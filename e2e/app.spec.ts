@@ -136,6 +136,27 @@ test.describe.serial('Server-Centric E2E', () => {
     await expect(commPage.getByRole('button', { name: /清空|Clear/ })).toBeVisible()
     await expect(commPage.getByRole('button', { name: /保存|Save/ })).toBeDisabled()
 
+    await app.evaluate((electron) => {
+      const packet = {
+        id: 1,
+        timestamp: Date.now(),
+        direction: 'RX' as const,
+        protocol: 'ModbusTcp' as const,
+        frameType: 'MBAP' as const,
+        clientAddr: '127.0.0.1:502',
+        slaveId: 2,
+        functionCode: 3,
+        data: new Uint8Array([0x01, 0x03, 0x00, 0x00, 0x00, 0x02]),
+        parsed: { isException: false }
+      }
+      electron.BrowserWindow.getAllWindows().forEach((win) => {
+        win.webContents.send('comm_packet', packet)
+      })
+    })
+
+    await expect(commPage.getByText(/RX\s+\|\s+Unit:002\s+\|\s+01 03 00 00 00 02/)).toBeVisible()
+    await expect(commPage.getByRole('button', { name: /保存|Save/ })).toBeEnabled()
+
     await commPage.getByRole('button', { name: /停止|Stop/ }).click()
     await expect(commPage.getByRole('button', { name: /继续|Continue/ })).toBeEnabled()
 
