@@ -14,8 +14,6 @@ const LanguageSwitcher = (): JSX.Element => {
     i18n.changeLanguage(newLang)
   }
 
-  const currentLang = languages.find((l) => l.code === i18n.language) || languages[0]
-
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
       <Typography variant="body2" sx={{ color: 'text.secondary' }}>
@@ -26,12 +24,15 @@ const LanguageSwitcher = (): JSX.Element => {
         onChange={handleChange}
         size="small"
         sx={{ minWidth: 120 }}
-        renderValue={() => (
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <span>{currentLang.flag}</span>
-            <span>{currentLang.label}</span>
-          </Box>
-        )}
+        renderValue={(value) => {
+          const lang = languages.find((l) => l.code === value) || languages[0]
+          return (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <span>{lang.flag}</span>
+              <span>{lang.label}</span>
+            </Box>
+          )
+        }}
       >
         {languages.map((lang) => (
           <MenuItem key={lang.code} value={lang.code}>
