@@ -31,9 +31,7 @@ export const useDataZustand = create<DataZustand, [['zustand/mutative', never]]>
 onEvent('register_data', (registerData) => {
   const state = useDataZustand.getState()
   const rootState = useRootZustand.getState()
-  rootState.clientState.scanningRegisters
-    ? state.appendRegisterData(registerData)
-    : state.setRegisterData(registerData)
+  state.setRegisterData(registerData)
   rootState.setLastSuccessfulTransactionMillis(DateTime.now().toMillis())
 })
 

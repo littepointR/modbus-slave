@@ -2,7 +2,6 @@ import {
   Protocol,
   RegisterType,
   ModbusBaudRate,
-  ClientState,
   Transaction,
   RegisterMapping,
   RegisterMapValue,
@@ -33,7 +32,6 @@ export type PersistedRootZustand = z.infer<typeof PersistedRootZustandSchema>
 export type RootZusand = {
   transactions: Transaction[]
   version: string
-  clientState: ClientState
   ready: boolean
   valid: Valid
   lastSuccessfulTransactionMillis: number | null
@@ -53,8 +51,6 @@ export type RootZusand = {
   clearTransactions: () => void
   // Config
   init: () => Promise<void>
-  // State
-  setClientState: (clientState: ClientState) => void
   // Configuration actions
   setProtocol: (protocol: Protocol) => void
   setPort: MaskSetFn

@@ -58,5 +58,4 @@ onEvent('window_update', (windows) => {
 
   // When we are the main window, set the state accordingly
   state.setHideHomeButton(windows.server)
-  if (windows.server) state.setAppType('client')
 })

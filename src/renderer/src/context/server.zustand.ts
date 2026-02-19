@@ -92,7 +92,8 @@ export const useServerZustand = create<
       createServer: async (params) => {
         // Only update port from backend response, never from input
         const actualPort = await window.api.createServer(params)
-        const { uuid, port } = params
+        const { uuid, config } = params
+        const port = config.port
 
         console.log({ port, uuid, actualPort })
 
@@ -144,7 +145,10 @@ export const useServerZustand = create<
 
         for (const syncUuid of uuidsToSync) {
           const port = Number(state.port[syncUuid])
-          const actualPort = await window.api.setServerPort({ uuid: syncUuid, port })
+          const actualPort = await window.api.setServerPort({
+            uuid: syncUuid,
+            config: { protocol: 'ModbusTcp', port }
+          })
 
           set((state) => {
             state.port[syncUuid] = String(actualPort)
@@ -188,7 +192,10 @@ export const useServerZustand = create<
 
         if (state.uuids.length === 0) {
           // Create the main server if no server exists in persisted state
-          state.createServer({ port: 502, uuid: MAIN_SERVER_UUID })
+          state.createServer({
+            uuid: MAIN_SERVER_UUID,
+            config: { protocol: 'ModbusTcp', port: 502 }
+          })
           set((state) => {
             state.ready[MAIN_SERVER_UUID] = true
           })
@@ -393,7 +400,10 @@ export const useServerZustand = create<
         if (!valid) return
 
         // Only update port from backend response
-        const actualPort = await window.api.setServerPort({ uuid, port: Number(port) })
+        const actualPort = await window.api.setServerPort({
+          uuid,
+          config: { protocol: 'ModbusTcp', port: Number(port) }
+        })
         set((state) => {
           state.port[uuid] = String(actualPort)
         })

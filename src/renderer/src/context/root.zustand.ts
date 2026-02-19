@@ -10,7 +10,6 @@ import {
   migrateRootState
 } from '@shared'
 import { enqueueSnackbar } from 'notistack'
-import { useDataZustand } from './data.zustand'
 import { onEvent } from '@renderer/events'
 
 export const useRootZustand = create<
@@ -92,16 +91,6 @@ export const useRootZustand = create<
         }),
 
       // State
-      clientState: {
-        connectState: 'disconnected',
-        polling: false,
-        scanningUniId: false,
-        scanningRegisters: false
-      },
-      setClientState: (clientState) =>
-        set((state) => {
-          state.clientState = clientState
-        }),
       ready: false,
 
       // Configuration actions
@@ -115,9 +104,7 @@ export const useRootZustand = create<
       // Protocol
       setProtocol: (protocol) =>
         set((state) => {
-          const currentState = get()
-          if (!currentState.ready) return
-          if (currentState.clientState.connectState !== 'disconnected') return
+          if (!get().ready) return
 
           state.connectionConfig.protocol = protocol
           window.api.updateConnectionConfig({ protocol })
@@ -127,9 +114,7 @@ export const useRootZustand = create<
       // TCP
       setPort: (port) =>
         set((state) => {
-          const currentState = get()
-          if (!currentState.ready) return
-          if (currentState.clientState.connectState !== 'disconnected') return
+          if (!get().ready) return
 
           const newPort = Number(port)
           state.connectionConfig.tcp.options.port = newPort
@@ -137,9 +122,7 @@ export const useRootZustand = create<
         }),
       setHost: (host, valid) =>
         set((state) => {
-          const currentState = get()
-          if (!currentState.ready) return
-          if (currentState.clientState.connectState !== 'disconnected') return
+          if (!get().ready) return
 
           state.valid.host = !!valid
           state.connectionConfig.tcp.host = host
@@ -151,9 +134,7 @@ export const useRootZustand = create<
       // RTU
       setCom: (com, valid) =>
         set((state) => {
-          const currentState = get()
-          if (!currentState.ready) return
-          if (currentState.clientState.connectState !== 'disconnected') return
+          if (!get().ready) return
 
           state.valid.com = !!valid
           state.connectionConfig.rtu.com = com
@@ -161,27 +142,21 @@ export const useRootZustand = create<
         }),
       setBaudRate: (baudRate) =>
         set((state) => {
-          const currentState = get()
-          if (!currentState.ready) return
-          if (currentState.clientState.connectState !== 'disconnected') return
+          if (!get().ready) return
 
           state.connectionConfig.rtu.options.baudRate = baudRate
           window.api.updateConnectionConfig({ rtu: { options: { baudRate } } })
         }),
       setParity: (parity) =>
         set((state) => {
-          const currentState = get()
-          if (!currentState.ready) return
-          if (currentState.clientState.connectState !== 'disconnected') return
+          if (!get().ready) return
 
           state.connectionConfig.rtu.options.parity = parity
           window.api.updateConnectionConfig({ rtu: { options: { parity } } })
         }),
       setDataBits: (dataBits) =>
         set((state) => {
-          const currentState = get()
-          if (!currentState.ready) return
-          if (currentState.clientState.connectState !== 'disconnected') return
+          if (!get().ready) return
 
           const newDataBits = Number(dataBits)
           state.connectionConfig.rtu.options.dataBits = newDataBits
@@ -189,9 +164,7 @@ export const useRootZustand = create<
         }),
       setStopBits: (stopBits) =>
         set((state) => {
-          const currentState = get()
-          if (!currentState.ready) return
-          if (currentState.clientState.connectState !== 'disconnected') return
+          if (!get().ready) return
 
           const newStopBits = Number(stopBits)
           state.connectionConfig.rtu.options.stopBits = newStopBits
@@ -234,40 +207,28 @@ export const useRootZustand = create<
         }),
       setAddress: (address) =>
         set((state) => {
-          const currentState = get()
-          if (!currentState.ready) return
+          if (!get().ready) return
 
           const newAddress = Number(address)
           state.registerConfig.address = newAddress
           window.api.updateRegisterConfig({ address: newAddress })
-
-          // Reset registerdata when not polling
-          if (!currentState.clientState.polling) useDataZustand.getState().setRegisterData([])
         }),
       setLength: (length, valid) =>
         set((state) => {
-          const currentState = get()
-          if (!currentState.ready) return
+          if (!get().ready) return
 
           state.valid.lenght = !!valid
           const newLength = Number(length)
           state.registerConfig.length = Number(length)
           if (!valid) return
           window.api.updateRegisterConfig({ length: newLength })
-
-          // Reset registerdata when not polling
-          if (!currentState.clientState.polling) useDataZustand.getState().setRegisterData([])
         }),
       setType: (type) =>
         set((state) => {
-          const currentState = get()
-          if (!currentState.ready) return
+          if (!get().ready) return
 
           state.registerConfig.type = type
           window.api.updateRegisterConfig({ type })
-
-          // Reset registerdata when not polling
-          if (!currentState.clientState.polling) useDataZustand.getState().setRegisterData([])
         }),
       setLittleEndian: (littleEndian) =>
         set((state) => {
@@ -401,12 +362,6 @@ state.init()
 //
 //
 // Listen to events to set the state
-
-// Client state, like polling, scanning, etc.
-onEvent('client_state', (clientState) => {
-  const state = useRootZustand.getState()
-  state.setClientState(clientState)
-})
 
 // Transactions from the transation log
 onEvent('transaction', (transaction) => {

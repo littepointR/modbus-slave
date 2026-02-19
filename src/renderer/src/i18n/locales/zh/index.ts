@@ -25,6 +25,8 @@ export default {
     view: '查看',
     refresh: '刷新',
     validate: '验证',
+    continue: '继续',
+    autoScroll: '自动滚动',
     moreOptions: '更多选项',
     timeSettings: '时间设置',
     pollRate: '轮询间隔',
@@ -138,7 +140,7 @@ export default {
 
   // Server Mode
   server: {
-    title: 'Modbus 服务端',
+    title: 'Modbus 从站模拟器',
     configuration: '服务器配置',
     configPlaceholder: '服务器名称',
     addServer: '添加服务器',
@@ -146,6 +148,50 @@ export default {
     unitId: '单元 ID',
     port: '端口',
     portWithNumber: '端口 {{port}}',
+    toolbar: {
+      saveWorkspace: '保存工作空间',
+      openWorkspace: '打开工作空间',
+      newConnection: '新建连接',
+      newSlave: '新建从站',
+      openConnection: '打开连接',
+      closeConnection: '关闭连接',
+      editConnection: '编辑连接',
+      editSlave: '编辑从站',
+      commDetails: '通讯详情',
+      editScript: '编辑脚本'
+    },
+    dialog: {
+      newConnection: '新建连接',
+      editConnection: '编辑连接',
+      newSlave: '新建从站',
+      editSlave: '编辑从站',
+      connectionAlias: '连接别名',
+      connectionMode: '连接模式',
+      serialPort: '串口',
+      baudRate: '波特率',
+      dataBits: '数据位',
+      parity: '校验位',
+      stopBits: '停止位',
+      flowControl: '流控',
+      frameFormat: '帧格式',
+      ipAddress: 'IP 地址',
+      slaveAlias: '从站别名',
+      slaveId: '从站 ID',
+      responseDelay: '响应延迟 (ms)',
+      registerInit: '寄存器初始化',
+      initNone: '不初始化',
+      initRandom: '随机值',
+      initAddress: '寄存器地址',
+      addressType: '地址类型',
+      protocolAddress: '协议地址 (基址 0)',
+      plcAddress: 'PLC 地址 (基址 1)',
+      registerGroups: '寄存器组',
+      groupName: '组名称',
+      registerType: '寄存器类型',
+      startAddress: '起始地址',
+      count: '数量',
+      addGroup: '添加寄存器组'
+    },
     connection: {
       protocol: '协议',
       host: '主机地址',
@@ -154,7 +200,14 @@ export default {
       baudRate: '波特率',
       dataBits: '数据位',
       stopBits: '停止位',
-      parity: '校验位'
+      parity: '校验位',
+      mode: {
+        rtu: 'Modbus RTU',
+        tcp: 'Modbus TCP/IP',
+        udp: 'Modbus UDP/IP',
+        rtuovertcp: 'Modbus RTU Over TCP/IP',
+        rtuoverudp: 'Modbus RTU Over UDP/IP'
+      }
     },
     registers: {
       title: '寄存器',
@@ -183,7 +236,14 @@ export default {
       },
       validation: {
         inUse: '地址已被使用',
-        dataTypeDoesNotFit: '数据类型不适合此地址'
+        dataTypeDoesNotFit: '数据类型不适合此地址',
+        required: '此字段为必填项',
+        ipAddress: 'IP地址格式无效',
+        portRange: '端口号必须在1-65535之间',
+        baudRate: '无效的波特率',
+        slaveIdRange: '从站ID必须在1-247之间',
+        positiveNumber: '必须为正数',
+        countRange: '数量必须在1-65535之间'
       },
       titles: {
         edit: '编辑',
@@ -237,6 +297,7 @@ export default {
     response: '响应',
     error: '错误',
     noTransactions: '暂无通讯记录',
+    noData: '暂无通讯数据...',
     export: '导出',
     clear: '清空'
   },

@@ -25,6 +25,8 @@ export default {
     view: 'View',
     refresh: 'Refresh',
     validate: 'Validate',
+    continue: 'Continue',
+    autoScroll: 'Auto Scroll',
     moreOptions: 'More options',
     timeSettings: 'Time settings',
     pollRate: 'Poll Rate',
@@ -138,7 +140,7 @@ export default {
 
   // Server Mode
   server: {
-    title: 'Modbus Server',
+    title: 'Modbus Slave Emulator',
     configuration: 'Server Configuration',
     configPlaceholder: 'Server Name',
     addServer: 'Add Server',
@@ -146,6 +148,50 @@ export default {
     unitId: 'Unit ID',
     port: 'Port',
     portWithNumber: 'Port {{port}}',
+    toolbar: {
+      saveWorkspace: 'Save Workspace',
+      openWorkspace: 'Open Workspace',
+      newConnection: 'New Connection',
+      newSlave: 'New Slave',
+      openConnection: 'Open Connection',
+      closeConnection: 'Close Connection',
+      editConnection: 'Edit Connection',
+      editSlave: 'Edit Slave',
+      commDetails: 'Communication Details',
+      editScript: 'Edit Script'
+    },
+    dialog: {
+      newConnection: 'New Connection',
+      editConnection: 'Edit Connection',
+      newSlave: 'New Slave',
+      editSlave: 'Edit Slave',
+      connectionAlias: 'Connection Alias',
+      connectionMode: 'Connection Mode',
+      serialPort: 'Serial Port',
+      baudRate: 'Baud Rate',
+      dataBits: 'Data Bits',
+      parity: 'Parity',
+      stopBits: 'Stop Bits',
+      flowControl: 'Flow Control',
+      frameFormat: 'Frame Format',
+      ipAddress: 'IP Address',
+      slaveAlias: 'Slave Alias',
+      slaveId: 'Slave ID',
+      responseDelay: 'Response Delay (ms)',
+      registerInit: 'Register Initialization',
+      initNone: 'Do Not Initialize',
+      initRandom: 'Random Value',
+      initAddress: 'Register Address',
+      addressType: 'Address Type',
+      protocolAddress: 'Protocol Address (Base 0)',
+      plcAddress: 'PLC Address (Base 1)',
+      registerGroups: 'Register Groups',
+      groupName: 'Group Name',
+      registerType: 'Register Type',
+      startAddress: 'Start Address',
+      count: 'Count',
+      addGroup: 'Add Register Group'
+    },
     connection: {
       protocol: 'Protocol',
       host: 'Host',
@@ -154,7 +200,14 @@ export default {
       baudRate: 'Baud Rate',
       dataBits: 'Data Bits',
       stopBits: 'Stop Bits',
-      parity: 'Parity'
+      parity: 'Parity',
+      mode: {
+        rtu: 'Modbus RTU',
+        tcp: 'Modbus TCP/IP',
+        udp: 'Modbus UDP/IP',
+        rtuovertcp: 'Modbus RTU Over TCP/IP',
+        rtuoverudp: 'Modbus RTU Over UDP/IP'
+      }
     },
     registers: {
       title: 'Registers',
@@ -183,7 +236,14 @@ export default {
       },
       validation: {
         inUse: 'In use',
-        dataTypeDoesNotFit: 'Data type does not fit at this address'
+        dataTypeDoesNotFit: 'Data type does not fit at this address',
+        required: 'This field is required',
+        ipAddress: 'Invalid IP address format',
+        portRange: 'Port must be between 1 and 65535',
+        baudRate: 'Invalid baud rate',
+        slaveIdRange: 'Slave ID must be between 1 and 247',
+        positiveNumber: 'Must be a positive number',
+        countRange: 'Count must be between 1 and 65535'
       },
       titles: {
         edit: 'Edit',
@@ -237,6 +297,7 @@ export default {
     response: 'Response',
     error: 'Error',
     noTransactions: 'No transactions logged yet',
+    noData: 'No communication data...',
     export: 'Export',
     clear: 'Clear'
   },

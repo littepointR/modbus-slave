@@ -6,55 +6,11 @@ import { useLayoutZustand } from '@renderer/context/layout.zustand'
 import { useCallback, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import modbuxImage from '../../../../resources/icon.png'
-import ClientIcon from '@renderer/svg/Client'
 import ServerIcon from '@renderer/svg/Server'
-import { useRootZustand } from '@renderer/context/root.zustand'
 import { sendEvent } from '@renderer/events'
 import Ploxc from '@renderer/svg/Ploxc'
 import GithubCat from '@renderer/svg/GithubCat'
-
-//
-//
-//
-// Button to open the modbus client
-const ClientButton = meme(() => {
-  const { t } = useTranslation()
-  const setAppType = useLayoutZustand((z) => z.setAppType)
-  const connected = useRootZustand((z) => z.clientState.connectState === 'connected')
-  return (
-    <Button
-      data-testid="home-client-btn"
-      variant="contained"
-      sx={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        width: 160,
-        height: 160,
-        position: 'relative'
-      }}
-      onClick={() => setAppType('client')}
-    >
-      {connected && (
-        <Box
-          sx={(theme) => ({
-            position: 'absolute',
-            width: 10,
-            height: 10,
-            top: 8,
-            right: 8,
-            backgroundColor: theme.palette.warning.main,
-            borderRadius: 8
-          })}
-        />
-      )}
-      <ClientIcon sx={(theme) => ({ fill: theme.palette.background.default })} />
-      <Typography variant="overline" sx={(theme) => ({ color: theme.palette.background.default })}>
-        {t('nav.client')}
-      </Typography>
-    </Button>
-  )
-})
+import { useRootZustand } from '@renderer/context/root.zustand'
 
 //
 //
@@ -210,7 +166,6 @@ const Home = meme(() => {
               fontSize="large"
             />
           </Button>
-          <ClientButton />
         </Box>
         <Box sx={{ position: 'fixed', top: 16, right: 16, zIndex: 10 }}>
           <LanguageSwitcher />

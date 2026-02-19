@@ -1,6 +1,6 @@
 import z from 'zod'
 
-const AppTypeSchema = z.enum(['client', 'server'])
+const AppTypeSchema = z.enum(['server'])
 export type AppType = z.infer<typeof AppTypeSchema>
 
 export const PersistedLayoutZustandSchema = z.object({

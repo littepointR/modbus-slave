@@ -1,12 +1,12 @@
 import { Box } from '@mui/material'
-import { useLayoutZustand } from './context/layout.zustand'
-import Home from './containers/Home'
-import Client from './containers/Client'
 import Server from './containers/Server'
+import CommLogWindow from './containers/CommLogWindow'
 import UpdateBanner from './components/UpdateBanner'
 
 const App = (): JSX.Element => {
-  const appType = useLayoutZustand((z) => z.appType)
+  if (window.api.isCommLogWindow) {
+    return <CommLogWindow />
+  }
 
   return (
     <Box
@@ -20,7 +20,7 @@ const App = (): JSX.Element => {
     >
       <UpdateBanner />
       <Box sx={{ flex: 1, overflow: 'hidden' }}>
-        {appType === 'client' ? <Client /> : appType === 'server' ? <Server /> : <Home />}
+        <Server />
       </Box>
     </Box>
   )
