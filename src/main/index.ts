@@ -4,7 +4,6 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { initIpc, onIpcEvent } from './ipc'
 import { AppState } from './state'
-import { ModbusClient } from './modules/modbusClient'
 import os from 'os'
 import { ModbusServer } from './modules/mobusServer'
 import { Windows } from '@shared'
@@ -19,14 +18,11 @@ const windows = new Windows()
 // Initialize the app state
 const appState = new AppState()
 
-// Initialize the modbus client
-const client = new ModbusClient({ appState, windows })
-
 // Initialize the modbus server
 const server = new ModbusServer({ windows })
 
 // IPC
-initIpc(app, appState, client, server)
+initIpc(app, appState, server)
 
 // Single instance - DISABLED for multi-instance dev mode
 // DISABLE_SINGLE_INSTANCE
@@ -123,6 +119,42 @@ onIpcEvent('open_server_window', () => {
 
   windows.server.on('close', () => {
     windows.server = null
+  })
+})
+
+onIpcEvent('open_comm_log_window', () => {
+  if (windows.commLog) {
+    windows.commLog.focus()
+    return
+  }
+
+  windows.commLog = new BrowserWindow({
+    width: 800,
+    height: 600,
+    minWidth: 600,
+    minHeight: 400,
+    autoHideMenuBar: true,
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      sandbox: false,
+      nodeIntegration: false,
+      contextIsolation: true,
+      additionalArguments: ['is-comm-log-window']
+    },
+    title: 'Communication Log',
+    backgroundColor: '#181818'
+  })
+
+  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+    windows.commLog.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/comm-log`)
+  } else {
+    windows.commLog.loadFile(join(__dirname, '../renderer/index.html'), {
+      hash: '#/comm-log'
+    })
+  }
+
+  windows.commLog.on('close', () => {
+    windows.commLog = null
   })
 })
 

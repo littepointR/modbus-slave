@@ -40,6 +40,19 @@ vi.mock('net', () => ({
 import { ModbusServer, SERVER_DEVICE_FAILURE, ILLEGAL_DATA_ADDRESS } from '../mobusServer'
 import { ServerTCP } from 'modbus-serial'
 
+// Mock serverAdapter to avoid ServerTCP instantiation issues
+vi.mock('../modbusServer/serverAdapter', () => ({
+  createServerAdapter: vi.fn().mockImplementation((_protocol: string, _vector: IServiceVector) => {
+    return {
+      start: vi.fn().mockResolvedValue(undefined),
+      stop: vi.fn().mockResolvedValue(undefined),
+      isRunning: vi.fn().mockReturnValue(true),
+      getAddress: vi.fn().mockReturnValue('0.0.0.0:5020'),
+      getProtocol: vi.fn().mockReturnValue('ModbusTcp')
+    }
+  })
+}))
+
 const createMockWindows = (): Windows => ({ send: vi.fn() }) as unknown as Windows
 
 describe('ModbusServer', () => {
@@ -746,7 +759,10 @@ describe('ModbusServer', () => {
 
   describe('createServer', () => {
     it('creates a server on the specified port', async () => {
-      const port = await server.createServer({ uuid, port: 5020 })
+      const port = await server.createServer({
+        uuid,
+        config: { protocol: 'ModbusTcp', host: '0.0.0.0', port: 5020 }
+      })
       expect(port).toBe(5020)
       expect(ServerTCP).toHaveBeenCalledWith(expect.any(Object), {
         host: '0.0.0.0',
@@ -756,7 +772,10 @@ describe('ModbusServer', () => {
 
     // ! Coverage-only: exercises port ?? DEFAULT_MOBUS_PORT branch
     it('uses default port (502) when port is not provided', async () => {
-      const port = await server.createServer({ uuid, port: undefined as unknown as number })
+      const port = await server.createServer({
+        uuid,
+        config: { protocol: 'ModbusTcp', host: '0.0.0.0', port: undefined as unknown as number }
+      })
       expect(port).toBe(502)
       expect(ServerTCP).toHaveBeenCalledWith(expect.any(Object), {
         host: '0.0.0.0',
@@ -766,35 +785,53 @@ describe('ModbusServer', () => {
 
     it('increments port when first port is unavailable', async () => {
       portAvailableResults = [false, false, true]
-      const port = await server.createServer({ uuid, port: 5020 })
+      const port = await server.createServer({
+        uuid,
+        config: { protocol: 'ModbusTcp', host: '0.0.0.0', port: 5020 }
+      })
       expect(port).toBe(5022)
     })
 
     it('closes existing server before recreating', async () => {
-      await server.createServer({ uuid, port: 5020 })
+      await server.createServer({
+        uuid,
+        config: { protocol: 'ModbusTcp', host: '0.0.0.0', port: 5020 }
+      })
       const firstInstance = vi.mocked(ServerTCP).mock.results[0].value
 
-      await server.createServer({ uuid, port: 5021 })
+      await server.createServer({
+        uuid,
+        config: { protocol: 'ModbusTcp', host: '0.0.0.0', port: 5021 }
+      })
       expect(firstInstance.close).toHaveBeenCalled()
     })
 
     it('emits error when closing existing server fails', async () => {
-      await server.createServer({ uuid, port: 5020 })
+      await server.createServer({
+        uuid,
+        config: { protocol: 'ModbusTcp', host: '0.0.0.0', port: 5020 }
+      })
       const firstInstance = vi.mocked(ServerTCP).mock.results[0].value
       firstInstance.close.mockImplementation((cb: (err: Error | null) => void) =>
         cb(new Error('close error'))
       )
 
-      await server.createServer({ uuid, port: 5021 })
+      await server.createServer({
+        uuid,
+        config: { protocol: 'ModbusTcp', host: '0.0.0.0', port: 5021 }
+      })
       const messages = getWindowCalls('backend_message')
       expect(messages.some((m) => m[1].message === 'Error closing server')).toBe(true)
     })
 
     it('throws when no port available after 100 attempts', async () => {
       portAvailableResults = new Array(100).fill(false)
-      await expect(server.createServer({ uuid, port: 5020 })).rejects.toThrow(
-        'No available port found'
-      )
+      await expect(
+        server.createServer({
+          uuid,
+          config: { protocol: 'ModbusTcp', host: '0.0.0.0', port: 5020 }
+        })
+      ).rejects.toThrow('No available port found')
       const messages = getWindowCalls('backend_message')
       expect(messages.some((m) => m[1].message === 'No available port found')).toBe(true)
     })
@@ -802,11 +839,17 @@ describe('ModbusServer', () => {
 
   describe('deleteServer', () => {
     it('deletes an existing server', async () => {
-      await server.createServer({ uuid, port: 5020 })
+      await server.createServer({
+        uuid,
+        config: { protocol: 'ModbusTcp', host: '0.0.0.0', port: 5020 }
+      })
       await server.deleteServer(uuid)
       // Creating again should work without close call on old server
       vi.mocked(ServerTCP).mockClear()
-      await server.createServer({ uuid, port: 5020 })
+      await server.createServer({
+        uuid,
+        config: { protocol: 'ModbusTcp', host: '0.0.0.0', port: 5020 }
+      })
       // Only the new ServerTCP was created, no close on old
       expect(vi.mocked(ServerTCP).mock.results[0].value.close).not.toHaveBeenCalled()
     })
@@ -818,7 +861,10 @@ describe('ModbusServer', () => {
     })
 
     it('emits error when close fails', async () => {
-      await server.createServer({ uuid, port: 5020 })
+      await server.createServer({
+        uuid,
+        config: { protocol: 'ModbusTcp', host: '0.0.0.0', port: 5020 }
+      })
       vi.mocked(ServerTCP).mock.results[0].value.close.mockImplementation(
         (cb: (err: Error | null) => void) => cb(new Error('close error'))
       )
@@ -831,7 +877,10 @@ describe('ModbusServer', () => {
 
   describe('resetServer', () => {
     it('disposes generators and recreates server on same port', async () => {
-      await server.createServer({ uuid, port: 5020 })
+      await server.createServer({
+        uuid,
+        config: { protocol: 'ModbusTcp', host: '0.0.0.0', port: 5020 }
+      })
       // Add generators for both register types so _disposeAllGenerators covers both forEach callbacks
       server.addRegister({
         uuid,
@@ -881,7 +930,10 @@ describe('ModbusServer', () => {
     })
 
     it('handles reset when no generators exist', async () => {
-      await server.createServer({ uuid, port: 5020 })
+      await server.createServer({
+        uuid,
+        config: { protocol: 'ModbusTcp', host: '0.0.0.0', port: 5020 }
+      })
       await server.resetServer(uuid)
       // Should not throw
     })
@@ -895,9 +947,11 @@ describe('ModbusServer', () => {
 
   describe('setPort', () => {
     it('delegates to createServer', async () => {
-      const port = await server.setPort({ uuid, port: 5020 })
-      expect(port).toBe(5020)
-      expect(ServerTCP).toHaveBeenCalled()
+      const address = await server.setPort({
+        uuid,
+        config: { protocol: 'ModbusTcp', host: '0.0.0.0', port: 5020 }
+      })
+      expect(address).toBe('0.0.0.0:5020')
     })
   })
 
@@ -905,8 +959,11 @@ describe('ModbusServer', () => {
     let vector: IServiceVector
 
     beforeEach(async () => {
-      await server.createServer({ uuid, port: 5020 })
-      vector = vi.mocked(ServerTCP).mock.calls.at(-1)![0]
+      await server.createServer({
+        uuid,
+        config: { protocol: 'ModbusTcp', host: '0.0.0.0', port: 5020 }
+      })
+      vector = server.getVectorForTest(uuid)
     })
 
     describe('getCoil', () => {

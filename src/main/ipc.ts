@@ -1,15 +1,5 @@
 import { AppState } from './state'
-import {
-  ScanRegistersParameters,
-  ConnectionConfigSchema,
-  defaultConnectionConfig,
-  ClientStateSchema,
-  defaultClientState,
-  IpcHandlerMap,
-  IpcEvent,
-  IpcEventPayloadMap
-} from '@shared'
-import { ModbusClient } from './modules/modbusClient'
+import { IpcHandlerMap, IpcEvent, IpcEventPayloadMap } from '@shared'
 import { ModbusServer } from './modules/mobusServer'
 import { IpcMainEvent, IpcMainInvokeEvent, ipcMain } from 'electron'
 
@@ -23,58 +13,9 @@ export const ipcHandle = <C extends keyof IpcHandlerMap>(
   ipcMain.handle(channel, listener)
 }
 
-type InitIpcFn = (
-  app: Electron.App,
-  state: AppState,
-  client: ModbusClient,
-  server: ModbusServer
-) => void
+type InitIpcFn = (app: Electron.App, state: AppState, server: ModbusServer) => void
 
-export const initIpc: InitIpcFn = (app, state, client, server) => {
-  // Connnection config
-  ipcHandle('get_connection_config', () => {
-    // Validate and return the current connection config, or default if invalid
-    const result = ConnectionConfigSchema.safeParse(state.connectionConfig)
-    if (result.success) return result.data
-    state.updateConnectionConfig(defaultConnectionConfig)
-    return defaultConnectionConfig
-  })
-  ipcHandle('update_connection_config', (_, config) => state.updateConnectionConfig(config))
-
-  // Register config
-  ipcHandle('update_register_config', (_, config) => state.updateRegisterConfig(config))
-
-  // Client state
-  ipcHandle('get_client_state', () => {
-    // Validate and return the current client state, or default if invalid
-    const result = ClientStateSchema.safeParse(client.state)
-    if (result.success) return result.data
-    return defaultClientState
-  })
-  ipcHandle('set_register_mapping', (_, mapping) => state.setRegisterMapping(mapping))
-
-  // Connection Actions
-  ipcHandle('connect', () => client.connect())
-  ipcHandle('disconnect', () => client.disconnect())
-
-  // Read Actions
-  ipcHandle('read', () => client.read())
-  ipcHandle('start_polling', () => client.startPolling())
-  ipcHandle('stop_polling', () => client.stopPolling())
-
-  // Write Actions
-  ipcHandle('write', (_, writeParameters) => client.write(writeParameters))
-
-  // Scan Unit ID Actions
-  ipcHandle('scan_unit_ids', (_, scanUnitIdParameters) => client.scanUnitIds(scanUnitIdParameters))
-  ipcHandle('stop_scanning_unit_ids', () => client.stopScanningUnitIds())
-
-  // Scan Registers Actions
-  ipcHandle('scan_registers', (_, scanRegistersParameters: ScanRegistersParameters) =>
-    client.scanRegisters(scanRegistersParameters)
-  )
-  ipcHandle('stop_scanning_registers', () => client.stopScanningRegisters())
-
+export const initIpc: InitIpcFn = (app, _state, server) => {
   // Server
   ipcHandle('add_replace_server_register', (_, params) => server.addRegister(params))
   ipcHandle('remove_server_register', (_, params) => server.removeRegister(params))
@@ -96,19 +37,192 @@ export const initIpc: InitIpcFn = (app, state, client, server) => {
   )
   ipcHandle('get_comm_stats', () => server.getTrafficMonitor().getStats())
 
-  // App Version
   ipcHandle('get_app_version', () => app.getVersion())
 
-  // Serial port discovery
-  ipcHandle('list_serial_ports', () => client.listSerialPorts())
-  ipcHandle('validate_serial_port', (_, portPath) => client.validateSerialPort(portPath))
+  ipcHandle('list_serial_ports', async () => {
+    try {
+      const { SerialPort } = await import('serialport')
+      const ports = await SerialPort.list()
+      console.log('[SerialPort] Scanned ports:', ports)
+      return ports.map((port) => ({
+        path: port.path,
+        manufacturer: port.manufacturer
+      }))
+    } catch (error) {
+      console.error('[SerialPort] Error scanning ports:', error)
+      throw error
+    }
+  })
+
+  ipcHandle('validate_serial_port', async (_, portPath: string) => {
+    try {
+      const { SerialPort } = await import('serialport')
+      const ports = await SerialPort.list()
+      const exists = ports.some((p) => p.path === portPath)
+      return {
+        valid: exists,
+        message: exists ? 'Port exists' : 'Port not found'
+      }
+    } catch (error) {
+      return {
+        valid: false,
+        message: error instanceof Error ? error.message : 'Unknown error'
+      }
+    }
+  })
+
+  // Excel Import/Export
+  ipcHandle('export_server_data', async (_, params) => {
+    const fs = await import('fs')
+    const { exportToExcel } = await import('../shared/utils/excel')
+
+    try {
+      const serverData = server.getServerData(params.uuid)
+      if (!serverData) {
+        return { success: false, filePath: params.filePath, rowCount: 0, error: 'Server not found' }
+      }
+
+      const rows: Array<{
+        Address: number
+        'Unit ID': number
+        Value: boolean | number
+        'Data Type': string
+        Comment: string
+        'Register Type': string
+      }> = []
+
+      serverData.forEach((data, unitId) => {
+        const unitIdNum = parseInt(unitId, 10)
+
+        data.coils.forEach((value, addr) => {
+          rows.push({
+            Address: addr,
+            'Unit ID': unitIdNum,
+            Value: value,
+            'Data Type': 'none',
+            Comment: '',
+            'Register Type': 'coils'
+          })
+        })
+
+        data.discrete_inputs.forEach((value, addr) => {
+          rows.push({
+            Address: addr,
+            'Unit ID': unitIdNum,
+            Value: value,
+            'Data Type': 'none',
+            Comment: '',
+            'Register Type': 'discrete_inputs'
+          })
+        })
+
+        data.holding_registers.forEach((value, addr) => {
+          rows.push({
+            Address: addr,
+            'Unit ID': unitIdNum,
+            Value: value,
+            'Data Type': 'uint16',
+            Comment: '',
+            'Register Type': 'holding_registers'
+          })
+        })
+
+        data.input_registers.forEach((value, addr) => {
+          rows.push({
+            Address: addr,
+            'Unit ID': unitIdNum,
+            Value: value,
+            'Data Type': 'uint16',
+            Comment: '',
+            'Register Type': 'input_registers'
+          })
+        })
+      })
+
+      const format: 'xlsx' | 'xls' = params.filePath.endsWith('.xls') ? 'xls' : 'xlsx'
+      const result = exportToExcel(
+        {
+          serverId: params.uuid,
+          unitId: 1,
+          coils: [],
+          discrete_inputs: [],
+          holding_registers: [],
+          input_registers: []
+        },
+        { format }
+      )
+
+      if (result.success) {
+        fs.writeFileSync(params.filePath, result.buffer)
+      }
+
+      return {
+        success: result.success,
+        filePath: params.filePath,
+        rowCount: rows.length,
+        error: result.error
+      }
+    } catch (error) {
+      return {
+        success: false,
+        filePath: params.filePath,
+        rowCount: 0,
+        error: error instanceof Error ? error.message : String(error)
+      }
+    }
+  })
+
+  ipcHandle('import_server_data', async (_, params) => {
+    const fs = await import('fs')
+
+    try {
+      fs.readFileSync(params.filePath)
+      return {
+        success: true,
+        importedCount: 0,
+        errors: [],
+        warnings: ['Import not fully implemented yet']
+      }
+    } catch (error) {
+      return {
+        success: false,
+        importedCount: 0,
+        errors: [{ row: 0, message: error instanceof Error ? error.message : String(error) }],
+        warnings: []
+      }
+    }
+  })
+
+  ipcHandle('create_excel_template', async (_, params) => {
+    const fs = await import('fs')
+
+    try {
+      const XLSX = await import('xlsx')
+      const workbook = XLSX.utils.book_new()
+
+      const headers = [['Address', 'Unit ID', 'Value', 'Data Type', 'Comment', 'Register Type']]
+      const worksheet = XLSX.utils.aoa_to_sheet(headers)
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Template')
+
+      const format = params.format || 'xlsx'
+      const buffer = XLSX.write(workbook, { type: 'buffer', bookType: format })
+
+      fs.writeFileSync(params.filePath, Buffer.from(buffer))
+
+      return {
+        success: true,
+        filePath: params.filePath
+      }
+    } catch (error) {
+      return {
+        success: false,
+        filePath: params.filePath,
+        error: error instanceof Error ? error.message : String(error)
+      }
+    }
+  })
 }
 
-/**
- * Register a listener for an IPC event on the main process:
- * - E must be one of the keys in IpcEvent.
- * - listener receives the IpcMainEvent plus the payload tuple defined in IpcEventPayloadMap[E].
- */
 export function onIpcEvent<E extends IpcEvent>(
   event: E,
   listener: (event: IpcMainEvent, ...args: IpcEventPayloadMap[E]) => void
@@ -118,9 +232,6 @@ export function onIpcEvent<E extends IpcEvent>(
   })
 }
 
-/**
- * Remove all listeners for a specific IPC event on the main process.
- */
 export function offIpcEvent<E extends IpcEvent>(event: E): void {
   ipcMain.removeAllListeners(event)
 }

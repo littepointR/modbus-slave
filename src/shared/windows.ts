@@ -4,11 +4,13 @@ import { BrowserWindow } from 'electron'
 interface WindowsObject {
   main: BrowserWindow | null
   server: BrowserWindow | null
+  commLog: BrowserWindow | null
 }
 
 export interface WindowsOpen {
   main: boolean
   server: boolean
+  commLog: boolean
 }
 
 export class Windows {
@@ -17,7 +19,8 @@ export class Windows {
   constructor() {
     this._windows = {
       main: null,
-      server: null
+      server: null,
+      commLog: null
     }
   }
 
@@ -56,11 +59,20 @@ export class Windows {
     this._sendUpdate()
   }
 
+  get commLog(): BrowserWindow | null {
+    return this._windows.commLog
+  }
+  set commLog(commLog) {
+    this._windows.commLog = commLog
+    this._sendUpdate()
+  }
+
   // Send update when windows change
   private _sendUpdate(): void {
     const windowsOpen = {
       main: !!this._windows.main,
-      server: !!this._windows.server
+      server: !!this._windows.server,
+      commLog: !!this._windows.commLog
     }
     try {
       Object.values(this._windows).forEach((w) => w?.webContents.send('window_update', windowsOpen))

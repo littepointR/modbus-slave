@@ -75,7 +75,10 @@ export const IPC_CHANNELS = [
   'stop_comm_monitor',
   'clear_comm_monitor',
   'export_comm_log',
-  'get_comm_stats'
+  'get_comm_stats',
+  'export_server_data',
+  'import_server_data',
+  'create_excel_template'
 ] as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[number]
@@ -293,6 +296,63 @@ export interface IpcHandlerSpec {
     args: []
     return: PacketStats
   }
+
+  /** Export server register data to Excel */
+  ['export_server_data']: {
+    args: [ExportServerDataParams]
+    return: ExportServerDataResult
+  }
+
+  /** Import server register data from Excel */
+  ['import_server_data']: {
+    args: [ImportServerDataParams]
+    return: ImportServerDataResult
+  }
+
+  /** Create Excel template for import */
+  ['create_excel_template']: {
+    args: [CreateExcelTemplateParams]
+    return: CreateExcelTemplateResult
+  }
+}
+
+// Excel Import/Export Types
+export interface ExportServerDataParams {
+  uuid: string
+  filePath: string
+  registerTypes?: ('coils' | 'discrete_inputs' | 'holding_registers' | 'input_registers')[]
+}
+
+export interface ExportServerDataResult {
+  success: boolean
+  filePath: string
+  rowCount: number
+  error?: string
+}
+
+export interface ImportServerDataParams {
+  uuid: string
+  filePath: string
+  unitId?: string
+  mergeStrategy?: 'replace' | 'merge' | 'append'
+}
+
+export interface ImportServerDataResult {
+  success: boolean
+  importedCount: number
+  errors: Array<{ row: number; message: string }>
+  warnings: string[]
+}
+
+export interface CreateExcelTemplateParams {
+  filePath: string
+  format?: 'xlsx' | 'xls'
+}
+
+export interface CreateExcelTemplateResult {
+  success: boolean
+  filePath: string
+  error?: string
 }
 
 export type IpcHandlerMap = {
@@ -313,6 +373,7 @@ export const IPC_EVENTS = [
   'boolean_value',
   'window_update',
   'open_server_window',
+  'open_comm_log_window',
   'address_groups',
   'comm_packet',
   'comm_monitor_clear'
@@ -331,6 +392,7 @@ export interface IpcEventPayloadMap {
   ['boolean_value']: [BooleanValue]
   ['window_update']: [WindowsOpen]
   ['open_server_window']: []
+  ['open_comm_log_window']: []
   ['address_groups']: [AddressGroup[]]
   ['comm_packet']: [ServerCommPacket]
   ['comm_monitor_clear']: [void]

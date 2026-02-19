@@ -93,6 +93,22 @@ export class ModbusServer {
   }
 
   /**
+   * Get the Modbus service vector for testing.
+   * @internal For testing only
+   */
+  getVectorForTest(uuid: string): IServiceVector {
+    return this._getVector(uuid)
+  }
+
+  /**
+   * Get all server data for a given UUID (for Excel export)
+   * Returns data organized by unit ID and register type
+   */
+  getServerData(uuid: string): ServerDataUnitMap | undefined {
+    return this._serverData.get(uuid)
+  }
+
+  /**
    * Ensures an inner map exists for a given UUID in the outer map, creating it if necessary.
    * @param outerMap - The outer map (by UUID)
    * @param uuid - The server UUID
