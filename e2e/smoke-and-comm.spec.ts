@@ -97,6 +97,62 @@ test.describe.serial('Server Smoke And Comm E2E', () => {
     await expect(stringTab).toHaveAttribute('aria-selected', 'true')
   })
 
+  test('can open plot window, change interpretation and reflect table highlighting', async () => {
+    const firstRow = page.locator('tbody tr').nth(0)
+    const secondRow = page.locator('tbody tr').nth(1)
+    const thirdRow = page.locator('tbody tr').nth(2)
+
+    await firstRow.locator('td input[type="checkbox"]').first().click()
+    await secondRow.locator('td input[type="checkbox"]').first().click()
+
+    await page.getByRole('button', { name: /Plot Selected \(2\)/ }).click()
+    let plotPage: Page | null = null
+    await expect
+      .poll(async () => {
+        const windows = app.windows()
+        for (const win of windows) {
+          if (win === page || win.isClosed()) continue
+          try {
+            const title = await win.title()
+            if (/^Plot - /.test(title)) {
+              plotPage = win
+              return true
+            }
+          } catch {
+            // window may close while polling, keep trying.
+          }
+        }
+        return false
+      })
+      .toBe(true)
+    expect(plotPage).not.toBeNull()
+    await plotPage!.waitForLoadState('domcontentloaded')
+
+    await expect(plotPage!.getByText(/Plot -/)).toBeVisible()
+    await expect(plotPage!.getByText(/0x0000/i)).toBeVisible()
+    await expect(plotPage!.getByText(/0x0001/i)).toBeVisible()
+
+    const firstInterpret = plotPage!.locator('[role="combobox"]').first()
+    await expect(firstInterpret).toBeVisible()
+    await firstInterpret.click()
+    await plotPage!.getByRole('option', { name: /DOUBLE \(4w\)/ }).click()
+
+    const firstValueCell = firstRow.locator('td').nth(4)
+    const secondValueCell = secondRow.locator('td').nth(4)
+    const thirdValueCell = thirdRow.locator('td').nth(4)
+
+    const bg1 = await firstValueCell.evaluate((el) => getComputedStyle(el).backgroundColor)
+    const bg2 = await secondValueCell.evaluate((el) => getComputedStyle(el).backgroundColor)
+    const bg3 = await thirdValueCell.evaluate((el) => getComputedStyle(el).backgroundColor)
+
+    expect(bg1).toBe(bg2)
+    expect(bg1).not.toBe('rgba(0, 0, 0, 0)')
+    expect(bg3).toBe('rgba(0, 0, 0, 0)')
+
+    await plotPage!.close()
+    await expect.poll(async () => app.windows().length).toBe(1)
+  })
+
   test('can open communication log window', async () => {
     await page.getByText(CONN_ALIAS_EDITED, { exact: true }).click()
     await page.getByRole('button', { name: /打开连接|Open Connection/ }).click()
