@@ -330,5 +330,16 @@ export default {
     beExplanation: 'In Big-Endian, the high-order word (W1) is assigned to the first register, while the low-order word (W0) is assigned to the second register.',
     leExplanation: 'In Little-Endian, the low-order word (W0) is stored first, and the high-order word (W1) is stored second.',
     conclusion: 'When communicating with Modbus devices, it\'s essential to know which endianness the device uses to ensure correct data interpretation.'
+  },
+
+  // Chart Feature
+  chart: {
+    showChart: 'Show Chart',
+    hideChart: 'Hide Chart',
+    configTitle: 'Chart Configuration',
+    searchPlaceholder: 'Search registers...',
+    selectedSeries: 'Selected Series',
+    noSeriesSelected: 'No series selected',
+    realTimeChart: 'Real-time Chart'
   }
 }

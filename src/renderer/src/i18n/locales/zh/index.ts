@@ -323,5 +323,16 @@ export default {
     beExplanation: '在大端模式中，高位字（W1）被分配到第一个寄存器，而低位字（W0）被分配到第二个寄存器。',
     leExplanation: '在小端模式中，低位字（W0）先存储，高位字（W1）后存储。',
     conclusion: '在与Modbus设备通信时，了解设备使用哪种字节序对于确保正确的数据解释至关重要。'
+  },
+
+  // 图表功能
+  chart: {
+    showChart: '显示图表',
+    hideChart: '隐藏图表',
+    configTitle: '图表配置',
+    searchPlaceholder: '搜索寄存器...',
+    selectedSeries: '已选系列',
+    noSeriesSelected: '未选择系列',
+    realTimeChart: '实时图表'
   }
 }

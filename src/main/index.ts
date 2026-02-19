@@ -28,10 +28,11 @@ const server = new ModbusServer({ windows })
 // IPC
 initIpc(app, appState, client, server)
 
-// Single instance
-const gotTheLock = app.requestSingleInstanceLock()
+// Single instance - DISABLED for multi-instance dev mode
+// DISABLE_SINGLE_INSTANCE
+const gotTheLock = true // app.requestSingleInstanceLock() - disabled for multi-instance dev
 
-if (!gotTheLock) {
+if (false) { // disabled for multi-instance dev
   app.quit()
 } else {
   app.on('second-instance', () => {

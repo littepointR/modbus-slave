@@ -12,6 +12,7 @@ import ClearButton from './ClearButton/ClearButton'
 import ShowLogButton from './ShowLogButton/ShowLogButton'
 import MenuButton from './MenuButton/MenuButton'
 import RawButton from './RawButton/RawButton'
+import { ChartToolbarButton } from '@renderer/components/client/Charts'
 import { useRootZustand } from '@renderer/context/root.zustand'
 import TextField from '@mui/material/TextField'
 import { useTranslation } from 'react-i18next'
@@ -67,6 +68,7 @@ const RegisterGridToolbar = meme(() => {
         <ClientConfigName />
         <ClearButton />
         <ShowLogButton />
+        <ChartToolbarButton />
         <MenuButton />
       </Box>
     </Box>
