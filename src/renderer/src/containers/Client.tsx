@@ -3,7 +3,7 @@ import Box from '@mui/material/Box'
 import Fade from '@mui/material/Fade'
 import MessageReceiver from '@renderer/components/shared/MessageReceiver'
 import HomeButton from '@renderer/components/shared/HomeButton'
-import LanguageSwitcher from '@renderer/components/shared/LanguageSwitcher'
+import SettingsMenu from '@renderer/components/shared/SettingsMenu'
 import RegisterConfig from '../components/client/RegisterConfig/RegisterConfig'
 import ClientGrids from '@renderer/components/client/ClientGrids/ClientGrids'
 import ConnectionConfig from '@renderer/components/client/ConnectionConfig/ConnectionConfig'
@@ -31,7 +31,7 @@ const Client = meme(() => {
             <RegisterConfig />
             <ConnectionConfig />
           </Box>
-          <LanguageSwitcher />
+          <SettingsMenu />
         </Box>
         <ClientGrids />
         <ScanRegisters />

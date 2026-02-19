@@ -1,6 +1,6 @@
 import { meme } from '@renderer/components/shared/inputs/meme'
 import HomeButton from '@renderer/components/shared/HomeButton'
-import LanguageSwitcher from '@renderer/components/shared/LanguageSwitcher'
+import SettingsMenu from '@renderer/components/shared/SettingsMenu'
 import MessageReceiver from '@renderer/components/shared/MessageReceiver'
 import { useServerZustand } from '@renderer/context/server.zustand'
 import OpenSaveClear from '../components/server/OpenSaveClear/OpenSaveClear'
@@ -54,7 +54,7 @@ const Server = meme(() => {
             <ServerName />
             <ServerConfig />
           </Box>
-          <LanguageSwitcher />
+          <SettingsMenu />
         </Box>
         <ServerGrid />
       </Box>
