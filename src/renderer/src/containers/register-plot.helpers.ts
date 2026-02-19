@@ -82,7 +82,32 @@ export const decodePlotValue = (
   }
 }
 
+const PLOT_COLORS = [
+  '#1976d2',
+  '#d32f2f',
+  '#2e7d32',
+  '#ed6c02',
+  '#7b1fa2',
+  '#00838f',
+  '#5d4037',
+  '#455a64'
+]
+
+const PLOT_SELECTION_BG = [
+  'rgba(25, 118, 210, 0.11)',
+  'rgba(211, 47, 47, 0.1)',
+  'rgba(46, 125, 50, 0.1)',
+  'rgba(237, 108, 2, 0.1)',
+  'rgba(123, 31, 162, 0.1)',
+  'rgba(0, 131, 143, 0.1)',
+  'rgba(93, 64, 55, 0.1)',
+  'rgba(69, 90, 100, 0.1)'
+]
+
 export const getRegisterColor = (address: number): string => {
-  const hue = (address * 47) % 360
-  return `hsl(${hue}, 75%, 82%)`
+  return PLOT_COLORS[Math.abs(address) % PLOT_COLORS.length]
+}
+
+export const getPlotSelectionColor = (seed: number): string => {
+  return PLOT_SELECTION_BG[Math.abs(seed) % PLOT_SELECTION_BG.length]
 }

@@ -68,7 +68,12 @@ import type {
   RegisterPlotWindowInit,
   ServerConnectionConfig
 } from '@shared'
-import { getRegisterColor } from './register-plot.helpers'
+import {
+  decodePlotValue,
+  getPlotSelectionColor,
+  getRegisterColor,
+  getWordSpanForInterpretation
+} from './register-plot.helpers'
 
 // =============================================================================
 // TYPES
@@ -163,8 +168,13 @@ interface OpenTab {
   slaveId: string
   registerGroupId: string
   selectedAddresses: Set<number>
-  interpretationTab: 'basic' | 'long' | 'float' | 'double' | 'string'
+  interpretationTab: 'basic' | 'long' | 'float' | 'double' | 'typed' | 'string'
   stringEncoding: string
+  typedInterpretation: Record<number, PlotInterpretation>
+}
+
+interface PlotWindowState extends RegisterPlotWindowInit {
+  selectionColor: string
 }
 
 // =============================================================================
@@ -1440,7 +1450,7 @@ const Server = (): JSX.Element => {
   const [tablePagination, setTablePagination] = useState<
     Record<string, { page: number; rowsPerPage: number }>
   >({})
-  const [plotWindows, setPlotWindows] = useState<RegisterPlotWindowInit[]>([])
+  const [plotWindows, setPlotWindows] = useState<PlotWindowState[]>([])
 
   useEffect(() => {
     void window.api.startCommMonitor()
@@ -1513,7 +1523,8 @@ const Server = (): JSX.Element => {
           registerGroupId,
           selectedAddresses: new Set(),
           interpretationTab: 'basic',
-          stringEncoding: 'UTF-8'
+          stringEncoding: 'UTF-8',
+          typedInterpretation: {}
         }
       ])
     }
@@ -1799,7 +1810,13 @@ const Server = (): JSX.Element => {
     }
 
     sendEvent('open_register_plot_window', payload)
-    setPlotWindows((prev) => [...prev, payload])
+    setPlotWindows((prev) => [
+      ...prev,
+      {
+        ...payload,
+        selectionColor: getPlotSelectionColor(prev.length)
+      }
+    ])
   }
 
   return (
@@ -2179,7 +2196,14 @@ const Server = (): JSX.Element => {
                                 <TableBody>
                                   {paginatedRegisters.map((register) => {
                                     const isSelected = tab.selectedAddresses.has(register.address)
-                                    const registerColor = getRegisterColor(register.address)
+                                    const linkedPlotWindow = plotWindows.find(
+                                      (plotWindow) =>
+                                        plotWindow.connectionId === tab.connectionId &&
+                                        plotWindow.slaveId === tab.slaveId &&
+                                        plotWindow.registerGroupId === tab.registerGroupId &&
+                                        plotWindow.series.some((s) => s.address === register.address)
+                                    )
+                                    const valueBackground = linkedPlotWindow?.selectionColor
                                     return (
                                       <TableRow
                                         key={register.address}
@@ -2209,8 +2233,12 @@ const Server = (): JSX.Element => {
                                                 width: 10,
                                                 height: 10,
                                                 borderRadius: '50%',
-                                                bgcolor: registerColor,
-                                                border: '1px solid rgba(0,0,0,0.25)'
+                                                bgcolor: linkedPlotWindow
+                                                  ? getRegisterColor(register.address)
+                                                  : 'transparent',
+                                                border: linkedPlotWindow
+                                                  ? '1px solid rgba(0,0,0,0.25)'
+                                                  : '1px dashed rgba(0,0,0,0.2)'
                                               }}
                                             />
                                             {formatAddress(register.address)}
@@ -2231,7 +2259,7 @@ const Server = (): JSX.Element => {
                                             placeholder="Double-click to edit"
                                           />
                                         </TableCell>
-                                        <TableCell sx={{ bgcolor: registerColor }}>
+                                        <TableCell sx={{ bgcolor: valueBackground }}>
                                           {group.type === '01' || group.type === '02' ? (
                                             <Box sx={{ display: 'flex', justifyContent: 'center' }}>
                                               <Switch
@@ -2266,7 +2294,7 @@ const Server = (): JSX.Element => {
                                               sx={{
                                                 width: '100%',
                                                 '& .MuiInputBase-root': {
-                                                  bgcolor: registerColor
+                                                  bgcolor: valueBackground
                                                 }
                                               }}
                                               inputProps={{
@@ -2352,6 +2380,7 @@ const Server = (): JSX.Element => {
                         <Tab label="Long" value="long" />
                         <Tab label="Float" value="float" />
                         <Tab label="Double" value="double" />
+                        <Tab label="Typed Decode" value="typed" />
                         <Tab label="String" value="string" />
                       </Tabs>
 
@@ -2566,6 +2595,75 @@ const Server = (): JSX.Element => {
                               </Typography>
                             </Box>
                           )
+                        ) : tab.interpretationTab === 'typed' ? (
+                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                            {selectedRegisters.map((reg) => {
+                              const mode = tab.typedInterpretation[reg.address] || 'short'
+                              const decoded = decodePlotValue(
+                                Object.fromEntries(group.registers.map((r) => [r.address, r.value])),
+                                reg.address,
+                                mode
+                              )
+                              const neededWords = getWordSpanForInterpretation(mode)
+                              return (
+                                <Paper
+                                  key={reg.address}
+                                  variant="outlined"
+                                  sx={{ p: 1.5, display: 'flex', alignItems: 'center', gap: 1.5 }}
+                                >
+                                  <Typography sx={{ minWidth: 110, fontFamily: 'monospace' }}>
+                                    {formatAddress(reg.address)}
+                                  </Typography>
+                                  <FormControl size="small" sx={{ minWidth: 150 }}>
+                                    <InputLabel>Type</InputLabel>
+                                    <Select
+                                      label="Type"
+                                      value={mode}
+                                      onChange={(e) =>
+                                        updateTab(activeTabId, {
+                                          typedInterpretation: {
+                                            ...tab.typedInterpretation,
+                                            [reg.address]: e.target.value as PlotInterpretation
+                                          }
+                                        })
+                                      }
+                                    >
+                                      {(
+                                        [
+                                          'short',
+                                          'ushort',
+                                          'int',
+                                          'uint',
+                                          'long',
+                                          'ulong',
+                                          'float',
+                                          'double'
+                                        ] as PlotInterpretation[]
+                                      ).map((opt) => (
+                                        <MenuItem key={opt} value={opt}>
+                                          {opt.toUpperCase()} ({getWordSpanForInterpretation(opt)}w)
+                                        </MenuItem>
+                                      ))}
+                                    </Select>
+                                  </FormControl>
+                                  <TextField
+                                    size="small"
+                                    fullWidth
+                                    label="Decoded Value"
+                                    value={decoded === null ? '' : String(decoded)}
+                                    InputProps={{ readOnly: true }}
+                                    helperText={
+                                      decoded === null
+                                        ? `Need ${neededWords} consecutive words starting at ${formatAddress(
+                                            reg.address
+                                          )}`
+                                        : ' '
+                                    }
+                                  />
+                                </Paper>
+                              )
+                            })}
+                          </Box>
                         ) : tab.interpretationTab === 'string' ? (
                           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                             <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
