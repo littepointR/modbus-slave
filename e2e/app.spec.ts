@@ -130,5 +130,16 @@ test.describe.serial('Server-Centric E2E', () => {
 
     await expect(commPage.getByText(/通讯日志|Transaction Log/)).toBeVisible()
     await expect(commPage.getByText(/暂无通讯数据|No communication data/)).toBeVisible()
+
+    await expect(commPage.getByRole('button', { name: /继续|Continue/ })).toBeVisible()
+    await expect(commPage.getByRole('button', { name: /停止|Stop/ })).toBeVisible()
+    await expect(commPage.getByRole('button', { name: /清空|Clear/ })).toBeVisible()
+    await expect(commPage.getByRole('button', { name: /保存|Save/ })).toBeDisabled()
+
+    await commPage.getByRole('button', { name: /停止|Stop/ }).click()
+    await expect(commPage.getByRole('button', { name: /继续|Continue/ })).toBeEnabled()
+
+    await commPage.getByRole('button', { name: /继续|Continue/ }).click()
+    await expect(commPage.getByRole('button', { name: /停止|Stop/ })).toBeEnabled()
   })
 })
