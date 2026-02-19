@@ -37,7 +37,8 @@ vi.mock('modbus-serial', () => ({
         _server: {
           once: (event: string, handler: (...args: unknown[]) => void) => {
             handlers[event] = handler
-          }
+          },
+          on: vi.fn()
         },
         close
       }

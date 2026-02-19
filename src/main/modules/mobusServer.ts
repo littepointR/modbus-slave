@@ -186,7 +186,8 @@ export class ModbusServer {
     const adapter = createServerAdapter(config.protocol, vector, {
       host: config.host,
       port: config.port,
-      serial: config.serial
+      serial: config.serial,
+      onPacket: (packet) => this._trafficMonitor.recordPacket(packet)
     })
 
     try {

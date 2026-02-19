@@ -3,7 +3,8 @@ import type { IServiceVector } from 'modbus-serial'
 import net from 'net'
 import dgram from 'dgram'
 import { SerialPort } from 'serialport'
-import type { ServerProtocol, SerialConfig } from '@shared'
+import type { ServerProtocol, SerialConfig, ServerCommPacket } from '@shared'
+import { parseMBAPHeader, parseModbusPDU } from '../trafficMonitor'
 
 export interface ServerAdapter {
   start(): Promise<void>
@@ -12,6 +13,8 @@ export interface ServerAdapter {
   getAddress(): string
   getProtocol(): ServerProtocol
 }
+
+type PacketRecorder = (packet: Omit<ServerCommPacket, 'id' | 'timestamp'>) => void
 
 abstract class BaseServerAdapter implements ServerAdapter {
   protected _vector: IServiceVector
@@ -36,11 +39,40 @@ export class TcpServerAdapter extends BaseServerAdapter {
   private _server: ServerTCP | null = null
   private _host: string
   private _port: number
+  private _onPacket?: PacketRecorder
 
-  constructor(vector: IServiceVector, host: string, port: number) {
+  constructor(vector: IServiceVector, host: string, port: number, onPacket?: PacketRecorder) {
     super(vector)
     this._host = host
     this._port = port
+    this._onPacket = onPacket
+  }
+
+  private _recordTcpPacket(
+    direction: 'RX' | 'TX',
+    clientAddr: string,
+    buffer: Buffer | Uint8Array
+  ): void {
+    if (!this._onPacket) return
+    const bytes = buffer instanceof Buffer ? buffer : Buffer.from(buffer)
+    const mbap = parseMBAPHeader(bytes)
+    if (!mbap) return
+
+    const pdu = parseModbusPDU(bytes, 7)
+    if (!pdu) return
+
+    this._onPacket({
+      direction,
+      protocol: 'ModbusTcp',
+      frameType: 'MBAP',
+      clientAddr,
+      slaveId: mbap.unitId,
+      functionCode: pdu.functionCode,
+      data: new Uint8Array(bytes),
+      parsed: {
+        isException: pdu.isException
+      }
+    })
   }
 
   async start(): Promise<void> {
@@ -57,6 +89,20 @@ export class TcpServerAdapter extends BaseServerAdapter {
       })
       netServer.once('error', (err) => {
         reject(err)
+      })
+
+      netServer.on('connection', (socket) => {
+        const clientAddr = `${socket.remoteAddress ?? 'unknown'}:${socket.remotePort ?? 0}`
+        socket.on('data', (chunk: Buffer) => {
+          this._recordTcpPacket('RX', clientAddr, chunk)
+        })
+
+        const rawWrite = socket.write.bind(socket)
+        ;(socket as any).write = ((chunk: unknown, ...args: unknown[]) => {
+          const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as any)
+          this._recordTcpPacket('TX', clientAddr, bytes)
+          return rawWrite(chunk as any, ...(args as [any]))
+        }) as typeof socket.write
       })
     })
   }
@@ -224,10 +270,41 @@ export class RtuServerAdapter extends BaseServerAdapter {
   private _receiveBuffer: Buffer = Buffer.alloc(0)
   private _frameTimeout: NodeJS.Timeout | null = null
   private readonly _FRAME_TIMEOUT_MS = 4 // 3.5 character times at 9600bps ≈ 4ms
+  private _onPacket?: PacketRecorder
+  private _protocol: 'ModbusRtu' | 'ModbusAscii'
 
-  constructor(vector: IServiceVector, serialConfig: SerialConfig) {
+  constructor(
+    vector: IServiceVector,
+    serialConfig: SerialConfig,
+    onPacket?: PacketRecorder,
+    protocol: 'ModbusRtu' | 'ModbusAscii' = 'ModbusRtu'
+  ) {
     super(vector)
     this._serialConfig = serialConfig
+    this._onPacket = onPacket
+    this._protocol = protocol
+  }
+
+  private _recordSerialPacket(direction: 'RX' | 'TX', frame: Buffer, unitId?: number): void {
+    if (!this._onPacket) return
+
+    const frameType = this._protocol === 'ModbusAscii' ? 'ASCII' : 'RTU'
+    const clientAddr = `serial:${this._serialConfig.port}`
+    const payload = frameType === 'RTU' ? frame.slice(0, -2) : frame
+    const parsed = parseModbusPDU(payload, 1)
+
+    this._onPacket({
+      direction,
+      protocol: this._protocol,
+      frameType,
+      clientAddr,
+      slaveId: unitId ?? payload[0] ?? 0,
+      functionCode: parsed?.functionCode ?? payload[1] ?? 0,
+      data: new Uint8Array(frame),
+      parsed: {
+        isException: parsed?.isException
+      }
+    })
   }
 
   async start(): Promise<void> {
@@ -305,6 +382,8 @@ export class RtuServerAdapter extends BaseServerAdapter {
     const unitId = frame[0]
     const functionCode = frame[1]
     const data = frame.slice(2, -2)
+
+    this._recordSerialPacket('RX', frame, unitId)
 
     // Process request using vector
     this._processRequest(unitId, functionCode, data, true)
@@ -454,12 +533,14 @@ export class RtuServerAdapter extends BaseServerAdapter {
 
         if (isRTU) {
           const frameWithCRC = addRTUCRC(responseFrame)
+          this._recordSerialPacket('TX', frameWithCRC, unitId)
           this._port?.write(frameWithCRC)
         } else {
           // ASCII - add LRC and encode
           const lrc = calculateLRC(responseFrame)
           const frameWithLRC = Buffer.concat([responseFrame, Buffer.from([lrc])])
           const asciiFrame = createASCIIFrame(frameWithLRC)
+          this._recordSerialPacket('TX', asciiFrame, unitId)
           this._port?.write(asciiFrame)
         }
       }
@@ -469,11 +550,13 @@ export class RtuServerAdapter extends BaseServerAdapter {
       const exceptionFrame = Buffer.from([unitId, functionCode | 0x80, 0x04])
       if (isRTU) {
         const frameWithCRC = addRTUCRC(exceptionFrame)
+        this._recordSerialPacket('TX', frameWithCRC, unitId)
         this._port?.write(frameWithCRC)
       } else {
         const lrc = calculateLRC(exceptionFrame)
         const frameWithLRC = Buffer.concat([exceptionFrame, Buffer.from([lrc])])
         const asciiFrame = createASCIIFrame(frameWithLRC)
+        this._recordSerialPacket('TX', asciiFrame, unitId)
         this._port?.write(asciiFrame)
       }
     }
@@ -492,10 +575,12 @@ export class AsciiServerAdapter extends BaseServerAdapter {
   private _serialConfig: SerialConfig
   private _port: SerialPort | null = null
   private _receiveBuffer: string = ''
+  private _onPacket?: PacketRecorder
 
-  constructor(vector: IServiceVector, serialConfig: SerialConfig) {
+  constructor(vector: IServiceVector, serialConfig: SerialConfig, onPacket?: PacketRecorder) {
     super(vector)
     this._serialConfig = serialConfig
+    this._onPacket = onPacket
   }
 
   async start(): Promise<void> {
@@ -574,8 +659,28 @@ export class AsciiServerAdapter extends BaseServerAdapter {
     const functionCode = data[1]
     const payload = data.slice(2)
 
+    if (this._onPacket) {
+      this._onPacket({
+        direction: 'RX',
+        protocol: 'ModbusAscii',
+        frameType: 'ASCII',
+        clientAddr: `serial:${this._serialConfig.port}`,
+        slaveId: unitId,
+        functionCode,
+        data: new Uint8Array(frame),
+        parsed: {
+          isException: false
+        }
+      })
+    }
+
     // Use RTU adapter's process logic (same protocol, different framing)
-    const rtuAdapter = new RtuServerAdapter(this._vector, this._serialConfig)
+    const rtuAdapter = new RtuServerAdapter(
+      this._vector,
+      this._serialConfig,
+      this._onPacket,
+      'ModbusAscii'
+    )
     // @ts-ignore - accessing private method
     rtuAdapter._port = this._port
     // @ts-ignore
@@ -690,6 +795,7 @@ export interface ServerAdapterConfig {
   host?: string
   port?: number
   serial?: SerialConfig
+  onPacket?: PacketRecorder
 }
 
 export function createServerAdapter(
@@ -699,18 +805,19 @@ export function createServerAdapter(
 ): ServerAdapter {
   const host = config.host ?? '0.0.0.0'
   const port = config.port ?? 502
+  const onPacket = config.onPacket
 
   switch (protocol) {
     case 'ModbusTcp':
-      return new TcpServerAdapter(vector, host, port)
+      return new TcpServerAdapter(vector, host, port, onPacket)
     case 'ModbusUdp':
       return new UdpServerAdapter(vector, host, port)
     case 'ModbusRtu':
       if (!config.serial) throw new Error('Serial config required for RTU')
-      return new RtuServerAdapter(vector, config.serial)
+      return new RtuServerAdapter(vector, config.serial, onPacket, 'ModbusRtu')
     case 'ModbusAscii':
       if (!config.serial) throw new Error('Serial config required for ASCII')
-      return new AsciiServerAdapter(vector, config.serial)
+      return new AsciiServerAdapter(vector, config.serial, onPacket)
     case 'ModbusRtuOverTcp':
       return new RtuOverTcpServerAdapter(vector, host, port)
     case 'ModbusRtuOverUdp':

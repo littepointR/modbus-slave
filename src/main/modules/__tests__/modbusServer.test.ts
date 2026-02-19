@@ -755,7 +755,8 @@ describe('ModbusServer', () => {
       expect(createServerAdapter).toHaveBeenCalledWith('ModbusTcp', expect.any(Object), {
         host: '0.0.0.0',
         port: 5020,
-        serial: undefined
+        serial: undefined,
+        onPacket: expect.any(Function)
       })
       expect(adapterInstances[0].start).toHaveBeenCalled()
     })

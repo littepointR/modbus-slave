@@ -61,6 +61,7 @@ import {
 } from '@mui/icons-material'
 import { v4 as uuidv4 } from 'uuid'
 import SettingsMenu from '@renderer/components/shared/SettingsMenu'
+import type { CreateServerParams, ServerConnectionConfig } from '@shared'
 
 // =============================================================================
 // TYPES
@@ -107,6 +108,47 @@ interface Connection {
   port?: number
   isOpen: boolean
   slaves: Slave[]
+}
+
+const toServerConfig = (connection: Connection): ServerConnectionConfig => {
+  switch (connection.mode) {
+    case 'tcp':
+      return {
+        protocol: 'ModbusTcp',
+        host: connection.ipAddress || '127.0.0.1',
+        port: connection.port || 502
+      }
+    case 'udp':
+      return {
+        protocol: 'ModbusUdp',
+        host: connection.ipAddress || '127.0.0.1',
+        port: connection.port || 502
+      }
+    case 'rtuovertcp':
+      return {
+        protocol: 'ModbusRtuOverTcp',
+        host: connection.ipAddress || '127.0.0.1',
+        port: connection.port || 502
+      }
+    case 'rtuoverudp':
+      return {
+        protocol: 'ModbusRtuOverUdp',
+        host: connection.ipAddress || '127.0.0.1',
+        port: connection.port || 502
+      }
+    case 'rtu':
+    default:
+      return {
+        protocol: connection.frameFormat === 'ascii' ? 'ModbusAscii' : 'ModbusRtu',
+        serial: {
+          port: connection.serialPort || '',
+          baudRate: connection.baudRate || 9600,
+          dataBits: connection.dataBits || 8,
+          stopBits: connection.stopBits || 1,
+          parity: connection.parity || 'none'
+        }
+      }
+  }
 }
 
 interface OpenTab {
@@ -1392,6 +1434,13 @@ const Server = (): JSX.Element => {
     Record<string, { page: number; rowsPerPage: number }>
   >({})
 
+  useEffect(() => {
+    void window.api.startCommMonitor()
+    return () => {
+      void window.api.stopCommMonitor()
+    }
+  }, [])
+
   const toggleConnection = (id: string) => {
     setExpandedConnections((prev) => {
       const next = new Set(prev)
@@ -1647,16 +1696,30 @@ const Server = (): JSX.Element => {
     return conn?.slaves.find((s) => s.id === slaveId) || null
   }
 
-  const handleOpenConnection = () => {
+  const handleOpenConnection = async () => {
     const conn = getSelectedConnection()
     if (!conn) return
-    setConnections(connections.map((c) => (c.id === conn.id ? { ...c, isOpen: true } : c)))
+    try {
+      const params: CreateServerParams = {
+        uuid: conn.id,
+        config: toServerConfig(conn)
+      }
+      await window.api.createServer(params)
+      setConnections((prev) => prev.map((c) => (c.id === conn.id ? { ...c, isOpen: true } : c)))
+    } catch (error) {
+      console.error('Failed to open connection:', error)
+    }
   }
 
-  const handleCloseConnection = () => {
+  const handleCloseConnection = async () => {
     const conn = getSelectedConnection()
     if (!conn) return
-    setConnections(connections.map((c) => (c.id === conn.id ? { ...c, isOpen: false } : c)))
+    try {
+      await window.api.deleteServer(conn.id)
+      setConnections((prev) => prev.map((c) => (c.id === conn.id ? { ...c, isOpen: false } : c)))
+    } catch (error) {
+      console.error('Failed to close connection:', error)
+    }
   }
 
   return (
