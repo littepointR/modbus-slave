@@ -14,6 +14,7 @@ import Select from '@mui/material/Select'
 import { UnitIdString, UnitIdStringSchema } from '@shared'
 import MenuItem from '@mui/material/MenuItem'
 import React, { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 interface UnitIdMenuItemProps {
   unitId: UnitIdString
@@ -44,6 +45,7 @@ const UnitIdMenuItem = meme(({ unitId }: UnitIdMenuItemProps) => {
 
 // Unit Id
 const UnitId = meme(() => {
+  const { t } = useTranslation()
   const unitId = useServerZustand((z) => {
     const uuid = z.selectedUuid
     return z.getUnitId(uuid)
@@ -52,13 +54,13 @@ const UnitId = meme(() => {
 
   return (
     <FormControl size="small">
-      <InputLabel id={labelId}>Unit ID</InputLabel>
+      <InputLabel id={labelId}>{t('server.unitId')}</InputLabel>
       <Select
         data-testid="server-unitid-select"
         size="small"
         labelId={labelId}
         value={unitId}
-        label="Unit ID"
+        label={t('server.unitId')}
         onChange={(e) => {
           const result = UnitIdStringSchema.safeParse(e.target.value)
           if (result.success) useServerZustand.getState().setUnitId(result.data)

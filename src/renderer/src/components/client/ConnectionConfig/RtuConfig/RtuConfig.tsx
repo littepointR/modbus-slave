@@ -18,6 +18,7 @@ import { SerialPortOptions } from 'modbus-serial/ModbusRTU'
 import { AutocompleteRenderInputParams } from '@mui/material'
 import { useSnackbar } from 'notistack'
 import { useEffect, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 
 const measureTextWidth = (text: string, font: string = '400 14px Roboto, sans-serif'): number => {
   const canvas = document.createElement('canvas')
@@ -30,13 +31,14 @@ const measureTextWidth = (text: string, font: string = '400 14px Roboto, sans-se
 }
 
 const ComTextField = meme((params: AutocompleteRenderInputParams) => {
+  const { t } = useTranslation()
   const comValid = useRootZustand((z) => z.valid.com)
   const loading = useRootZustand((z) => z.serialPortsLoading)
 
   return (
     <TextField
       {...params}
-      label="COM Port"
+      label={t('client.connection.comPort')}
       variant="outlined"
       size="small"
       sx={{
@@ -126,6 +128,7 @@ const ComInput = meme(() => {
 //
 // COM Port Actions
 const ComActions = meme(() => {
+  const { t } = useTranslation()
   const disabled = useRootZustand((z) => z.clientState.connectState !== 'disconnected')
   const com = useRootZustand((z) => z.connectionConfig.rtu.com)
   const loading = useRootZustand((z) => z.serialPortsLoading)
@@ -163,8 +166,8 @@ const ComActions = meme(() => {
         onClick={onRefresh}
         disabled={disabled || loading}
         data-testid="rtu-refresh-btn"
-        aria-label="Refresh COM ports"
-        title="Refresh COM ports"
+        aria-label={t('client.connection.refreshComPorts')}
+        title={t('client.connection.refreshComPorts')}
       >
         {loading ? <CircularProgress size={16} /> : <Refresh fontSize="small" />}
       </ToggleButton>
@@ -173,8 +176,8 @@ const ComActions = meme(() => {
         onClick={onValidate}
         disabled={disabled || validating || !com || com.trim() === ''}
         data-testid="rtu-validate-btn"
-        aria-label="Validate COM port"
-        title="Validate COM port"
+        aria-label={t('client.connection.validateComPort')}
+        title={t('client.connection.validateComPort')}
       >
         {validating ? <CircularProgress size={16} /> : <CheckCircleOutline fontSize="small" />}
       </ToggleButton>
@@ -204,6 +207,7 @@ const Com = (): JSX.Element => {
 //
 // Baud Rate
 const BaudRateSelect = meme(() => {
+  const { t } = useTranslation()
   const disabled = useRootZustand((z) => z.clientState.connectState !== 'disconnected')
 
   const labelId = 'baud-rate-select'
@@ -212,14 +216,14 @@ const BaudRateSelect = meme(() => {
 
   return (
     <FormControl size="small">
-      <InputLabel id={labelId}>Baud Rate</InputLabel>
+      <InputLabel id={labelId}>{t('client.connection.baudRate')}</InputLabel>
 
       <Select
         disabled={disabled}
         size="small"
         labelId={labelId}
         value={baudRate}
-        label="Baud Rate"
+        label={t('client.connection.baudRate')}
         onChange={(e) => setBaudRate(e.target.value as ModbusBaudRate)}
         sx={{ width: 100 }}
         data-testid="rtu-baudrate-select"
@@ -240,6 +244,7 @@ const BaudRateSelect = meme(() => {
 const parityOptions: SerialPortOptions['parity'][] = ['none', 'even', 'odd', 'mark', 'space']
 
 const ParitySelect = meme(() => {
+  const { t } = useTranslation()
   const disabled = useRootZustand((z) => z.clientState.connectState !== 'disconnected')
 
   const labelId = 'parity-select'
@@ -248,14 +253,14 @@ const ParitySelect = meme(() => {
 
   return (
     <FormControl size="small">
-      <InputLabel id={labelId}>Parity</InputLabel>
+      <InputLabel id={labelId}>{t('client.connection.parity')}</InputLabel>
 
       <Select
         disabled={disabled}
         size="small"
         labelId={labelId}
         value={parity}
-        label="Parity"
+        label={t('client.connection.parity')}
         onChange={(e) => setParity(e.target.value as SerialPortOptions['parity'])}
         sx={{ width: 85 }}
         data-testid="rtu-parity-select"
@@ -276,6 +281,7 @@ const ParitySelect = meme(() => {
 const databitsOptions: SerialPortOptions['dataBits'][] = [8, 7, 6, 5]
 
 const DataBitsSelect = meme(() => {
+  const { t } = useTranslation()
   const disabled = useRootZustand((z) => z.clientState.connectState !== 'disconnected')
 
   const labelId = 'databits-select'
@@ -284,14 +290,14 @@ const DataBitsSelect = meme(() => {
 
   return (
     <FormControl size="small">
-      <InputLabel id={labelId}>Data Bits</InputLabel>
+      <InputLabel id={labelId}>{t('client.connection.dataBits')}</InputLabel>
 
       <Select
         disabled={disabled}
         size="small"
         labelId={labelId}
         value={dataBits}
-        label="Data Bits"
+        label={t('client.connection.dataBits')}
         onChange={(e) => setDataBits(Number(e.target.value))}
         sx={{ width: 75 }}
         data-testid="rtu-databits-select"
@@ -311,6 +317,7 @@ const DataBitsSelect = meme(() => {
 // Stop Bits
 const StopBitsOptions: SerialPortOptions['stopBits'][] = [1, 2]
 const StopBitsSelect = meme(() => {
+  const { t } = useTranslation()
   const disabled = useRootZustand((z) => z.clientState.connectState !== 'disconnected')
 
   const labelId = 'stopbits-select'
@@ -319,13 +326,13 @@ const StopBitsSelect = meme(() => {
 
   return (
     <FormControl size="small">
-      <InputLabel id={labelId}>Stop Bits</InputLabel>
+      <InputLabel id={labelId}>{t('client.connection.stopBits')}</InputLabel>
       <Select
         disabled={disabled}
         size="small"
         labelId={labelId}
         value={stopBits}
-        label="Stop Bits"
+        label={t('client.connection.stopBits')}
         onChange={(e) => setStopBits(Number(e.target.value))}
         sx={{ width: 75 }}
         data-testid="rtu-stopbits-select"

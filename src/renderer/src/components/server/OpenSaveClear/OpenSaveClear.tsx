@@ -13,6 +13,7 @@ import {
 import { snakeCase } from 'lodash'
 import { useSnackbar } from 'notistack'
 import { useRef, useState, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 
 //
 //
@@ -28,6 +29,7 @@ const useOpen: UseOpenHook = () => {
   const [opening, setOpening] = useState(false)
 
   const { enqueueSnackbar } = useSnackbar()
+  const { t } = useTranslation()
 
   const open = useCallback(
     async (file: File | undefined) => {
@@ -72,7 +74,7 @@ const useOpen: UseOpenHook = () => {
             await new Promise((r) => setTimeout(r, 1))
           })
 
-          enqueueSnackbar({ variant: 'success', message: 'Configuration opened successfully' })
+          enqueueSnackbar({ variant: 'success', message: t('snackbar.configOpened') })
         }
 
         // Legacy format, without name
@@ -83,13 +85,12 @@ const useOpen: UseOpenHook = () => {
           state.replaceServerRegisters('0', legacyConfigResult.data)
           enqueueSnackbar({
             variant: 'warning',
-            message:
-              'Configuration opened successfully (legacy format), consider saving with the new format.'
+            message: t('snackbar.configOpenedLegacy')
           })
         }
 
         if (!configResult.success && !legacyConfigResult.success) {
-          enqueueSnackbar({ variant: 'error', message: 'Invalid Config' })
+          enqueueSnackbar({ variant: 'error', message: t('snackbar.invalidConfig') })
           console.warn({
             configResult: configResult.error,
             legacyConfigResult: legacyConfigResult.error
@@ -97,7 +98,7 @@ const useOpen: UseOpenHook = () => {
         }
       } catch (error) {
         const tError = error as Error
-        enqueueSnackbar({ variant: 'error', message: `INVALID JSON: ${tError.message}` })
+        enqueueSnackbar({ variant: 'error', message: t('snackbar.invalidJson', { message: tError.message }) })
       }
 
       // Synchronize only the selected server after opening the configuration
@@ -106,7 +107,7 @@ const useOpen: UseOpenHook = () => {
       openingRef.current = false
       setOpening(false)
     },
-    [enqueueSnackbar]
+    [enqueueSnackbar, t]
   )
 
   return { opening, openingRef, open }
@@ -162,6 +163,7 @@ const useSave: UseSaveHook = () => {
 const OpenSaveClear = meme(() => {
   const { opening, open } = useOpen()
   const { save } = useSave()
+  const { t } = useTranslation()
 
   const clear = useCallback(async () => {
     const state = useServerZustand.getState()
@@ -193,11 +195,11 @@ const OpenSaveClear = meme(() => {
         <label htmlFor="container-button-server-file">
           <IconButton
             data-testid="server-open-btn"
-            aria-label="Open configuration"
+            aria-label={t('server.openSaveClear.open')}
             color="primary"
             disabled={opening}
             component="span"
-            title="Open configuration"
+            title={t('server.openSaveClear.open')}
           >
             <FileOpen />
           </IconButton>
@@ -205,8 +207,8 @@ const OpenSaveClear = meme(() => {
       </div>
       <IconButton
         data-testid="server-save-btn"
-        aria-label="Save configuration"
-        title="Save configuration"
+        aria-label={t('server.openSaveClear.save')}
+        title={t('server.openSaveClear.save')}
         color="primary"
         disabled={opening}
         onClick={save}
@@ -215,8 +217,8 @@ const OpenSaveClear = meme(() => {
       </IconButton>
       <IconButton
         data-testid="server-clear-btn"
-        aria-label="Clear configuration"
-        title="Clear configuration"
+        aria-label={t('server.openSaveClear.clear')}
+        title={t('server.openSaveClear.clear')}
         color="primary"
         disabled={opening}
         onClick={clear}

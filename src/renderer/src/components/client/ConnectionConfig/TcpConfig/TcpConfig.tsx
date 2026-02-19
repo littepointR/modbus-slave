@@ -2,12 +2,14 @@ import { TextField, Box, InputBaseComponentProps } from '@mui/material'
 import HostInput from '@renderer/components/shared/inputs/HostInput'
 import { meme } from '@renderer/components/shared/inputs/meme'
 import { maskInputProps } from '@renderer/components/shared/inputs/types'
-import UIntInput from '@renderer/components/shared/inputs/UintInput'
+import UintInput from '@renderer/components/shared/inputs/UintInput'
 import { useRootZustand } from '@renderer/context/root.zustand'
 import { ElementType } from 'react'
+import { useTranslation } from 'react-i18next'
 
 // Host
 const Host = meme(() => {
+  const { t } = useTranslation()
   const disabled = useRootZustand((z) => z.clientState.connectState !== 'disconnected')
   const host = useRootZustand((z) => z.connectionConfig.tcp.host)
   const hostValid = useRootZustand((z) => z.valid.host)
@@ -16,7 +18,7 @@ const Host = meme(() => {
   return (
     <TextField
       disabled={disabled}
-      label="IP Address"
+      label={t('client.connection.ipAddress')}
       variant="outlined"
       size="small"
       sx={{ width: 130 }}
@@ -42,13 +44,14 @@ const Host = meme(() => {
 //
 // Port
 const Port = meme(() => {
+  const { t } = useTranslation()
   const disabled = useRootZustand((z) => z.clientState.connectState !== 'disconnected')
   const port = useRootZustand((z) => String(z.connectionConfig.tcp.options.port))
 
   return (
     <TextField
       disabled={disabled}
-      label="Port"
+      label={t('client.connection.port')}
       variant="outlined"
       size="small"
       sx={{ width: 60 }}
@@ -56,7 +59,7 @@ const Port = meme(() => {
       data-testid="tcp-port-input"
       slotProps={{
         input: {
-          inputComponent: UIntInput as unknown as ElementType<InputBaseComponentProps, 'input'>,
+          inputComponent: UintInput as unknown as ElementType<InputBaseComponentProps, 'input'>,
           inputProps: maskInputProps({ set: useRootZustand.getState().setPort })
         }
       }}

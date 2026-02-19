@@ -3,6 +3,7 @@ import IconButton from '@mui/material/IconButton'
 import { useDataZustand } from '@renderer/context/data.zustand'
 import { useRootZustand } from '@renderer/context/root.zustand'
 import { RegisterData, dummyWords } from '@shared'
+import { useTranslation } from 'react-i18next'
 
 export const showMapping = (): void => {
   const registerData: RegisterData[] = []
@@ -31,16 +32,17 @@ const ViewConfigButton = (): JSX.Element => {
   const disabled = useRootZustand(
     (z) => Object.keys(z.registerMapping[z.registerConfig.type]).length === 0
   )
+  const { t } = useTranslation()
 
   return (
     <IconButton
       data-testid="view-config-btn"
-      aria-label="View configuration"
+      aria-label={t('client.config.view')}
       disabled={disabled}
       size="small"
       onClick={showMapping}
       color="primary"
-      title="view current datatype, scaling and comment configuration"
+      title={t('client.config.viewTooltip')}
     >
       <Visibility fontSize="small" />
     </IconButton>

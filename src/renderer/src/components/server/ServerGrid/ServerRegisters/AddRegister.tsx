@@ -21,6 +21,7 @@ import DataTypeSelectInput from '@renderer/components/shared/inputs/DataTypeSele
 import { useMinMaxInteger } from '@renderer/hooks'
 import { useServerZustand } from '@renderer/context/server.zustand'
 import { Delete } from '@mui/icons-material'
+import { useTranslation } from 'react-i18next'
 
 //
 //
@@ -54,6 +55,7 @@ AddressInputForward.displayName = 'AddressInput'
 const AddressInput = meme(AddressInputForward)
 
 const AddressField = meme(() => {
+  const { t } = useTranslation()
   const address = useAddRegisterZustand((z) => String(z.address))
   const addressInUse = useAddRegisterZustand((z) => z.addressInUse)
   const addressFitError = useAddRegisterZustand((z) => z.addressFitError)
@@ -65,7 +67,7 @@ const AddressField = meme(() => {
       <TextField
         data-testid="add-reg-address-input"
         error={!valid}
-        label="Address"
+        label={t('server.registers.address')}
         variant="outlined"
         size="small"
         sx={{ width: 90 }}
@@ -80,8 +82,8 @@ const AddressField = meme(() => {
           }
         }}
       />
-      {addressInUse && <FormHelperText>In use</FormHelperText>}
-      {addressFitError && <FormHelperText>Data type does not fit at this address</FormHelperText>}
+      {addressInUse && <FormHelperText>{t('server.registers.validation.inUse')}</FormHelperText>}
+      {addressFitError && <FormHelperText>{t('server.registers.validation.dataTypeDoesNotFit')}</FormHelperText>}
     </FormControl>
   )
 })
@@ -103,6 +105,7 @@ const DataTypeSelect = meme(() => {
 //
 // Fixed Or Generator
 const FixedOrGenerator = meme(() => {
+  const { t } = useTranslation()
   const fixed = useAddRegisterZustand((z) => z.fixed)
   const setFixed = useAddRegisterZustand((z) => z.setFixed)
 
@@ -116,14 +119,14 @@ const FixedOrGenerator = meme(() => {
       sx={{ flex: 1 }}
     >
       <ToggleButton data-testid="add-reg-fixed-btn" sx={{ flex: 1, flexBasis: 0 }} value={true}>
-        Fixed
+        {t('server.registers.mode.fixed')}
       </ToggleButton>
       <ToggleButton
         data-testid="add-reg-generator-btn"
         sx={{ flex: 1, flexBasis: 0 }}
         value={false}
       >
-        Generator
+        {t('server.registers.mode.generator')}
       </ToggleButton>
     </ToggleButtonGroup>
   )
@@ -164,6 +167,7 @@ ValueInputForward.displayName = 'ValueInput'
 const ValueInput = meme(ValueInputForward)
 
 const ValueInputComponent = meme(() => {
+  const { t } = useTranslation()
   const value = useAddRegisterZustand((z) => z.value)
   const valid = useAddRegisterZustand((z) => z.valid.value)
   const setValue = useAddRegisterZustand((z) => z.setValue)
@@ -171,7 +175,7 @@ const ValueInputComponent = meme(() => {
   return (
     <TextField
       data-testid="add-reg-value-input"
-      label="Value"
+      label={t('server.registers.value')}
       variant="outlined"
       size="small"
       sx={{ minWidth: 100 }}
@@ -253,6 +257,7 @@ const MaxInput = meme(MaxInputForward)
 //
 // Min Max components
 const MinTextField = meme(() => {
+  const { t } = useTranslation()
   const min = useAddRegisterZustand((z) => String(z.min))
   const valid = useAddRegisterZustand((z) => z.valid.min)
   const setMin = useAddRegisterZustand((z) => z.setMin)
@@ -261,7 +266,7 @@ const MinTextField = meme(() => {
     <TextField
       data-testid="add-reg-min-input"
       error={!valid}
-      label="Min Value"
+      label={t('server.registers.minValue')}
       variant="outlined"
       size="small"
       sx={{ width: 90 }}
@@ -277,6 +282,7 @@ const MinTextField = meme(() => {
 })
 
 const MaxTextField = meme(() => {
+  const { t } = useTranslation()
   const max = useAddRegisterZustand((z) => String(z.max))
   const valid = useAddRegisterZustand((z) => z.valid.max)
   const setMax = useAddRegisterZustand((z) => z.setMax)
@@ -285,7 +291,7 @@ const MaxTextField = meme(() => {
     <TextField
       data-testid="add-reg-max-input"
       error={!valid}
-      label="Max Value"
+      label={t('server.registers.maxValue')}
       variant="outlined"
       size="small"
       sx={{ width: 90 }}
@@ -330,6 +336,7 @@ IntervalInputForward.displayName = 'IntervalInput'
 const IntervalInput = meme(IntervalInputForward)
 
 const IntervalTextField = meme(() => {
+  const { t } = useTranslation()
   const interval = useAddRegisterZustand((z) => String(z.interval))
   const valid = useAddRegisterZustand((z) => z.valid.interval)
   const setInterval = useAddRegisterZustand((z) => z.setInterval)
@@ -338,7 +345,7 @@ const IntervalTextField = meme(() => {
     <TextField
       data-testid="add-reg-interval-input"
       error={!valid}
-      label="Interval (s)"
+      label={t('server.registers.interval')}
       variant="outlined"
       size="small"
       sx={{ width: 90 }}
@@ -378,13 +385,14 @@ const ValueParameters = meme(() => {
 //
 // Comment
 const CommentField = meme(() => {
+  const { t } = useTranslation()
   const comment = useAddRegisterZustand((z) => z.comment)
   const setComment = useAddRegisterZustand((z) => z.setComment)
 
   return (
     <TextField
       data-testid="add-reg-comment-input"
-      label="Comment"
+      label={t('server.registers.comment')}
       variant="outlined"
       size="small"
       value={comment}
@@ -399,6 +407,7 @@ const CommentField = meme(() => {
 //
 // Toggle endianness button
 const ToggleEndianButton = meme(() => {
+  const { t } = useTranslation()
   const littleEndian = useAddRegisterZustand((z) => z.littleEndian)
   const setLittleEndian = useAddRegisterZustand((z) => z.setLittleEndian)
 
@@ -413,13 +422,13 @@ const ToggleEndianButton = meme(() => {
     >
       <ToggleButton
         data-testid="add-reg-be-btn"
-        aria-label="Big Endian"
+        aria-label={t('server.registers.bigEndian')}
         value={false}
         sx={{ whiteSpace: 'nowrap' }}
       >
         BE
       </ToggleButton>
-      <ToggleButton data-testid="add-reg-le-btn" aria-label="Little Endian" value={true}>
+      <ToggleButton data-testid="add-reg-le-btn" aria-label={t('server.registers.littleEndian')} value={true}>
         LE
       </ToggleButton>
     </ToggleButtonGroup>
@@ -486,6 +495,7 @@ function submitRegister(isEdit: boolean): { address: number; dataType: BaseDataT
 
 // Add buttons
 const AddButtons = meme(() => {
+  const { t } = useTranslation()
   const edit = useAddRegisterZustand((z) => z.serverRegisterEdit !== undefined)
   const valid = useAddRegisterZustand((z) => {
     if (z.fixed) return z.valid.address && z.valid.value
@@ -534,7 +544,7 @@ const AddButtons = meme(() => {
         color="primary"
         onClick={handleEditSubmit}
       >
-        Submit Change
+        {t('server.registers.actions.submitChange')}
       </Button>
     )
   }
@@ -549,7 +559,7 @@ const AddButtons = meme(() => {
         color="primary"
         onClick={handleAddAndClose}
       >
-        Add & Close
+        {t('server.registers.actions.addAndClose')}
       </Button>
       <Button
         data-testid="add-reg-next-btn"
@@ -559,13 +569,14 @@ const AddButtons = meme(() => {
         color="primary"
         onClick={handleAddAndNext}
       >
-        Add & Next
+        {t('server.registers.actions.addAndNext')}
       </Button>
     </>
   )
 })
 
 const DeleteButton = meme(() => {
+  const { t } = useTranslation()
   const [over, setOver] = useState(false)
   const handleClick = useCallback(() => {
     const { address, registerType, setRegisterType, setEditRegister } =
@@ -598,7 +609,7 @@ const DeleteButton = meme(() => {
       onMouseEnter={() => setOver(true)}
       onMouseLeave={() => setOver(false)}
     >
-      Remove
+      {t('server.registers.actions.remove')}
     </Button>
   )
 })
@@ -609,6 +620,7 @@ const DeleteButton = meme(() => {
 //
 // MAIN
 const AddRegister = meme(() => {
+  const { t } = useTranslation()
   const edit = useAddRegisterZustand((z) => z.serverRegisterEdit !== undefined)
   const registerType = useAddRegisterZustand((z) => z.registerType)
   const setRegisterType = useAddRegisterZustand((z) => z.setRegisterType)
@@ -665,8 +677,10 @@ const AddRegister = meme(() => {
         sx={{ display: 'flex', flexDirection: 'column', gap: 2, p: 2, height: 'fit-content' }}
       >
         <Typography variant="subtitle2" sx={{ px: 0.5 }}>
-          {edit ? 'Edit' : 'Add'}{' '}
-          {registerType === 'input_registers' ? 'Input Register' : 'Holding Register'}
+          {edit ? t('server.registers.titles.edit') : t('server.registers.titles.add')}{' '}
+          {registerType === 'input_registers'
+            ? t('server.registers.titles.inputRegister')
+            : t('server.registers.titles.holdingRegister')}
         </Typography>
         <FixedOrGenerator />
         <Box sx={{ display: 'flex', gap: 2 }}>
