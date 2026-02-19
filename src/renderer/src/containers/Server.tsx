@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, memo, useCallback } from 'react'
+import { useState, useRef, useEffect, memo, useCallback, type MouseEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { onEvent, sendEvent } from '@renderer/events'
 import {
@@ -26,6 +26,7 @@ import {
   Chip,
   Tabs,
   Tab,
+  Menu,
   Table,
   TableBody,
   TableCell,
@@ -179,6 +180,19 @@ interface PlotWindowState extends RegisterPlotWindowInit {
   selectionColor: string
 }
 
+interface TypedValueEditMenuState {
+  tabId: string
+  address: number
+  mouseX: number
+  mouseY: number
+}
+
+interface TypedBatchMenuState {
+  tabId: string
+  mouseX: number
+  mouseY: number
+}
+
 // =============================================================================
 // CONSTANTS
 // =============================================================================
@@ -205,6 +219,13 @@ const TYPED_INTERPRETATION_OPTIONS: PlotInterpretation[] = [
   'float',
   'double'
 ]
+
+interface TypedSpanHint {
+  startAddress: number
+  span: number
+  mode: PlotInterpretation
+  index: number
+}
 
 // =============================================================================
 // HELPERS
@@ -399,6 +420,43 @@ const extractConsecutiveGroups = <T extends { address: number }>(
   }
 
   return groups
+}
+
+const getDefaultTypedInterpretation = (registerType: RegisterGroup['type']): PlotInterpretation => {
+  return registerType === '01' || registerType === '02' ? 'ushort' : 'short'
+}
+
+const buildTypedSpanHints = (
+  selectedAddresses: Set<number>,
+  typedInterpretation: Record<number, PlotInterpretation>
+): Map<number, TypedSpanHint> => {
+  const hints = new Map<number, TypedSpanHint>()
+  const starts = Object.keys(typedInterpretation)
+    .map((value) => Number(value))
+    .filter((value) => Number.isFinite(value))
+    .sort((a, b) => a - b)
+
+  starts.forEach((startAddress) => {
+    const mode = typedInterpretation[startAddress]
+    if (!mode) return
+    const span = getWordSpanForInterpretation(mode)
+    if (span <= 1) return
+    for (let i = 0; i < span; i++) {
+      if (!selectedAddresses.has(startAddress + i)) {
+        return
+      }
+    }
+    for (let i = 0; i < span; i++) {
+      hints.set(startAddress + i, {
+        startAddress,
+        span,
+        mode,
+        index: i
+      })
+    }
+  })
+
+  return hints
 }
 
 // =============================================================================
@@ -1460,6 +1518,8 @@ const Server = (): JSX.Element => {
   const [editingSlave, setEditingSlave] = useState<Slave | undefined>(undefined)
   const [editingSlaveConnectionId, setEditingSlaveConnectionId] = useState<string | null>(null)
   const [typedBatchMode, setTypedBatchMode] = useState<PlotInterpretation>('short')
+  const [typedValueEditMenu, setTypedValueEditMenu] = useState<TypedValueEditMenuState | null>(null)
+  const [typedBatchMenu, setTypedBatchMenu] = useState<TypedBatchMenuState | null>(null)
 
   const [tablePagination, setTablePagination] = useState<
     Record<string, { page: number; rowsPerPage: number }>
@@ -1626,6 +1686,53 @@ const Server = (): JSX.Element => {
     } else {
       updateTab(tabId, { selectedAddresses: new Set(addresses) })
     }
+  }
+
+  const applyTypedInterpretationToSelection = (tabId: string, mode: PlotInterpretation): boolean => {
+    const tab = openTabs.find(
+      (t) => `${t.connectionId}-${t.slaveId}-${t.registerGroupId}` === tabId
+    )
+    if (!tab) return false
+
+    const startAddresses = getBatchAssignableAddresses(tab.selectedAddresses, mode)
+    if (startAddresses.length === 0) return false
+
+    updateTab(tabId, {
+      typedInterpretation: {
+        ...tab.typedInterpretation,
+        ...Object.fromEntries(startAddresses.map((address) => [address, mode]))
+      }
+    })
+    return true
+  }
+
+  const handleOpenTypedBatchMenu = (
+    event: MouseEvent<HTMLTableRowElement>,
+    tabId: string
+  ): void => {
+    event.preventDefault()
+    setTypedValueEditMenu(null)
+    setTypedBatchMenu({
+      tabId,
+      mouseX: event.clientX + 2,
+      mouseY: event.clientY - 6
+    })
+  }
+
+  const handleOpenTypedValueEditMenu = (
+    event: MouseEvent<HTMLElement>,
+    tabId: string,
+    address: number
+  ): void => {
+    event.preventDefault()
+    event.stopPropagation()
+    setTypedBatchMenu(null)
+    setTypedValueEditMenu({
+      tabId,
+      address,
+      mouseX: event.clientX + 2,
+      mouseY: event.clientY - 6
+    })
   }
 
   const updateRegister = (
@@ -1802,8 +1909,7 @@ const Server = (): JSX.Element => {
 
     if (selectedRegisters.length === 0) return
 
-    const defaultInterpretation: PlotInterpretation =
-      group.type === '01' || group.type === '02' ? 'ushort' : 'short'
+    const defaultInterpretation = getDefaultTypedInterpretation(group.type)
 
     const payload: RegisterPlotWindowInit = {
       chartId: uuidv4(),
@@ -1925,7 +2031,7 @@ const Server = (): JSX.Element => {
                   onClick={handleEditConnection}
                   startIcon={<EditIcon />}
                 >
-                  {t('common.edit')}
+                  {t('server.toolbar.editConnection')}
                 </Button>
               </Tooltip>
               <Tooltip title={t('server.toolbar.editSlave')}>
@@ -1936,7 +2042,7 @@ const Server = (): JSX.Element => {
                   onClick={handleEditSlave}
                   startIcon={<DeviceIcon />}
                 >
-                  {t('common.edit')}
+                  {t('server.toolbar.editSlave')}
                 </Button>
               </Tooltip>
               <Tooltip title={t('server.toolbar.commDetails')}>
@@ -2098,12 +2204,17 @@ const Server = (): JSX.Element => {
                 const selectedRegisters = group.registers.filter((r) =>
                   tab.selectedAddresses.has(r.address)
                 )
+                const defaultTypedInterpretation = getDefaultTypedInterpretation(group.type)
                 const rawRegisterMap = Object.fromEntries(
                   group.registers.map((r) => [r.address, r.value])
                 )
                 const longGroups = extractConsecutiveGroups(selectedRegisters, 2)
                 const floatGroups = extractConsecutiveGroups(selectedRegisters, 2)
                 const doubleGroups = extractConsecutiveGroups(selectedRegisters, 4)
+                const typedSpanHints = buildTypedSpanHints(
+                  tab.selectedAddresses,
+                  tab.typedInterpretation
+                )
                 const batchAssignableStarts = getBatchAssignableAddresses(
                   tab.selectedAddresses,
                   typedBatchMode
@@ -2217,6 +2328,10 @@ const Server = (): JSX.Element => {
                                 <TableBody>
                                   {paginatedRegisters.map((register) => {
                                     const isSelected = tab.selectedAddresses.has(register.address)
+                                    const currentTypedMode =
+                                      tab.typedInterpretation[register.address] ||
+                                      defaultTypedInterpretation
+                                    const typedSpanHint = typedSpanHints.get(register.address)
                                     const linkedPlotWindow = plotWindows.find(
                                       (plotWindow) =>
                                         plotWindow.connectionId === tab.connectionId &&
@@ -2230,6 +2345,14 @@ const Server = (): JSX.Element => {
                                         key={register.address}
                                         selected={isSelected}
                                         hover
+                                        onContextMenu={(event) => {
+                                          if (!isSelected) {
+                                            updateTab(activeTabId, {
+                                              selectedAddresses: new Set([register.address])
+                                            })
+                                          }
+                                          handleOpenTypedBatchMenu(event, activeTabId)
+                                        }}
                                         onClick={(e) =>
                                           toggleAddressSelection(
                                             activeTabId,
@@ -2249,6 +2372,16 @@ const Server = (): JSX.Element => {
                                           sx={{ fontFamily: 'monospace', fontWeight: 'bold' }}
                                         >
                                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                            {typedSpanHint ? (
+                                              <Box
+                                                sx={{
+                                                  width: 4,
+                                                  height: 18,
+                                                  borderRadius: 1,
+                                                  bgcolor: getRegisterColor(typedSpanHint.startAddress)
+                                                }}
+                                              />
+                                            ) : null}
                                             <Box
                                               sx={{
                                                 width: 10,
@@ -2263,6 +2396,18 @@ const Server = (): JSX.Element => {
                                               }}
                                             />
                                             {formatAddress(register.address)}
+                                            {typedSpanHint ? (
+                                              <Chip
+                                                size="small"
+                                                variant="outlined"
+                                                color="info"
+                                                label={
+                                                  typedSpanHint.index === 0
+                                                    ? `${typedSpanHint.mode.toUpperCase()} x${typedSpanHint.span}`
+                                                    : `↳ ${formatAddress(typedSpanHint.startAddress)}`
+                                                }
+                                              />
+                                            ) : null}
                                           </Box>
                                         </TableCell>
                                         <TableCell>
@@ -2282,7 +2427,14 @@ const Server = (): JSX.Element => {
                                         </TableCell>
                                         <TableCell sx={{ bgcolor: valueBackground }}>
                                           {group.type === '01' || group.type === '02' ? (
-                                            <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+                                            <Box
+                                              sx={{
+                                                display: 'flex',
+                                                justifyContent: 'center',
+                                                alignItems: 'center',
+                                                gap: 1
+                                              }}
+                                            >
                                               <Switch
                                                 checked={register.value !== 0}
                                                 onChange={(e) =>
@@ -2298,34 +2450,76 @@ const Server = (): JSX.Element => {
                                                 size="small"
                                                 onClick={(e) => e.stopPropagation()}
                                               />
+                                              <Chip
+                                                size="small"
+                                                variant="outlined"
+                                                data-testid={`value-format-${register.address}`}
+                                                label={currentTypedMode.toUpperCase()}
+                                                onDoubleClick={(event) => {
+                                                  if (!isSelected) {
+                                                    updateTab(activeTabId, {
+                                                      selectedAddresses: new Set([register.address])
+                                                    })
+                                                  }
+                                                  handleOpenTypedValueEditMenu(
+                                                    event,
+                                                    activeTabId,
+                                                    register.address
+                                                  )
+                                                }}
+                                                onClick={(e) => e.stopPropagation()}
+                                              />
                                             </Box>
                                           ) : (
-                                            <TextField
-                                              size="small"
-                                              value={register.value}
-                                              onChange={(e) =>
-                                                updateRegister(
-                                                  tab.connectionId,
-                                                  tab.slaveId,
-                                                  tab.registerGroupId,
-                                                  register.address,
-                                                  { value: Number(e.target.value) }
-                                                )
-                                              }
-                                              sx={{
-                                                width: '100%',
-                                                '& .MuiInputBase-root': {
-                                                  bgcolor: valueBackground
+                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                              <TextField
+                                                size="small"
+                                                value={register.value}
+                                                onChange={(e) =>
+                                                  updateRegister(
+                                                    tab.connectionId,
+                                                    tab.slaveId,
+                                                    tab.registerGroupId,
+                                                    register.address,
+                                                    { value: Number(e.target.value) }
+                                                  )
                                                 }
-                                              }}
-                                              inputProps={{
-                                                style: { textAlign: 'center' },
-                                                min: 0,
-                                                max: 65535
-                                              }}
-                                              type="number"
-                                              onClick={(e) => e.stopPropagation()}
-                                            />
+                                                sx={{
+                                                  flex: 1,
+                                                  '& .MuiInputBase-root': {
+                                                    bgcolor: valueBackground
+                                                  }
+                                                }}
+                                                inputProps={{
+                                                  style: { textAlign: 'center' },
+                                                  min: 0,
+                                                  max: 65535
+                                                }}
+                                                type="number"
+                                                onClick={(e) => e.stopPropagation()}
+                                              />
+                                              <Chip
+                                                size="small"
+                                                variant="outlined"
+                                                data-testid={`value-format-${register.address}`}
+                                                label={`${currentTypedMode.toUpperCase()} (${getWordSpanForInterpretation(
+                                                  currentTypedMode
+                                                )}w)`}
+                                                onDoubleClick={(event) => {
+                                                  if (!isSelected) {
+                                                    updateTab(activeTabId, {
+                                                      selectedAddresses: new Set([register.address])
+                                                    })
+                                                  }
+                                                  handleOpenTypedValueEditMenu(
+                                                    event,
+                                                    activeTabId,
+                                                    register.address
+                                                  )
+                                                }}
+                                                onClick={(e) => e.stopPropagation()}
+                                              />
+                                            </Box>
                                           )}
                                         </TableCell>
                                         <TableCell>
@@ -2654,14 +2848,7 @@ const Server = (): JSX.Element => {
                                 disabled={batchAssignableStarts.length === 0}
                                 data-testid="typed-batch-apply"
                                 onClick={() =>
-                                  updateTab(activeTabId, {
-                                    typedInterpretation: {
-                                      ...tab.typedInterpretation,
-                                      ...Object.fromEntries(
-                                        batchAssignableStarts.map((addr) => [addr, typedBatchMode])
-                                      )
-                                    }
-                                  })
+                                  void applyTypedInterpretationToSelection(activeTabId, typedBatchMode)
                                 }
                               >
                                 Apply To {batchAssignableStarts.length} Start Address
@@ -2678,7 +2865,8 @@ const Server = (): JSX.Element => {
                               </Typography>
                             </Paper>
                             {selectedRegisters.map((reg) => {
-                              const mode = tab.typedInterpretation[reg.address] || 'short'
+                              const mode =
+                                tab.typedInterpretation[reg.address] || defaultTypedInterpretation
                               const decoded = decodePlotValue(
                                 rawRegisterMap,
                                 reg.address,
@@ -2783,6 +2971,68 @@ const Server = (): JSX.Element => {
                         ) : null}
                       </Box>
                     </Paper>
+                    <Menu
+                      open={!!typedBatchMenu && typedBatchMenu.tabId === activeTabId}
+                      onClose={() => setTypedBatchMenu(null)}
+                      anchorReference="anchorPosition"
+                      anchorPosition={
+                        typedBatchMenu
+                          ? { top: typedBatchMenu.mouseY, left: typedBatchMenu.mouseX }
+                          : undefined
+                      }
+                    >
+                      {TYPED_INTERPRETATION_OPTIONS.map((mode) => {
+                        const startAddresses = getBatchAssignableAddresses(tab.selectedAddresses, mode)
+                        return (
+                          <MenuItem
+                            key={`ctx-batch-${mode}`}
+                            disabled={startAddresses.length === 0}
+                            onClick={() => {
+                              applyTypedInterpretationToSelection(activeTabId, mode)
+                              setTypedBatchMenu(null)
+                            }}
+                          >
+                            {mode.toUpperCase()} ({getWordSpanForInterpretation(mode)}w)
+                          </MenuItem>
+                        )
+                      })}
+                    </Menu>
+                    <Menu
+                      open={!!typedValueEditMenu && typedValueEditMenu.tabId === activeTabId}
+                      onClose={() => setTypedValueEditMenu(null)}
+                      anchorReference="anchorPosition"
+                      anchorPosition={
+                        typedValueEditMenu
+                          ? { top: typedValueEditMenu.mouseY, left: typedValueEditMenu.mouseX }
+                          : undefined
+                      }
+                    >
+                      {TYPED_INTERPRETATION_OPTIONS.map((mode) => {
+                        const targetAddress = typedValueEditMenu?.address
+                        const isEnabled =
+                          targetAddress !== undefined &&
+                          targetAddress !== null &&
+                          canSelectInterpretationAtAddress(tab.selectedAddresses, targetAddress, mode)
+                        return (
+                          <MenuItem
+                            key={`ctx-value-${mode}`}
+                            disabled={!isEnabled}
+                            onClick={() => {
+                              if (targetAddress === undefined || targetAddress === null) return
+                              updateTab(activeTabId, {
+                                typedInterpretation: {
+                                  ...tab.typedInterpretation,
+                                  [targetAddress]: mode
+                                }
+                              })
+                              setTypedValueEditMenu(null)
+                            }}
+                          >
+                            {mode.toUpperCase()} ({getWordSpanForInterpretation(mode)}w)
+                          </MenuItem>
+                        )
+                      })}
+                    </Menu>
                   </Box>
                 )
               })()

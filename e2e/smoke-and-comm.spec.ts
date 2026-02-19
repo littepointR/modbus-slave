@@ -123,12 +123,16 @@ test.describe.serial('Server Smoke And Comm E2E', () => {
     await expect(page.getByTestId('typed-row-2')).toContainText('INT (2w)')
     await expect(page.getByTestId('typed-row-1')).toContainText('SHORT (1w)')
 
-    await page.getByTestId('typed-row-2').getByRole('combobox').click()
-    await expect(page.getByRole('option', { name: /DOUBLE \(4w\)/ })).toHaveAttribute(
-      'aria-disabled',
-      'true'
-    )
-    await page.keyboard.press('Escape')
+    const firstRow = page.locator('tbody tr').nth(0)
+    await firstRow.click({ button: 'right' })
+    await page.getByRole('menuitem', { name: /^DOUBLE \(4w\)$/ }).click()
+    await expect(firstRow).toContainText('DOUBLE (4w)')
+
+    const thirdRow = page.locator('tbody tr').nth(2)
+    await page.getByTestId('value-format-2').dblclick()
+    await expect(page.getByRole('menuitem', { name: /^SHORT \(1w\)$/ })).toBeVisible()
+    await page.getByRole('menuitem', { name: /^SHORT \(1w\)$/ }).click()
+    await expect(thirdRow).toContainText('SHORT (1w)')
   })
 
   test('can open plot window with fixed interpretation and reflect table highlighting', async () => {
@@ -181,7 +185,8 @@ test.describe.serial('Server Smoke And Comm E2E', () => {
     await expect(plotPage!.getByText(/Plot -/)).toBeVisible()
     await expect(plotPage!.getByText(/0x0000/i)).toBeVisible()
     await expect(plotPage!.getByText(/0x0001/i)).toBeVisible()
-    await expect(plotPage!.getByText(/SHORT \(1w\)/)).toBeVisible()
+    await expect(plotPage!.locator('[role="combobox"]')).toHaveCount(0)
+    await expect(plotPage!.getByText(/\([124]w\)/)).toHaveCount(2)
     await expect(plotPage!.getByRole('checkbox', { name: 'X Auto' })).toBeChecked()
     await expect(plotPage!.getByRole('checkbox', { name: 'Y Auto' })).toBeChecked()
     await expect(plotPage!.getByLabel('Y Min')).toBeDisabled()
