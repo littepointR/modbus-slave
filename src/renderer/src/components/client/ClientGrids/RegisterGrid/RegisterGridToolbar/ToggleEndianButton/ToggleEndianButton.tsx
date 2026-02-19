@@ -3,8 +3,10 @@ import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
 import Tooltip from '@mui/material/Tooltip'
 import EndianTable from '@renderer/components/shared/inputs/EndianTable'
 import { useRootZustand } from '@renderer/context/root.zustand'
+import { useTranslation } from 'react-i18next'
 
 const ToggleEndianButton = (): JSX.Element | null => {
+  const { t } = useTranslation()
   const type = useRootZustand((z) => z.registerConfig.type)
   const littleEndian = useRootZustand((z) => z.registerConfig.littleEndian)
   const setLittleEndian = useRootZustand((z) => z.setLittleEndian)
@@ -28,13 +30,13 @@ const ToggleEndianButton = (): JSX.Element | null => {
       >
         <ToggleButton
           data-testid="endian-be-btn"
-          aria-label="Big Endian"
+          aria-label={t('client.register.bigEndian')}
           value={false}
           sx={{ whiteSpace: 'nowrap' }}
         >
           BE
         </ToggleButton>
-        <ToggleButton data-testid="endian-le-btn" aria-label="Little Endian" value={true}>
+        <ToggleButton data-testid="endian-le-btn" aria-label={t('client.register.littleEndian')} value={true}>
           LE
         </ToggleButton>
       </ToggleButtonGroup>

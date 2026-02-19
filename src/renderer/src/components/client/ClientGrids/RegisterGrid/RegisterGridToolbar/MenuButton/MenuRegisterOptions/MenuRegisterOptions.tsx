@@ -1,8 +1,10 @@
 import Checkbox from '@mui/material/Checkbox'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import { useRootZustand } from '@renderer/context/root.zustand'
+import { useTranslation } from 'react-i18next'
 
 const MenuRegisterOptions = (): JSX.Element | null => {
+  const { t } = useTranslation()
   const type = useRootZustand((z) => z.registerConfig.type)
 
   const advanceMode = useRootZustand((z) => z.registerConfig.advancedMode)
@@ -22,7 +24,7 @@ const MenuRegisterOptions = (): JSX.Element | null => {
             data-testid="advanced-mode-checkbox"
           />
         }
-        label="Advanced mode"
+        label={t('client.options.advancedMode')}
       />
       <FormControlLabel
         disabled={!advanceMode}
@@ -34,7 +36,7 @@ const MenuRegisterOptions = (): JSX.Element | null => {
             data-testid="show-64bit-checkbox"
           />
         }
-        label="Show 64 bit values"
+        label={t('client.options.show64bit')}
       />
     </>
   )
