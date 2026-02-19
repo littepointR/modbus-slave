@@ -7,6 +7,7 @@ import { AppState } from './state'
 import os from 'os'
 import { ModbusServer } from './modules/mobusServer'
 import { Windows } from '@shared'
+import type { RegisterPlotData, RegisterPlotWindowInit } from '@shared'
 
 if (is.dev && os.platform() === 'darwin') {
   app.disableHardwareAcceleration()
@@ -72,6 +73,7 @@ function createWindow(): BrowserWindow {
 
   windows.main.on('close', () => {
     windows.server?.close()
+    registerPlotWindows.forEach((plotWindow) => plotWindow.close())
   })
 
   // HMR for renderer base on electron-vite cli.
@@ -156,6 +158,54 @@ onIpcEvent('open_comm_log_window', () => {
   windows.commLog.on('close', () => {
     windows.commLog = null
   })
+})
+
+const registerPlotWindows = new Map<string, BrowserWindow>()
+
+onIpcEvent('open_register_plot_window', (_event, payload: RegisterPlotWindowInit) => {
+  const win = new BrowserWindow({
+    width: 980,
+    height: 680,
+    minWidth: 760,
+    minHeight: 480,
+    autoHideMenuBar: true,
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      sandbox: false,
+      nodeIntegration: false,
+      contextIsolation: true,
+      additionalArguments: ['is-register-plot-window']
+    },
+    title: payload.title,
+    backgroundColor: '#181818'
+  })
+
+  registerPlotWindows.set(payload.chartId, win)
+
+  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+    win.loadURL(`${process.env['ELECTRON_RENDERER_URL']}`)
+  } else {
+    win.loadFile(join(__dirname, '../renderer/index.html'))
+  }
+
+  win.webContents.once('did-finish-load', () => {
+    setTimeout(() => {
+      if (!win.isDestroyed()) {
+        win.webContents.send('register_plot_init', payload)
+      }
+    }, 200)
+  })
+
+  win.on('closed', () => {
+    registerPlotWindows.delete(payload.chartId)
+    windows.send('register_plot_window_closed', payload.chartId)
+  })
+})
+
+onIpcEvent('register_plot_data', (_event, payload: RegisterPlotData) => {
+  const plotWin = registerPlotWindows.get(payload.chartId)
+  if (!plotWin || plotWin.isDestroyed() || plotWin.webContents.isDestroyed()) return
+  plotWin.webContents.send('register_plot_data', payload)
 })
 
 let splash: BrowserWindow | null = null

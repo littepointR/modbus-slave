@@ -5,6 +5,7 @@ import { IPC_CHANNELS, IpcHandlerMap, snakeToCamel } from '@shared'
 const passedArgs = process.argv.slice(2)
 const isServerWindow = passedArgs.includes('is-server-window')
 const isCommLogWindow = passedArgs.includes('is-comm-log-window')
+const isRegisterPlotWindow = passedArgs.includes('is-register-plot-window')
 
 export const ipcInvoke = <C extends keyof IpcHandlerMap>(
   channel: C,
@@ -67,6 +68,7 @@ type Handlers = typeof handlers
 export type Api = {
   isServerWindow: boolean
   isCommLogWindow: boolean
+  isRegisterPlotWindow: boolean
 } & Handlers
 
 /**
@@ -77,6 +79,7 @@ export type Api = {
 const api = {
   isServerWindow,
   isCommLogWindow,
+  isRegisterPlotWindow,
   ...handlers
 } as Api
 

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, memo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { sendEvent } from '@renderer/events'
+import { onEvent, sendEvent } from '@renderer/events'
 import {
   Box,
   AppBar,
@@ -57,11 +57,18 @@ import {
   ToggleOff as DiscreteInputIcon,
   Storage as HoldingRegisterIcon,
   Input as InputRegisterIcon,
-  Refresh as RefreshIcon
+  Refresh as RefreshIcon,
+  ShowChart as ShowChartIcon
 } from '@mui/icons-material'
 import { v4 as uuidv4 } from 'uuid'
 import SettingsMenu from '@renderer/components/shared/SettingsMenu'
-import type { CreateServerParams, ServerConnectionConfig } from '@shared'
+import type {
+  CreateServerParams,
+  PlotInterpretation,
+  RegisterPlotWindowInit,
+  ServerConnectionConfig
+} from '@shared'
+import { getRegisterColor } from './register-plot.helpers'
 
 // =============================================================================
 // TYPES
@@ -1433,6 +1440,7 @@ const Server = (): JSX.Element => {
   const [tablePagination, setTablePagination] = useState<
     Record<string, { page: number; rowsPerPage: number }>
   >({})
+  const [plotWindows, setPlotWindows] = useState<RegisterPlotWindowInit[]>([])
 
   useEffect(() => {
     void window.api.startCommMonitor()
@@ -1440,6 +1448,41 @@ const Server = (): JSX.Element => {
       void window.api.stopCommMonitor()
     }
   }, [])
+
+  useEffect(() => {
+    const offPlotClose = onEvent('register_plot_window_closed', (chartId) => {
+      setPlotWindows((prev) => prev.filter((p) => p.chartId !== chartId))
+    })
+
+    return () => {
+      offPlotClose()
+    }
+  }, [])
+
+  useEffect(() => {
+    if (plotWindows.length === 0) return
+
+    const timer = setInterval(() => {
+      const now = Date.now()
+      plotWindows.forEach((plotWindow) => {
+        const connection = connections.find((c) => c.id === plotWindow.connectionId)
+        const slave = connection?.slaves.find((s) => s.id === plotWindow.slaveId)
+        const group = slave?.registerGroups.find((g) => g.id === plotWindow.registerGroupId)
+        if (!group) return
+
+        const rawRegisters = Object.fromEntries(group.registers.map((reg) => [reg.address, reg.value]))
+        sendEvent('register_plot_data', {
+          chartId: plotWindow.chartId,
+          timestamp: now,
+          rawRegisters
+        })
+      })
+    }, 500)
+
+    return () => {
+      clearInterval(timer)
+    }
+  }, [connections, plotWindows])
 
   const toggleConnection = (id: string) => {
     setExpandedConnections((prev) => {
@@ -1720,6 +1763,43 @@ const Server = (): JSX.Element => {
     } catch (error) {
       console.error('Failed to close connection:', error)
     }
+  }
+
+  const handleOpenRegisterPlot = (
+    tab: OpenTab,
+    connection: Connection,
+    slave: Slave,
+    group: RegisterGroup
+  ): void => {
+    const selectedRegisters = group.registers
+      .filter((reg) => tab.selectedAddresses.has(reg.address))
+      .sort((a, b) => a.address - b.address)
+
+    if (selectedRegisters.length === 0) return
+
+    const defaultInterpretation: PlotInterpretation =
+      group.type === '01' || group.type === '02' ? 'ushort' : 'short'
+
+    const payload: RegisterPlotWindowInit = {
+      chartId: uuidv4(),
+      title: `Plot - ${connection.alias} / ${slave.alias} / ${group.name}`,
+      connectionId: connection.id,
+      connectionAlias: connection.alias,
+      slaveId: slave.id,
+      slaveAlias: slave.alias,
+      registerGroupId: group.id,
+      registerGroupName: group.name,
+      registerType: group.type,
+      series: selectedRegisters.map((reg) => ({
+        address: reg.address,
+        label: reg.variableName || formatAddress(reg.address),
+        color: getRegisterColor(reg.address),
+        interpretation: defaultInterpretation
+      }))
+    }
+
+    sendEvent('open_register_plot_window', payload)
+    setPlotWindows((prev) => [...prev, payload])
   }
 
   return (
@@ -2010,6 +2090,18 @@ const Server = (): JSX.Element => {
                           size="small"
                         />
                         <Chip label={`Slave: ${slave?.alias}`} variant="outlined" size="small" />
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          startIcon={<ShowChartIcon />}
+                          disabled={selectedRegisters.length === 0}
+                          onClick={() => {
+                            if (!conn || !slave) return
+                            handleOpenRegisterPlot(tab, conn, slave, group)
+                          }}
+                        >
+                          Plot Selected ({selectedRegisters.length})
+                        </Button>
                       </Box>
 
                       {(() => {
@@ -2087,6 +2179,7 @@ const Server = (): JSX.Element => {
                                 <TableBody>
                                   {paginatedRegisters.map((register) => {
                                     const isSelected = tab.selectedAddresses.has(register.address)
+                                    const registerColor = getRegisterColor(register.address)
                                     return (
                                       <TableRow
                                         key={register.address}
@@ -2110,7 +2203,18 @@ const Server = (): JSX.Element => {
                                         <TableCell
                                           sx={{ fontFamily: 'monospace', fontWeight: 'bold' }}
                                         >
-                                          {formatAddress(register.address)}
+                                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                            <Box
+                                              sx={{
+                                                width: 10,
+                                                height: 10,
+                                                borderRadius: '50%',
+                                                bgcolor: registerColor,
+                                                border: '1px solid rgba(0,0,0,0.25)'
+                                              }}
+                                            />
+                                            {formatAddress(register.address)}
+                                          </Box>
                                         </TableCell>
                                         <TableCell>
                                           <EditableCell
@@ -2127,23 +2231,25 @@ const Server = (): JSX.Element => {
                                             placeholder="Double-click to edit"
                                           />
                                         </TableCell>
-                                        <TableCell>
+                                        <TableCell sx={{ bgcolor: registerColor }}>
                                           {group.type === '01' || group.type === '02' ? (
-                                            <Switch
-                                              checked={register.value !== 0}
-                                              onChange={(e) =>
-                                                updateRegister(
-                                                  tab.connectionId,
-                                                  tab.slaveId,
-                                                  tab.registerGroupId,
-                                                  register.address,
-                                                  { value: e.target.checked ? 1 : 0 }
-                                                )
-                                              }
-                                              disabled={group.type === '02'}
-                                              size="small"
-                                              onClick={(e) => e.stopPropagation()}
-                                            />
+                                            <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+                                              <Switch
+                                                checked={register.value !== 0}
+                                                onChange={(e) =>
+                                                  updateRegister(
+                                                    tab.connectionId,
+                                                    tab.slaveId,
+                                                    tab.registerGroupId,
+                                                    register.address,
+                                                    { value: e.target.checked ? 1 : 0 }
+                                                  )
+                                                }
+                                                disabled={group.type === '02'}
+                                                size="small"
+                                                onClick={(e) => e.stopPropagation()}
+                                              />
+                                            </Box>
                                           ) : (
                                             <TextField
                                               size="small"
@@ -2157,7 +2263,12 @@ const Server = (): JSX.Element => {
                                                   { value: Number(e.target.value) }
                                                 )
                                               }
-                                              sx={{ width: '100%' }}
+                                              sx={{
+                                                width: '100%',
+                                                '& .MuiInputBase-root': {
+                                                  bgcolor: registerColor
+                                                }
+                                              }}
                                               inputProps={{
                                                 style: { textAlign: 'center' },
                                                 min: 0,

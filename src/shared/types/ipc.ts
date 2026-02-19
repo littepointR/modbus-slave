@@ -355,6 +355,42 @@ export interface CreateExcelTemplateResult {
   error?: string
 }
 
+export type PlotInterpretation =
+  | 'short'
+  | 'ushort'
+  | 'int'
+  | 'uint'
+  | 'long'
+  | 'ulong'
+  | 'float'
+  | 'double'
+
+export interface RegisterPlotSeriesSpec {
+  address: number
+  label: string
+  color: string
+  interpretation: PlotInterpretation
+}
+
+export interface RegisterPlotWindowInit {
+  chartId: string
+  title: string
+  connectionId: string
+  connectionAlias: string
+  slaveId: string
+  slaveAlias: string
+  registerGroupId: string
+  registerGroupName: string
+  registerType: '01' | '02' | '03' | '04'
+  series: RegisterPlotSeriesSpec[]
+}
+
+export interface RegisterPlotData {
+  chartId: string
+  timestamp: number
+  rawRegisters: Record<number, number>
+}
+
 export type IpcHandlerMap = {
   [K in IpcChannel]: IpcHandlerSpec[K]
 }
@@ -374,9 +410,13 @@ export const IPC_EVENTS = [
   'window_update',
   'open_server_window',
   'open_comm_log_window',
+  'open_register_plot_window',
   'address_groups',
   'comm_packet',
-  'comm_monitor_clear'
+  'comm_monitor_clear',
+  'register_plot_init',
+  'register_plot_data',
+  'register_plot_window_closed'
 ] as const
 
 export type IpcEvent = (typeof IPC_EVENTS)[number]
@@ -393,9 +433,13 @@ export interface IpcEventPayloadMap {
   ['window_update']: [WindowsOpen]
   ['open_server_window']: []
   ['open_comm_log_window']: []
+  ['open_register_plot_window']: [RegisterPlotWindowInit]
   ['address_groups']: [AddressGroup[]]
   ['comm_packet']: [ServerCommPacket]
   ['comm_monitor_clear']: [void]
+  ['register_plot_init']: [RegisterPlotWindowInit]
+  ['register_plot_data']: [RegisterPlotData]
+  ['register_plot_window_closed']: [string]
 }
 
 export interface BackendMessage {
