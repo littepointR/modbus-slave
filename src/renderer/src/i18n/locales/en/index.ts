@@ -20,7 +20,8 @@ export default {
     showLog: 'Show Log',
     hideLog: 'Hide Log',
     settings: 'Settings',
-    language: 'Language'
+    language: 'Language',
+    returnToHome: 'Return to home'
   },
 
   // Navigation

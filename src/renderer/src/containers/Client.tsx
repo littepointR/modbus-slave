@@ -3,6 +3,7 @@ import Box from '@mui/material/Box'
 import Fade from '@mui/material/Fade'
 import MessageReceiver from '@renderer/components/shared/MessageReceiver'
 import HomeButton from '@renderer/components/shared/HomeButton'
+import LanguageSwitcher from '@renderer/components/shared/LanguageSwitcher'
 import RegisterConfig from '../components/client/RegisterConfig/RegisterConfig'
 import ClientGrids from '@renderer/components/client/ClientGrids/ClientGrids'
 import ConnectionConfig from '@renderer/components/client/ConnectionConfig/ConnectionConfig'
@@ -24,12 +25,13 @@ const Client = meme(() => {
         }}
       >
         <MessageReceiver />
-        <Box sx={{ display: 'flex', gap: 2 }}>
+        <Box sx={{ display: 'flex', gap: 2, justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <Box sx={{ display: 'flex', width: '100%', gap: 2, flexWrap: 'wrap' }}>
             <HomeButton />
             <RegisterConfig />
             <ConnectionConfig />
           </Box>
+          <LanguageSwitcher />
         </Box>
         <ClientGrids />
         <ScanRegisters />

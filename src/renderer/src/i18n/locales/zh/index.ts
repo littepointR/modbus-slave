@@ -20,7 +20,8 @@ export default {
     showLog: '显示日志',
     hideLog: '隐藏日志',
     settings: '设置',
-    language: '语言'
+    language: '语言',
+    returnToHome: '返回主页'
   },
 
   // Navigation
