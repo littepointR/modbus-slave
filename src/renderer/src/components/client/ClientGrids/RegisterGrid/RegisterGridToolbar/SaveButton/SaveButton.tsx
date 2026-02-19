@@ -5,6 +5,7 @@ import { useRootZustand } from '@renderer/context/root.zustand'
 import { RegisterMapConfig, RegisterType } from '@shared'
 import { snakeCase } from 'lodash'
 import { useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 
 const SaveButton = meme(() => {
   const saveRegisterConfig = useCallback(async () => {
@@ -54,14 +55,16 @@ const SaveButton = meme(() => {
     document.body.removeChild(element)
   }, [])
 
+  const { t } = useTranslation()
+
   return (
     <IconButton
       data-testid="save-config-btn"
-      aria-label="Save configuration"
+      aria-label={t('client.config.save')}
       size="small"
       onClick={saveRegisterConfig}
       color="primary"
-      title="save datatype, scaling and comment configuration to json file"
+      title={t('client.config.saveTooltip')}
     >
       <Save fontSize="small" />
     </IconButton>

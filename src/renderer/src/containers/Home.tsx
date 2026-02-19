@@ -1,8 +1,10 @@
 import { CallSplit } from '@mui/icons-material'
 import { Fade, Box, Button, Typography, SxProps } from '@mui/material'
 import { meme } from '@renderer/components/shared/inputs/meme'
+import LanguageSwitcher from '@renderer/components/shared/LanguageSwitcher'
 import { useLayoutZustand } from '@renderer/context/layout.zustand'
 import { useCallback, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import modbuxImage from '../../../../resources/icon.png'
 import ClientIcon from '@renderer/svg/Client'
 import ServerIcon from '@renderer/svg/Server'
@@ -16,6 +18,7 @@ import GithubCat from '@renderer/svg/GithubCat'
 //
 // Button to open the modbus client
 const ClientButton = meme(() => {
+  const { t } = useTranslation()
   const setAppType = useLayoutZustand((z) => z.setAppType)
   const connected = useRootZustand((z) => z.clientState.connectState === 'connected')
   return (
@@ -47,7 +50,7 @@ const ClientButton = meme(() => {
       )}
       <ClientIcon sx={(theme) => ({ fill: theme.palette.background.default })} />
       <Typography variant="overline" sx={(theme) => ({ color: theme.palette.background.default })}>
-        Client
+        {t('nav.client')}
       </Typography>
     </Button>
   )
@@ -59,6 +62,7 @@ const ClientButton = meme(() => {
 //
 // Button to open the modbus server configurator
 const ServerButton = meme((): JSX.Element => {
+  const { t } = useTranslation()
   const setAppType = useLayoutZustand((z) => z.setAppType)
   return (
     <Button
@@ -75,7 +79,7 @@ const ServerButton = meme((): JSX.Element => {
     >
       <ServerIcon sx={(theme) => ({ fill: theme.palette.background.default })} />
       <Typography variant="overline" sx={(theme) => ({ color: theme.palette.background.default })}>
-        Server
+        {t('nav.server')}
       </Typography>
     </Button>
   )
@@ -165,6 +169,7 @@ const Version = (): JSX.Element => {
 // MAIN
 const Home = meme(() => {
   useShiftKeyListener()
+  const { t } = useTranslation()
 
   return (
     <Fade in={true} timeout={500}>
@@ -194,8 +199,8 @@ const Home = meme(() => {
           <ServerButton />
           <Button
             data-testid="home-split-btn"
-            aria-label="Open server in separate window"
-            title="Open server in separate window"
+            aria-label={t('nav.split')}
+            title={t('nav.split')}
             onClick={() => {
               sendEvent('open_server_window')
             }}
@@ -206,6 +211,9 @@ const Home = meme(() => {
             />
           </Button>
           <ClientButton />
+        </Box>
+        <Box sx={{ position: 'fixed', top: 16, right: 16, zIndex: 10 }}>
+          <LanguageSwitcher />
         </Box>
         <PloxcLogo />
         <Version />

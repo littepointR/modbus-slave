@@ -1,5 +1,6 @@
 import { meme } from '@renderer/components/shared/inputs/meme'
 import HomeButton from '@renderer/components/shared/HomeButton'
+import SettingsMenu from '@renderer/components/shared/SettingsMenu'
 import MessageReceiver from '@renderer/components/shared/MessageReceiver'
 import { useServerZustand } from '@renderer/context/server.zustand'
 import OpenSaveClear from '../components/server/OpenSaveClear/OpenSaveClear'
@@ -9,17 +10,18 @@ import TextField from '@mui/material/TextField'
 import Fade from '@mui/material/Fade'
 import Box from '@mui/material/Box'
 import ServerGrid from '@renderer/components/server/ServerGrid/ServerGrid'
+import { useTranslation } from 'react-i18next'
 
 const ServerName = meme(() => {
+  const { t } = useTranslation()
   const name = useServerZustand((z) => z.name[z.selectedUuid] ?? '')
   return (
     <TextField
       data-testid="server-name-input"
       sx={{ flex: 1, minWidth: 200 }}
       size="small"
-      // variant="filled"
       color="primary"
-      placeholder="Server Name"
+      placeholder={t('server.configuration')}
       value={name}
       onChange={(e) => useServerZustand.getState().setName(e.target.value)}
     />
@@ -42,7 +44,7 @@ const Server = meme(() => {
         }}
       >
         <MessageReceiver />
-        <Box sx={{ display: 'flex', gap: 2 }}>
+        <Box sx={{ display: 'flex', gap: 2, justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <Box
             sx={{ display: 'flex', width: '100%', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}
           >
@@ -52,6 +54,7 @@ const Server = meme(() => {
             <ServerName />
             <ServerConfig />
           </Box>
+          <SettingsMenu />
         </Box>
         <ServerGrid />
       </Box>

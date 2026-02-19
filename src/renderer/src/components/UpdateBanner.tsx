@@ -1,6 +1,7 @@
 import { Alert, AlertTitle, IconButton, Link, Collapse } from '@mui/material'
 import CloseIcon from '@mui/icons-material/Close'
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 const FORCE_SHOW_BANNER = false // Set to true for testing
 
@@ -13,6 +14,7 @@ const UpdateBanner = (): JSX.Element | null => {
   const [showBanner, setShowBanner] = useState(false)
   const [latestVersion, setLatestVersion] = useState<string | null>(null)
   const [releaseUrl, setReleaseUrl] = useState<string | null>(null)
+  const { t } = useTranslation()
 
   useEffect(() => {
     const checkForUpdates = async (): Promise<void> => {
@@ -81,7 +83,7 @@ const UpdateBanner = (): JSX.Element | null => {
         severity="warning"
         action={
           <IconButton
-            aria-label="close"
+            aria-label={t('update.close')}
             color="inherit"
             size="small"
             onClick={handleDismiss}
@@ -98,8 +100,8 @@ const UpdateBanner = (): JSX.Element | null => {
         }}
         data-testid="update-banner"
       >
-        <AlertTitle>New version available</AlertTitle>
-        Version {latestVersion} is now available.{' '}
+        <AlertTitle>{t('update.title')}</AlertTitle>
+        {t('update.message', { version: latestVersion })}{' '}
         <Link
           href={releaseUrl}
           target="_blank"
@@ -108,7 +110,7 @@ const UpdateBanner = (): JSX.Element | null => {
           sx={{ fontWeight: 600 }}
           data-testid="update-banner-link"
         >
-          Download latest release
+          {t('update.download')}
         </Link>
       </Alert>
     </Collapse>

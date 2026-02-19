@@ -7,6 +7,7 @@ import { MaskSetFn } from '@renderer/context/root.zustand.types'
 import { useServerZustand } from '@renderer/context/server.zustand'
 import { BooleanRegisters } from '@shared'
 import { ElementType, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { create } from 'zustand'
 import { mutative } from 'zustand-mutative'
 
@@ -38,12 +39,13 @@ export const useAddBooleansZustand = create<AddBooleansZustand, [['zustand/mutat
 )
 
 const RangeField = meme(() => {
+  const { t } = useTranslation()
   const address = useAddBooleansZustand((z) => String(z.address))
   const setAddress = useAddBooleansZustand((z) => z.setAddress)
   return (
     <TextField
       data-testid="add-bool-address-input"
-      label="Address"
+      label={t('server.registers.address')}
       variant="outlined"
       size="small"
       sx={{ width: 90 }}
@@ -59,6 +61,7 @@ const RangeField = meme(() => {
 })
 
 const AddBoolButton = meme(() => {
+  const { t } = useTranslation()
   const handleClick = useCallback(() => {
     const { registerType, address, setAddress } = useAddBooleansZustand.getState()
     useServerZustand.getState().addBools(registerType, Number(address))
@@ -69,12 +72,13 @@ const AddBoolButton = meme(() => {
 
   return (
     <Button data-testid="add-bool-add-btn" size="small" onClick={handleClick}>
-      Add
+      {t('common.add')}
     </Button>
   )
 })
 
 const RemoveBoolButton = meme(() => {
+  const { t } = useTranslation()
   const handleClick = useCallback(() => {
     const { registerType, address, setAddress } = useAddBooleansZustand.getState()
     useServerZustand.getState().removeBool(registerType, Number(address))
@@ -85,7 +89,7 @@ const RemoveBoolButton = meme(() => {
 
   return (
     <Button data-testid="add-bool-remove-btn" size="small" onClick={handleClick}>
-      Remove
+      {t('common.delete')}
     </Button>
   )
 })

@@ -7,6 +7,7 @@ import { ServerConfig, ServerRegistersPerUnit, UnitIdStringSchema } from '@share
 import { snakeCase } from 'lodash'
 import { useSnackbar } from 'notistack'
 import { useRef, useState, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 
 //
 //
@@ -22,6 +23,7 @@ const useOpen: UseOpenHook = () => {
   const [opening, setOpening] = useState(false)
 
   const { enqueueSnackbar } = useSnackbar()
+  const { t } = useTranslation()
 
   const open = useCallback(
     async (file: File | undefined) => {
@@ -67,13 +69,13 @@ const useOpen: UseOpenHook = () => {
         if (migrated) {
           enqueueSnackbar({
             variant: 'info',
-            message: 'Configuration updated from older format',
+            message: t('snackbar.configMigrated'),
             autoHideDuration: 5000
           })
         } else {
           enqueueSnackbar({
             variant: 'success',
-            message: 'Configuration opened successfully'
+            message: t('snackbar.configOpened')
           })
         }
 
@@ -81,7 +83,7 @@ const useOpen: UseOpenHook = () => {
         if (wasMixedEndianness) {
           enqueueSnackbar({
             variant: 'warning',
-            message: `Warning: Config had mixed byte order settings. Now using ${config.littleEndian ? 'Little' : 'Big'}-Endian globally. Please verify.`,
+            message: t('snackbar.mixedEndianness', { endian: config.littleEndian ? t('common.littleEndian') : t('common.bigEndian') }),
             autoHideDuration: 8000
           })
         }
@@ -90,14 +92,13 @@ const useOpen: UseOpenHook = () => {
         if (warning === 'FUTURE_VERSION') {
           enqueueSnackbar({
             variant: 'warning',
-            message:
-              'This config was created with a newer version of Modbux. Some features may not work correctly.',
+            message: t('snackbar.futureVersion'),
             persist: true
           })
         }
       } catch (error) {
         const tError = error as Error
-        enqueueSnackbar({ variant: 'error', message: `Failed to load config: ${tError.message}` })
+        enqueueSnackbar({ variant: 'error', message: t('snackbar.invalidJson', { message: tError.message }) })
         console.error('Config load error:', error)
       }
 
@@ -107,7 +108,7 @@ const useOpen: UseOpenHook = () => {
       openingRef.current = false
       setOpening(false)
     },
-    [enqueueSnackbar]
+    [enqueueSnackbar, t]
   )
 
   return { opening, openingRef, open }
@@ -169,6 +170,7 @@ const useSave: UseSaveHook = () => {
 const OpenSaveClear = meme(() => {
   const { opening, open } = useOpen()
   const { save } = useSave()
+  const { t } = useTranslation()
 
   const clear = useCallback(async () => {
     const state = useServerZustand.getState()
@@ -200,11 +202,11 @@ const OpenSaveClear = meme(() => {
         <label htmlFor="container-button-server-file">
           <IconButton
             data-testid="server-open-btn"
-            aria-label="Open configuration"
+            aria-label={t('server.openSaveClear.open')}
             color="primary"
             disabled={opening}
             component="span"
-            title="Open configuration"
+            title={t('server.openSaveClear.open')}
           >
             <FileOpen />
           </IconButton>
@@ -212,8 +214,8 @@ const OpenSaveClear = meme(() => {
       </div>
       <IconButton
         data-testid="server-save-btn"
-        aria-label="Save configuration"
-        title="Save configuration"
+        aria-label={t('server.openSaveClear.save')}
+        title={t('server.openSaveClear.save')}
         color="primary"
         disabled={opening}
         onClick={save}
@@ -222,8 +224,8 @@ const OpenSaveClear = meme(() => {
       </IconButton>
       <IconButton
         data-testid="server-clear-btn"
-        aria-label="Clear configuration"
-        title="Clear configuration"
+        aria-label={t('server.openSaveClear.clear')}
+        title={t('server.openSaveClear.clear')}
         color="primary"
         disabled={opening}
         onClick={clear}

@@ -5,6 +5,7 @@ import '@fontsource/inter/700.css'
 import '@fontsource/inter/800.css'
 
 import './index.css'
+import './i18n'
 
 import React from 'react'
 import ReactDOM from 'react-dom/client'

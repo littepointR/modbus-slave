@@ -7,12 +7,14 @@ import { useSnackbar } from 'notistack'
 import { useRef, useState, useCallback } from 'react'
 import { showMapping } from '../ViewConfigButton/ViewConfigButton'
 import { meme } from '@renderer/components/shared/inputs/meme'
+import { useTranslation } from 'react-i18next'
 
 const LoadButton = meme((): JSX.Element => {
   const openingRef = useRef(false)
   const [opening, setOpening] = useState(false)
 
   const { enqueueSnackbar } = useSnackbar()
+  const { t } = useTranslation()
 
   const openConfig = useCallback(
     async (file: File | undefined) => {
@@ -34,17 +36,17 @@ const LoadButton = meme((): JSX.Element => {
         if (config.name) state.setName(config.name)
         state.replaceRegisterMapping(config.registerMapping)
 
-        // Show success notification
+        // Show success notification with translation
         if (migrated) {
           enqueueSnackbar({
             variant: 'info',
-            message: 'Configuration updated from older format',
+            message: t('snackbar.configMigrated'),
             autoHideDuration: 5000
           })
         } else {
           enqueueSnackbar({
             variant: 'success',
-            message: 'Configuration opened successfully'
+            message: t('snackbar.configOpened')
           })
         }
 
@@ -52,14 +54,13 @@ const LoadButton = meme((): JSX.Element => {
         if (warning === 'FUTURE_VERSION') {
           enqueueSnackbar({
             variant: 'warning',
-            message:
-              'This config was created with a newer version of Modbux. Some features may not work correctly.',
+            message: t('snackbar.futureVersion'),
             persist: true
           })
         }
       } catch (error) {
         const tError = error as Error
-        enqueueSnackbar({ variant: 'error', message: `Failed to load config: ${tError.message}` })
+        enqueueSnackbar({ variant: 'error', message: t('snackbar.invalidJson', { message: tError.message }) })
         console.error('Config load error:', error)
       }
 
@@ -68,7 +69,7 @@ const LoadButton = meme((): JSX.Element => {
       showMapping()
       useRootZustand.getState().setReadConfiguration(false)
     },
-    [enqueueSnackbar]
+    [enqueueSnackbar, t]
   )
 
   return (
@@ -86,12 +87,12 @@ const LoadButton = meme((): JSX.Element => {
       <label htmlFor="contained-button-file">
         <IconButton
           data-testid="load-config-btn"
-          aria-label="Load configuration"
+          aria-label={t('client.config.load')}
           size="small"
           disabled={opening}
           color="primary"
           component="span"
-          title="load a modbux client configuration file"
+          title={t('client.config.loadTooltip')}
         >
           <FileOpen fontSize="small" />
         </IconButton>

@@ -14,9 +14,11 @@ import MenuButton from './MenuButton/MenuButton'
 import RawButton from './RawButton/RawButton'
 import { useRootZustand } from '@renderer/context/root.zustand'
 import TextField from '@mui/material/TextField'
+import { useTranslation } from 'react-i18next'
 
 const ClientConfigName = meme(() => {
   const name = useRootZustand((z) => z.name ?? '')
+  const { t } = useTranslation()
 
   return (
     <TextField
@@ -26,7 +28,7 @@ const ClientConfigName = meme(() => {
       slotProps={{ input: { sx: { height: 28, fontSize: 12 } } }}
       size="small"
       color="primary"
-      placeholder="Client Configuration Name"
+      placeholder={t('client.register.configNamePlaceholder')}
       value={name}
       onChange={(e) => useRootZustand.getState().setName(e.target.value)}
     />
