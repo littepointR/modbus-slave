@@ -156,7 +156,27 @@ export default {
       comment: 'Comment',
       minValue: 'Min Value',
       maxValue: 'Max Value',
-      interval: 'Interval (s)'
+      interval: 'Interval (s)',
+      mode: {
+        fixed: 'Fixed',
+        generator: 'Generator'
+      },
+      actions: {
+        submitChange: 'Submit Change',
+        addAndClose: 'Add & Close',
+        addAndNext: 'Add & Next',
+        remove: 'Remove'
+      },
+      validation: {
+        inUse: 'In use',
+        dataTypeDoesNotFit: 'Data type does not fit at this address'
+      },
+      titles: {
+        edit: 'Edit',
+        add: 'Add',
+        inputRegister: 'Input Register',
+        holdingRegister: 'Holding Register'
+      }
     },
     booleans: {
       add: 'Add {{type}}',

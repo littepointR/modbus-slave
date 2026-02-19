@@ -156,7 +156,27 @@ export default {
       comment: '注释',
       minValue: '最小值',
       maxValue: '最大值',
-      interval: '间隔 (秒)'
+      interval: '间隔 (秒)',
+      mode: {
+        fixed: '固定值',
+        generator: '生成器'
+      },
+      actions: {
+        submitChange: '提交更改',
+        addAndClose: '添加并关闭',
+        addAndNext: '添加并继续',
+        remove: '删除'
+      },
+      validation: {
+        inUse: '地址已被使用',
+        dataTypeDoesNotFit: '数据类型不适合此地址'
+      },
+      titles: {
+        edit: '编辑',
+        add: '添加',
+        inputRegister: '输入寄存器',
+        holdingRegister: '保持寄存器'
+      }
     },
     booleans: {
       add: '添加{{type}}',
