@@ -4,6 +4,33 @@ import { RegisterType } from './client'
 import { ValueGenerator } from '../../main/modules/modbusServer/valueGenerator'
 import { unitIds } from './unitid'
 
+export const ServerProtocolSchema = z.enum([
+  'ModbusTcp',
+  'ModbusRtu',
+  'ModbusAscii',
+  'ModbusUdp',
+  'ModbusRtuOverTcp',
+  'ModbusRtuOverUdp'
+])
+export type ServerProtocol = z.infer<typeof ServerProtocolSchema>
+
+export const SerialConfigSchema = z.object({
+  port: z.string(),
+  baudRate: z.number().default(9600),
+  dataBits: z.number().default(8),
+  stopBits: z.number().default(1),
+  parity: z.enum(['none', 'even', 'odd']).default('none')
+})
+export type SerialConfig = z.infer<typeof SerialConfigSchema>
+
+export const ServerConnectionConfigSchema = z.object({
+  protocol: ServerProtocolSchema,
+  host: z.string().optional(),
+  port: z.number().optional(),
+  serial: SerialConfigSchema.optional()
+})
+export type ServerConnectionConfig = z.infer<typeof ServerConnectionConfigSchema>
+
 // Zod schema for boolean register types
 export const BooleanRegistersSchema = z.enum(['coils', 'discrete_inputs'])
 export type BooleanRegisters = z.infer<typeof BooleanRegistersSchema>
@@ -148,7 +175,7 @@ export interface SyncBoolsParameters {
 
 export interface CreateServerParams {
   uuid: string
-  port: number
+  config: ServerConnectionConfig
 }
 
 export interface SetUnitIdParams {

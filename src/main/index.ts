@@ -30,9 +30,8 @@ initIpc(app, appState, client, server)
 
 // Single instance - DISABLED for multi-instance dev mode
 // DISABLE_SINGLE_INSTANCE
-const gotTheLock = true // app.requestSingleInstanceLock() - disabled for multi-instance dev
-
-if (false) { // disabled for multi-instance dev
+if (false) {
+  // disabled for multi-instance dev
   app.quit()
 } else {
   app.on('second-instance', () => {

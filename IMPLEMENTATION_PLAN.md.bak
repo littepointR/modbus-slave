@@ -1,0 +1,582 @@
+# Redisant MSE 复刻实现计划
+
+## 项目概述
+
+基于对 Redisant Modbus Slave Emulator (MSE) 的深度分析，制定本复刻计划。目标是实现一个功能完整、专业级的 Modbus 调试工具，具备通信监视、数据转换、实时绘图、缓动函数等高级功能。
+
+**工作区:** `/Users/suyue/work/modbux/.worktrees/redisant-replication`  
+**分支:** `feature/redisant-replication`  
+**基础版本:** v1.6.0 (已包含实时图表功能)
+
+---
+
+## 一、功能差距分析
+
+### 当前 Modbux 状态 vs Redisant MSE
+
+| 功能模块 | Redisant MSE | Modbux 当前 | 差距等级 |
+|---------|-------------|------------|---------|
+| **协议支持** | 6种 (RTU/ASCII/TCP/UDP/RTUoverTCP/RTUoverUDP) | 2种 (RTU/TCP) | ⭐⭐⭐ 高 |
+| **通信监视** | 完整报文监视 (TX/RX, 时间戳, 地址, 数据) | ❌ 无 | ⭐⭐⭐ 高 |
+| **数据转换工具** | Float/Long/Double互转 + 字节序工具 | ❌ 无 | ⭐⭐⭐ 高 |
+| **实时图表** | 多曲线、Y轴设置、导出 | ✅ 已实现 | ⭐ 低 |
+| **缓动函数** | 几十种缓动函数模拟数据 | ⚠️ 基础版 | ⭐⭐ 中 |
+| **Excel导入/导出** | 从站数据 ↔ Excel | ❌ 无 | ⭐⭐ 中 |
+| **树状导航** | 连接→从站→数据区三级 | ⚠️ 部分 | ⭐⭐ 中 |
+| **多从站仿真** | 一端口多Slave ID | ❌ 单Server | ⭐⭐⭐ 高 |
+| **通信统计** | Read/Write计数 | ⚠️ 部分 | ⭐ 低 |
+| **校验码工具** | CRC/LRC计算器 | ❌ 无 | ⭐⭐ 中 |
+| **C#脚本** | 动态数据返回 | ❌ 无 | ⭐ 低 |
+
+---
+
+## 二、详细实现计划
+
+### Phase 1: 通信协议扩展 (Week 1-2)
+**目标:** 支持 6 种 Modbus 协议
+
+#### 1.1 Modbus ASCII 支持
+- [ ] 添加 ASCII 模式连接选项
+- [ ] 实现 ASCII 帧解析 (LRC校验)
+- [ ] 消息帧格式: `:ADDR FUNC DATA LRC\r\n`
+- [ ] UI: 协议选择下拉框添加 ASCII 选项
+- [ ] 连接配置持久化
+
+**文件变更:**
+- `src/shared/types/client.ts` - 添加 Protocol 枚举
+- `src/main/modules/modbusClient.ts` - 添加 ASCII 连接逻辑
+- `src/renderer/.../ConnectionConfig/` - UI 更新
+
+#### 1.2 Modbus UDP/IP 支持
+- [ ] 添加 UDP 传输层
+- [ ] 实现 UDP 端口绑定与数据报收发
+- [ ] 处理 UDP 无连接特性（超时重传）
+- [ ] UI: 协议选择添加 UDP 选项
+
+#### 1.3 Modbus RTU Over TCP/IP
+- [ ] TCP 连接上使用 RTU 帧格式
+- [ ] 保持 CRC 校验（而非 TCP 的 MBAP）
+- [ ] 常见网关设备支持
+
+#### 1.4 Modbus RTU Over UDP/IP
+- [ ] UDP 上传输 RTU 帧
+- [ ] 处理丢包与重传
+
+**技术要点:**
+```typescript
+// 协议类型扩展
+export type Protocol = 
+  | 'ModbusTcp' 
+  | 'ModbusRtu' 
+  | 'ModbusAscii'
+  | 'ModbusUdp'
+  | 'ModbusRtuOverTcp'
+  | 'ModbusRtuOverUdp'
+```
+
+---
+
+### Phase 2: 通信监视器 (Week 2-3)
+**目标:** 实现报文级通信监控 (类似 Wireshark 但针对 Modbus)
+
+#### 2.1 核心功能设计
+- [ ] 拦截所有 TX/RX 报文
+- [ ] 实时显示在独立窗口/面板
+- [ ] 报文解析: MBAP/RTU/ASCII 头部分析
+- [ ] 时间戳精确到毫秒
+- [ ] 序号递增
+
+#### 2.2 数据结构
+```typescript
+interface CommPacket {
+  id: number                    // 序号
+  timestamp: number            // 时间戳 (ms)
+  direction: 'TX' | 'RX'       // 发送/接收
+  protocol: Protocol           // 协议类型
+  frameType: 'MBAP' | 'RTU' | 'ASCII'
+  slaveId: number              // 从站ID
+  functionCode: number         // 功能码
+  data: Uint8Array             // 原始数据
+  parsed: {                    // 解析结果
+    startAddress?: number
+    quantity?: number
+    values?: number[]
+    exception?: number
+  }
+}
+```
+
+#### 2.3 UI 设计
+- [ ] 独立窗口: "通信细节" (可浮动)
+- [ ] 表格列: 序号 | TX/RX | 从站 | 功能码 | 数据 (Hex) | 解析 | 时间戳
+- [ ] 功能码着色 (01-红色, 03-蓝色等)
+- [ ] TX 高亮显示 (红色背景)
+- [ ] 按钮: 停止/继续监控, 清除, 保存到文件
+
+#### 2.4 实现位置
+- [ ] 主进程拦截: `src/main/modules/trafficMonitor.ts`
+- [ ] IPC 通道: `comm_packet` 事件
+- [ ] UI 组件: `src/renderer/.../CommMonitor/`
+
+**文件列表:**
+- `src/main/modules/trafficMonitor.ts` (新建)
+- `src/renderer/.../CommMonitor/CommMonitor.tsx` (新建)
+- `src/renderer/.../CommMonitor/PacketTable.tsx` (新建)
+- `src/shared/types/comm.ts` (新建)
+
+---
+
+### Phase 3: 数据转换工具 (Week 3-4)
+**目标:** 字节序转换 + 数据类型互转工具
+
+#### 3.1 字节序转换工具 (Byte Order Tool)
+- [ ] Float/Long/Double 各种字节序排列
+- [ ] 支持顺序: AB CD, CD AB, BA DC, DC BA
+- [ ] 64位: AB CD EF GH 等 8 种排列
+- [ ] 实时转换显示
+
+```typescript
+interface ByteOrderResult {
+  original: string      // 41 B8 00 00
+  float: number         // 23.0
+  floatSwapped: number  // 字节序交换后的值
+  long: number
+  longSwapped: number
+  double: number
+  // ... 所有排列组合
+}
+```
+
+#### 3.2 校验码计算器 (CRC/LRC Tool)
+- [ ] CRC16 (Modbus 标准)
+- [ ] LRC (ASCII 模式)
+- [ ] 输入: Hex 字符串
+- [ ] 输出: 校验码结果
+- [ ] 预设常用 CRC 算法
+
+```typescript
+interface CrcCalculator {
+  input: string          // "01 03 00 00 00 0A"
+  algorithm: 'CRC16-MODBUS' | 'LRC' | 'CRC32'
+  result: string         // "C5 D9"
+}
+```
+
+#### 3.3 UI 设计
+- [ ] 浮动窗口 (类似计算器)
+- [ ] 输入框 + 下拉选择 + 结果显示
+- [ ] 一键复制结果
+- [ ] 历史记录
+
+**文件列表:**
+- `src/renderer/.../Tools/ByteOrderConverter.tsx`
+- `src/renderer/.../Tools/CrcCalculator.tsx`
+- `src/shared/utils/crc.ts` (算法实现)
+
+---
+
+### Phase 4: 多从站仿真 (Week 4-5)
+**目标:** 单连接模拟多个 Slave ID
+
+#### 4.1 架构重构
+当前: `ModbusServer` 管理单一从站  
+目标: `ModbusServer` 管理多个 `SlaveDevice`
+
+```typescript
+interface SlaveDevice {
+  id: number              // Slave ID (1-247)
+  coils: Map<number, boolean>
+  discreteInputs: Map<number, boolean>
+  holdingRegisters: Map<number, number>
+  inputRegisters: Map<number, number>
+  enabled: boolean
+}
+
+class ModbusServer {
+  private slaves: Map<number, SlaveDevice>
+  
+  addSlave(id: number): void
+  removeSlave(id: number): void
+  getSlave(id: number): SlaveDevice | undefined
+}
+```
+
+#### 4.2 服务端向量更新
+- [ ] 根据 Slave ID 路由请求
+- [ ] 每个 Slave 独立寄存器空间
+- [ ] UI: 从站列表管理 (添加/删除/启用)
+
+#### 4.3 UI 更新
+- [ ] Server 视图: 左侧树形列表显示多个 Slave
+- [ ] 每个 Slave 展开显示其寄存器
+- [ ] 右键菜单: 添加 Slave, 复制 Slave, 删除
+
+**文件变更:**
+- `src/main/modules/mobusServer.ts` - 重构为多从站
+- `src/renderer/.../server/ServerGrid/` - 树形导航
+- `src/renderer/.../server/SlaveList/` (新建)
+
+---
+
+### Phase 5: 缓动函数增强 (Week 5-6)
+**目标:** 实现 Redisant 级别的缓动函数系统
+
+#### 5.1 缓动函数库
+实现 30+ 种缓动函数:
+- [ ] Linear
+- [ ] Quadratic (EaseIn, EaseOut, EaseInOut)
+- [ ] Cubic, Quartic, Quintic
+- [ ] Sine, Circular
+- [ ] Exponential
+- [ ] Elastic (EaseInElastic, EaseOutElastic, EaseInOutElastic)
+- [ ] Back (EaseInBack, EaseOutBack)
+- [ ] Bounce (EaseInBounce, EaseOutBounce)
+
+```typescript
+type EasingFunction = (t: number) => number
+
+interface EasingPreset {
+  name: string
+  fn: EasingFunction
+  category: 'Linear' | 'Quadratic' | 'Elastic' | 'Bounce'
+}
+
+// 示例: EaseOutElastic
+const easeOutElastic = (t: number): number => {
+  const c4 = (2 * Math.PI) / 3
+  if (t === 0) return 0
+  if (t === 1) return 1
+  return Math.pow(2, -10 * t) * Math.sin((t * 10 - 0.75) * c4) + 1
+}
+```
+
+#### 5.2 实时预览
+- [ ] 曲线图预览 (时间-数值)
+- [ ] 可拖拽调整参数
+- [ ] 实时重放
+
+#### 5.3 UI 设计
+- [ ] 弹出对话框 (类似 Redisant)
+- [ ] 参数: 持续时间, 缓动函数, 最小值, 最大值, 递增/递减
+- [ ] 图表实时预览
+- [ ] 按钮: 预览, 确定, 取消
+
+**文件列表:**
+- `src/shared/utils/easing.ts` (新建 - 所有缓动函数)
+- `src/renderer/.../server/EasingDialog.tsx` (新建)
+- `src/renderer/.../server/EasingPreview.tsx` (新建)
+
+---
+
+### Phase 6: Excel 导入/导出 (Week 6-7)
+**目标:** 从站数据批量管理
+
+#### 6.1 Excel 导出
+- [ ] 从站寄存器导出为 .xlsx
+- [ ] 列: 地址, 数据类型, 值, 注释
+- [ ] 多 Sheet (按数据区分组)
+- [ ] 格式化: 表头, 颜色, 列宽
+
+#### 6.2 Excel 导入
+- [ ] 解析 .xlsx 文件
+- [ ] 映射到寄存器配置
+- [ ] 数据验证 (地址范围, 数据类型)
+- [ ] 冲突处理 (覆盖/跳过/合并)
+
+#### 6.3 技术选型
+- [ ] 库: `xlsx` (SheetJS) 或 `exceljs`
+- [ ] 注意: Electron 主进程处理文件 I/O
+- [ ] 大文件分片处理
+
+**文件列表:**
+- `src/main/modules/excelHandler.ts` (新建)
+- `src/renderer/.../shared/ExcelImportDialog.tsx`
+- `src/renderer/.../shared/ExcelExportDialog.tsx`
+
+---
+
+### Phase 7: 树状导航重构 (Week 7-8)
+**目标:** Redisant 风格的左侧树形导航
+
+#### 7.1 树形结构设计
+```
+📁 COM1 (RTU - 已连接)
+  ├── 📁 Slave1 (ID: 1)
+  │     ├── 📄 保持寄存器 (0-50)
+  │     ├── 📄 输入寄存器
+  │     └── 📄 线圈
+  ├── 📁 Slave2 (ID: 2)
+  └── 📁 Slave3 (ID: 3)
+📁 127.0.0.1:502 (TCP - 活跃 🔴)
+  ├── 📁 Slave1
+  └── 📁 Slave2
+📁 独立方案通信
+  ├── 📄 电能基本测量数据区
+  └── 📄 开入开出状态
+```
+
+#### 7.2 功能
+- [ ] 拖拽排序
+- [ ] 右键菜单 (重命名, 删除, 添加子项)
+- [ ] 展开/折叠状态持久化
+- [ ] 双击导航到对应视图
+- [ ] 图标区分 (连接/从站/数据区)
+
+#### 7.3 组件设计
+- [ ] 使用 MUI TreeView 或 react-arborist
+- [ ] 虚拟滚动 (大数据量优化)
+- [ ] 搜索过滤
+
+**文件列表:**
+- `src/renderer/.../shared/TreeNavigator/` (新建目录)
+- `src/renderer/.../shared/TreeNavigator/TreeNavigator.tsx`
+- `src/renderer/.../shared/TreeNavigator/TreeNode.tsx`
+- `src/renderer/.../shared/TreeNavigator/tree.zustand.ts`
+
+---
+
+### Phase 8: 通信统计与状态栏 (Week 8)
+**目标:** 完善的通信状态显示
+
+#### 8.1 状态栏增强
+- [ ] 连接状态 (图标 + 文字)
+- [ ] 通信参数 (COM1-9600-8-N-1)
+- [ ] 实时时间
+- [ ] Read/Write 计数器
+- [ ] 错误计数
+
+#### 8.2 统计显示
+- [ ] 数据包总数
+- [ ] 平均响应时间
+- [ ] 错误率
+- [ ] 吞吐量 (bytes/s)
+
+**文件列表:**
+- `src/renderer/.../shared/StatusBar/` (重构)
+
+---
+
+### Phase 9: 高级功能 (Week 9-10)
+
+#### 9.1 PLC 地址转换
+- [ ] Modbus 地址 ↔ PLC 地址切换
+- [ ] 40001 → 0 (保持寄存器)
+- [ ] 30001 → 0 (输入寄存器)
+- [ ] 10001 → 0 (线圈)
+- [ ] 00001 → 0 (离散输入)
+
+#### 9.2 C# 脚本支持 (可选)
+- [ ] 集成 .NET runtime
+- [ ] 脚本编辑器 (Monaco)
+- [ ] 动态编译执行
+- [ ] 示例脚本库
+
+#### 9.3 主题与个性化
+- [ ] 深色/浅色主题
+- [ ] 自定义配色
+- [ ] 字体大小调节
+
+---
+
+## 三、技术架构图
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                        UI Layer                             │
+│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐        │
+│  │ TreeNavigator│ │ CommMonitor  │ │ ChartPanel   │        │
+│  └──────────────┘ └──────────────┘ └──────────────┘        │
+│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐        │
+│  │ ByteOrderTool│ │ EasingDialog │ │ ExcelDialog  │        │
+│  └──────────────┘ └──────────────┘ └──────────────┘        │
+├─────────────────────────────────────────────────────────────┤
+│                      Renderer Process                       │
+│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐        │
+│  │ chart.zustand│ │ comm.zustand │ │ tree.zustand │        │
+│  └──────────────┘ └──────────────┘ └──────────────┘        │
+├─────────────────────────────────────────────────────────────┤
+│                         IPC Layer                           │
+│  comm_packet │ register_data │ traffic_log │ excel_io       │
+├─────────────────────────────────────────────────────────────┤
+│                       Main Process                          │
+│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐        │
+│  │ModbusClient  │ │ModbusServer  │ │TrafficMonitor│        │
+│  └──────────────┘ └──────────────┘ └──────────────┘        │
+│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐        │
+│  │ExcelHandler  │ │CrcCalculator │ │EasingEngine  │        │
+│  └──────────────┘ └──────────────┘ └──────────────┘        │
+├─────────────────────────────────────────────────────────────┤
+│                      Hardware Layer                         │
+│  TCP/UDP Socket │ Serial Port │ File System                │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 四、文件结构规划
+
+```
+src/
+├── main/
+│   ├── modules/
+│   │   ├── modbusClient.ts          # 扩展协议支持
+│   │   ├── mobusServer.ts           # 多从站重构
+│   │   ├── trafficMonitor.ts        # 通信监视 (NEW)
+│   │   ├── excelHandler.ts          # Excel处理 (NEW)
+│   │   └── easingEngine.ts          # 缓动函数引擎 (NEW)
+│   └── index.ts
+├── preload/
+│   └── index.ts                     # 添加新IPC通道
+├── renderer/
+│   └── src/
+│       ├── components/
+│       │   ├── client/
+│       │   │   ├── Charts/          # 已有，增强
+│       │   │   ├── CommMonitor/     # 通信监视 (NEW)
+│       │   │   │   ├── CommMonitor.tsx
+│       │   │   │   ├── PacketTable.tsx
+│       │   │   │   └── PacketDetail.tsx
+│       │   │   └── Tools/           # 工具集合 (NEW)
+│       │   │       ├── ByteOrderConverter.tsx
+│       │   │       └── CrcCalculator.tsx
+│       │   ├── server/
+│       │   │   ├── EasingDialog/    # 缓动函数 (NEW)
+│       │   │   ├── SlaveList/       # 多从站列表 (NEW)
+│       │   │   └── ServerTree/      # 服务端树形 (NEW)
+│       │   └── shared/
+│       │       ├── TreeNavigator/   # 树形导航 (NEW)
+│       │       ├── ExcelImportDialog.tsx
+│       │       ├── ExcelExportDialog.tsx
+│       │       └── StatusBar/       # 状态栏重构
+│       ├── context/
+│       │   ├── comm.zustand.ts      # 通信状态 (NEW)
+│       │   ├── tree.zustand.ts      # 树形状态 (NEW)
+│       │   └── easing.zustand.ts    # 缓动状态 (NEW)
+│       └── utils/
+│           ├── easing.ts            # 缓动函数库 (NEW)
+│           ├── crc.ts               # CRC算法 (NEW)
+│           └── byteOrder.ts         # 字节序转换 (NEW)
+└── shared/
+    ├── types/
+    │   ├── comm.ts                  # 通信类型 (NEW)
+    │   ├── easing.ts                # 缓动类型 (NEW)
+    │   └── tree.ts                  # 树形类型 (NEW)
+    └── utils/
+        └── excel.ts                 # Excel工具
+```
+
+---
+
+## 五、依赖清单
+
+### 新增依赖
+```json
+{
+  "dependencies": {
+    "xlsx": "^0.18.5",
+    "@mui/x-tree-view": "^7.0.0",
+    "recharts": "^2.12.0 (已安装)"
+  },
+  "devDependencies": {}
+}
+```
+
+### 安装命令
+```bash
+yarn add xlsx @mui/x-tree-view
+```
+
+---
+
+## 六、实现优先级
+
+### P0 (核心功能 - 必须)
+1. ⭐ 通信监视器 (Phase 2)
+2. ⭐ 多从站仿真 (Phase 4)
+3. ⭐ 数据转换工具 (Phase 3)
+
+### P1 (重要功能 - 应该)
+4. 协议扩展 (Phase 1)
+5. Excel 导入/导出 (Phase 6)
+6. 缓动函数增强 (Phase 5)
+
+### P2 (增强功能 - 可以)
+7. 树状导航重构 (Phase 7)
+8. 通信统计 (Phase 8)
+9. PLC 地址转换 (Phase 9)
+
+### P3 (高级功能 - 可选)
+10. C# 脚本支持
+11. 主题系统
+
+---
+
+## 七、风险与注意事项
+
+### 技术风险
+| 风险 | 影响 | 缓解措施 |
+|------|------|---------|
+| **单实例限制** | 无法同时运行多个 modbux 测试 | 已临时禁用，后续改为多连接架构 |
+| **串口独占** | 多实例抢占串口 | 设计时考虑串口池管理 |
+| **性能问题** | 大量报文监视导致卡顿 | 虚拟滚动 + 采样率限制 |
+| **Excel大文件** | 内存溢出 | 分片处理 + Web Worker |
+
+### 兼容性
+- [ ] Windows 串口 COM 命名 (`COM1` vs `/dev/ttyUSB0`)
+- [ ] macOS 串口权限
+- [ ] Linux USB 设备识别
+
+---
+
+## 八、测试计划
+
+### 单元测试
+- [ ] 所有缓动函数返回值正确 (0-1范围)
+- [ ] CRC/LRC 计算结果与标准值一致
+- [ ] 字节序转换所有排列组合
+
+### 集成测试
+- [ ] 多从站同时响应不同 ID
+- [ ] 通信监视器捕获所有报文
+- [ ] Excel 导入导出数据一致
+
+### E2E 测试
+- [ ] 完整链路: Client ↔ Server (多从站)
+- [ ] 通信监视实时显示
+- [ ] 图表实时更新
+
+---
+
+## 九、里程碑
+
+| 里程碑 | 时间 | 交付物 |
+|--------|------|--------|
+| M1 | Week 2 | 协议扩展完成 (6种协议) |
+| M2 | Week 4 | 通信监视器上线 |
+| M3 | Week 6 | 多从站仿真 + 缓动函数 |
+| M4 | Week 8 | Excel 导入/导出 |
+| M5 | Week 10| 树状导航 + 完善 |
+| **Release** | Week 10 | v2.0.0 - Redisant 级别功能 |
+
+---
+
+## 十、参考资源
+
+### Redisant 界面截图
+- http://www.redisant.cn/image/mse/1.png - 主界面布局
+- http://www.redisant.cn/image/mse/2.png - 数据转换工具
+- http://www.redisant.cn/image/mse/3.png - 实时图表
+- http://www.redisant.cn/image/mse/4.png - 通信监视
+- http://www.redisant.cn/image/mse/5.png - 连接管理
+- http://www.redisant.cn/image/mse/6.png - 缓动函数
+
+### 技术文档
+- [Modbus Protocol Spec](https://modbus.org/docs/Modbus_Application_Protocol_V1_1b3.pdf)
+- [Easing Functions Cheat Sheet](https://easings.net/)
+- [SheetJS Documentation](https://docs.sheetjs.com/)
+
+---
+
+**计划制定:** 2026-02-19  
+**计划版本:** v1.0  
+**下一步:** 开始 Phase 1 - 协议扩展实现

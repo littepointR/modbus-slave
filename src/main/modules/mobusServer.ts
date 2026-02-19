@@ -16,11 +16,11 @@ import {
   BooleanRegisters,
   NumberRegisters
 } from '@shared'
-import { ServerTCP } from 'modbus-serial'
 import { Windows } from '@shared'
 import { ValueGenerator } from './modbusServer/valueGenerator'
 import type { IServiceVector, FCallbackVal } from 'modbus-serial'
-import net from 'net'
+import { createServerAdapter, ServerAdapter, TcpServerAdapter } from './modbusServer/serverAdapter'
+import type { ServerConnectionConfig, ServerProtocol } from '@shared'
 
 const getDefaultGenerators = (): ValueGenerators => ({
   input_registers: new Map(),
@@ -66,8 +66,8 @@ export interface ServerParams {
  * Handles server creation, deletion, register management, and value generator lifecycle.
  */
 export class ModbusServer {
-  private _port: Map<string, number> = new Map()
-  private _servers: Map<string, ServerTCP> = new Map()
+  private _configs: Map<string, ServerConnectionConfig> = new Map()
+  private _adapters: Map<string, ServerAdapter> = new Map()
   private _windows: Windows
 
   // Map to store server data for each unit ID of a server UUID
@@ -145,93 +145,61 @@ export class ModbusServer {
   }
 
   /**
-   * Checks if a TCP port is available for binding.
+   * Creates or recreates a Modbus server for the given UUID and connection config.
+   * If a server already exists, it is stopped and replaced.
+   * Returns the server address string from the active protocol adapter.
    */
-  private async _isPortAvailable(port: number): Promise<boolean> {
-    return new Promise((resolve) => {
-      const tester = net.createServer()
-      tester.once('error', () => {
-        resolve(false)
-      })
-      tester.once('listening', () => {
-        tester.close(() => resolve(true))
-      })
-      tester.listen(port, '0.0.0.0')
+  public createServer = async ({ uuid, config }: CreateServerParams): Promise<string> => {
+    const existingAdapter = this._adapters.get(uuid)
+    if (existingAdapter) {
+      await existingAdapter.stop()
+      this._adapters.delete(uuid)
+    }
+
+    const vector = this._getVector(uuid)
+    const adapter = createServerAdapter(config.protocol, vector, {
+      host: config.host,
+      port: config.port,
+      serial: config.serial
     })
+
+    try {
+      await adapter.start()
+    } catch (error) {
+      const startError = error instanceof Error ? error : new Error(String(error))
+      this._emitMessage({
+        message: `Failed to start ${config.protocol} server`,
+        variant: 'error',
+        error: startError
+      })
+      throw startError
+    }
+
+    this._adapters.set(uuid, adapter)
+    this._configs.set(uuid, config)
+
+    return adapter.getAddress()
   }
 
   /**
-   * Creates or recreates a Modbus TCP server for the given UUID and port.
-   * If a server already exists, it is closed and replaced.
-   * Also ensures value generator maps are initialized for all unitIds.
-   * Returns the actual port used (may differ from requested if taken).
-   */
-  public createServer = async ({ uuid, port }: CreateServerParams): Promise<number> => {
-    let actualPort = port ?? DEFAULT_MOBUS_PORT
-    const maxAttempts = 100
-    let server: ServerTCP | undefined
-
-    const existingServer = this._servers.get(uuid)
-    if (existingServer) {
-      await new Promise<void>((resolve) => {
-        existingServer.close((err) => {
-          if (err)
-            this._emitMessage({ message: 'Error closing server', variant: 'error', error: err })
-          resolve()
-        })
-      })
-      this._servers.delete(uuid)
-      this._port.delete(uuid)
-    }
-
-    for (let i = 0; i < maxAttempts; i++) {
-      const isAvailable = await this._isPortAvailable(actualPort)
-      if (isAvailable) {
-        server = new ServerTCP(this._getVector(uuid), {
-          host: '0.0.0.0',
-          port: actualPort
-        })
-
-        // // !Debug: Simulate connection loss by destroying incoming sockets after a delay.
-        // // - Short delay (e.g. 3000ms): triggers burst detection (reconnects fail within the 10s stability window)
-        // // - Long delay (e.g. 15000ms): allows stable connection, so the reconnect counter resets between drops
-        // const netServer = server['_server'] as net.Server
-        // netServer.on('connection', (sock) => {
-        //   setTimeout(() => sock.destroy(), 15000)
-        // })
-
-        this._servers.set(uuid, server)
-        this._port.set(uuid, actualPort)
-        return actualPort
-      }
-      actualPort++
-    }
-    this._emitMessage({
-      message: 'No available port found',
-      variant: 'error',
-      error: undefined
-    })
-    throw new Error('No available port found')
-  }
-
-  /**
-   * Deletes a Modbus TCP server for the given UUID, cleaning up all resources.
+   * Deletes a Modbus server for the given UUID, cleaning up all resources.
    */
   public deleteServer = async (uuid: string): Promise<void> => {
-    const server = this._servers.get(uuid)
-    if (!server) {
+    const adapter = this._adapters.get(uuid)
+    if (!adapter) {
       this._emitMessage({ message: `No server found for UUID ${uuid}`, variant: 'error' })
       return
     }
-    await new Promise<void>((resolve) => {
-      server.close((err) => {
-        if (err)
-          this._emitMessage({ message: 'Error closing server', variant: 'error', error: err })
-        resolve()
-      })
-    })
-    this._servers.delete(uuid)
-    this._port.delete(uuid)
+
+    try {
+      await adapter.stop()
+    } catch (error) {
+      const stopError = error instanceof Error ? error : new Error(String(error))
+      this._emitMessage({ message: 'Error closing server', variant: 'error', error: stopError })
+    }
+
+    this._adapters.delete(uuid)
+    this._configs.delete(uuid)
     this._generatorMap.delete(uuid)
   }
 
@@ -246,8 +214,8 @@ export class ModbusServer {
     }
     this._serverData.delete(uuid)
     this._generatorMap.delete(uuid)
-    const port = this._port.get(uuid)
-    if (port) await this.createServer({ uuid, port })
+    const config = this._configs.get(uuid)
+    if (config) await this.createServer({ uuid, config })
   }
 
   /**
@@ -447,10 +415,26 @@ export class ModbusServer {
 
   /**
    * Sets the port for a given server UUID by recreating the server on the new port.
-   * Returns the actual port used (may differ from requested if taken).
+   * Returns the server address string.
    */
-  public setPort = async ({ uuid, port }: CreateServerParams): Promise<number> => {
-    return this.createServer({ uuid, port })
+  public setPort = async ({ uuid, config }: CreateServerParams): Promise<string> => {
+    const existingConfig = this._configs.get(uuid)
+    const existingAdapter = this._adapters.get(uuid)
+    const protocol: ServerProtocol =
+      config.protocol ??
+      existingConfig?.protocol ??
+      (existingAdapter instanceof TcpServerAdapter
+        ? 'ModbusTcp'
+        : (existingAdapter?.getProtocol() ?? 'ModbusTcp'))
+
+    const nextConfig: ServerConnectionConfig = {
+      protocol,
+      host: config.host ?? existingConfig?.host,
+      port: config.port ?? existingConfig?.port ?? DEFAULT_MOBUS_PORT,
+      serial: config.serial ?? existingConfig?.serial
+    }
+
+    return this.createServer({ uuid, config: nextConfig })
   }
 
   // -------------------------------------------------------------------------
