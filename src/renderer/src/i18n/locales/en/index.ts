@@ -258,5 +258,29 @@ export default {
     invalidValue: 'Invalid value',
     timeout: 'Request timeout',
     unknownError: 'Unknown error'
+  },
+
+  // Endian Explanation
+  endian: {
+    title: 'Big-Endian vs Little-Endian Word Order',
+    description: 'The following table shows an example of a 32-bit integer value (305419896, hexadecimal 0x12345678) and how it is split into 16-bit words in both Big-Endian and Little-Endian formats. We also show how these words are assigned to Modbus registers, along with SCL (Structured Control Language) assignments.',
+    table: {
+      orderType: 'Order Type',
+      register0: 'Register 0',
+      register1: 'Register 1',
+      sclAssignments: 'SCL Register Assignments'
+    },
+    bigEndian: 'Big-Endian',
+    littleEndian: 'Little-Endian',
+    beTitle: 'Big-Endian (BE):',
+    beDescription: 'In Big-Endian format, the most significant byte (MSB) is stored first, followed by the least significant byte (LSB). In Modbus, this is the standard for most systems, including PLCs like Siemens S7. In the example, the 32-bit integer 0x12345678 is stored as:',
+    leTitle: 'Little-Endian (LE):',
+    leDescription: 'In Little-Endian format, the least significant byte (LSB) is stored first, followed by the most significant byte (MSB). This format is less common in Modbus communication. In the same example, the 32-bit integer 0x12345678 is stored as:',
+    wordOrder: 'Word order',
+    sclAssignment: 'SCL assignment',
+    explanationTitle: 'Explanation:',
+    beExplanation: 'In Big-Endian, the high-order word (W1) is assigned to the first register, while the low-order word (W0) is assigned to the second register.',
+    leExplanation: 'In Little-Endian, the low-order word (W0) is stored first, and the high-order word (W1) is stored second.',
+    conclusion: 'When communicating with Modbus devices, it\'s essential to know which endianness the device uses to ensure correct data interpretation.'
   }
 }
