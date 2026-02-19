@@ -22,9 +22,11 @@ import { useDataZustand } from '@renderer/context/data.zustand'
 import { useRootZustand } from '@renderer/context/root.zustand'
 import { getConventionalAddress, RegisterType } from '@shared'
 import { ElementType, useCallback, useEffect, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 
 // Protocol
 const TypeSelect = meme(() => {
+  const { t } = useTranslation()
   const labelId = 'register-type-select'
   const type = useRootZustand((z) => z.registerConfig.type)
 
@@ -35,19 +37,19 @@ const TypeSelect = meme(() => {
 
   return (
     <FormControl size="small">
-      <InputLabel id={labelId}>Type</InputLabel>
+      <InputLabel id={labelId}>{t('client.register.type')}</InputLabel>
       <Select
         size="small"
         labelId={labelId}
         value={type}
-        label="Type"
+        label={t('client.register.type')}
         onChange={(e) => handleChange(e.target.value as RegisterType)}
         data-testid="reg-type-select"
       >
-        <MenuItem value={'coils'}>Coils</MenuItem>
-        <MenuItem value={'discrete_inputs'}>Discrete Inputs</MenuItem>
-        <MenuItem value={'input_registers'}>Input Registers</MenuItem>
-        <MenuItem value={'holding_registers'}>Holding Registers</MenuItem>
+        <MenuItem value={'coils'}>{t('registerTypes.coils')}</MenuItem>
+        <MenuItem value={'discrete_inputs'}>{t('registerTypes.discrete_inputs')}</MenuItem>
+        <MenuItem value={'input_registers'}>{t('registerTypes.input_registers')}</MenuItem>
+        <MenuItem value={'holding_registers'}>{t('registerTypes.holding_registers')}</MenuItem>
       </Select>
     </FormControl>
   )
@@ -57,6 +59,7 @@ const TypeSelect = meme(() => {
 //
 // Address
 const Address = meme(() => {
+  const { t } = useTranslation()
   const address = useRootZustand((z) => String(z.registerConfig.address))
   const length = useRootZustand((z) => z.registerConfig.length)
   const type = useRootZustand((z) => z.registerConfig.type)
@@ -72,7 +75,7 @@ const Address = meme(() => {
   return (
     <TextField
       disabled={readConfiguration}
-      label="Address"
+      label={t('client.register.address')}
       variant="outlined"
       size="small"
       data-testid="reg-address-input"
@@ -149,10 +152,10 @@ const Address = meme(() => {
                 value={addressBase}
                 onChange={(_, v) => v !== null && setAddressBase(v)}
               >
-                <ToggleButton value={'0'} data-testid="reg-base-0-btn" aria-label="Address base 0">
+                <ToggleButton value={'0'} data-testid="reg-base-0-btn" aria-label={t('client.register.addressBase0')}>
                   0
                 </ToggleButton>
-                <ToggleButton value={'1'} data-testid="reg-base-1-btn" aria-label="Address base 1">
+                <ToggleButton value={'1'} data-testid="reg-base-1-btn" aria-label={t('client.register.addressBase1')}>
                   1
                 </ToggleButton>
               </ToggleButtonGroup>
@@ -168,6 +171,7 @@ const Address = meme(() => {
 //
 // Length
 const Length = meme(() => {
+  const { t } = useTranslation()
   const length = useRootZustand((z) => String(z.registerConfig.length))
   const lengthValid = useRootZustand((z) => z.valid.lenght)
   const setLength = useRootZustand((z) => z.setLength)
@@ -176,7 +180,7 @@ const Length = meme(() => {
   return (
     <TextField
       disabled={readConfiguration}
-      label="Length"
+      label={t('client.register.length')}
       variant="outlined"
       size="small"
       sx={{ width: 60 }}

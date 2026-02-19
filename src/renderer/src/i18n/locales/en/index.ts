@@ -21,7 +21,22 @@ export default {
     hideLog: 'Hide Log',
     settings: 'Settings',
     language: 'Language',
-    returnToHome: 'Return to home'
+    returnToHome: 'Return to home',
+    view: 'View',
+    refresh: 'Refresh',
+    validate: 'Validate',
+    moreOptions: 'More options',
+    timeSettings: 'Time settings',
+    pollRate: 'Poll Rate',
+    timeout: 'Timeout',
+    min: 'Min',
+    max: 'Max',
+    address: 'Address',
+    length: 'Length',
+    value: 'Value',
+    configuration: 'Configuration',
+    ok: 'OK',
+    error: 'ERROR'
   },
 
   // Navigation
@@ -44,7 +59,10 @@ export default {
       baudRate: 'Baud Rate',
       dataBits: 'Data Bits',
       stopBits: 'Stop Bits',
-      parity: 'Parity'
+      parity: 'Parity',
+      ipAddress: 'IP Address',
+      tcp: 'TCP',
+      rtu: 'RTU'
     },
     register: {
       title: 'Register Configuration',
@@ -54,15 +72,21 @@ export default {
       pollRate: 'Poll Rate (ms)',
       timeout: 'Timeout (ms)',
       littleEndian: 'Little Endian',
+      bigEndian: 'Big Endian',
       advancedMode: 'Advanced Mode',
       readConfiguration: 'Use Configuration',
-      addressBase: 'Address Base'
+      addressBase: 'Address Base',
+      addressBase0: 'Address base 0',
+      addressBase1: 'Address base 1',
+      configNamePlaceholder: 'Client Configuration Name'
     },
     actions: {
       startPolling: 'Start Polling',
       stopPolling: 'Stop Polling',
       scanUnitIds: 'Scan Unit IDs',
-      scanRegisters: 'Scan Registers'
+      scanRegisters: 'Scan Registers',
+      readConfigured: 'Read all configured registers',
+      readAll: 'Read all registers that have been configured with a data type'
     },
     messages: {
       connected: 'Connected to server',
@@ -72,6 +96,39 @@ export default {
       alreadyDisconnected: 'Already disconnected',
       cannotRead: 'Cannot read, not connected',
       cannotScanWhilePolling: 'Cannot scan while polling is enabled'
+    },
+    config: {
+      view: 'View configuration',
+      viewTooltip: 'view current datatype, scaling and comment configuration',
+      save: 'Save configuration',
+      saveTooltip: 'save datatype, scaling and comment configuration to json file',
+      load: 'Load configuration',
+      loadTooltip: 'load a modbux client configuration file',
+      clear: 'Clear configuration',
+      clearTooltip: 'clear datatype, scaling and comment configuration'
+    },
+    scan: {
+      minUnitId: 'Min Unit ID',
+      maxUnitId: 'Max Unit ID',
+      minAddress: 'Min Address',
+      maxAddress: 'Max Address',
+      start: 'Start Scanning',
+      stop: 'Stop Scanning'
+    },
+    options: {
+      advancedMode: 'Advanced mode',
+      show64bit: 'Show 64 bit values'
+    },
+    write: {
+      addressValue: 'Address {{address}} value',
+      fc6: 'FC6: Write single register',
+      fc16: 'FC16: Write multiple registers',
+      fc5: 'FC5: Write single coils',
+      fc15: 'FC15: Write multiple coils',
+      writeCoils: 'Write coils'
+    },
+    grid: {
+      interpolation: 'Interpolation'
     }
   },
 
@@ -79,10 +136,12 @@ export default {
   server: {
     title: 'Modbus Server',
     configuration: 'Server Configuration',
+    configPlaceholder: 'Server Name',
     addServer: 'Add Server',
     removeServer: 'Remove Server',
     unitId: 'Unit ID',
     port: 'Port',
+    portWithNumber: 'Port {{port}}',
     registers: {
       title: 'Registers',
       addRegister: 'Add Register',
@@ -92,8 +151,20 @@ export default {
       value: 'Value',
       length: 'Length (registers)',
       littleEndian: 'Little Endian',
+      bigEndian: 'Big Endian',
       scale: 'Scale Factor',
-      comment: 'Comment'
+      comment: 'Comment',
+      minValue: 'Min Value',
+      maxValue: 'Max Value',
+      interval: 'Interval (s)'
+    },
+    booleans: {
+      add: 'Add {{type}}',
+      deleteAll: 'Delete all {{type}}',
+      toggle: 'Toggle {{type}} address {{address}}'
+    },
+    sections: {
+      toggle: 'Toggle {{name}} section'
     },
     dataTypes: {
       int16: 'Int16',
@@ -113,6 +184,11 @@ export default {
       serverStarted: 'Server started',
       serverStopped: 'Server stopped',
       portInUse: 'Port is already in use'
+    },
+    openSaveClear: {
+      open: 'Open configuration',
+      save: 'Save configuration',
+      clear: 'Clear configuration'
     }
   },
 

@@ -21,7 +21,22 @@ export default {
     hideLog: '隐藏日志',
     settings: '设置',
     language: '语言',
-    returnToHome: '返回主页'
+    returnToHome: '返回主页',
+    view: '查看',
+    refresh: '刷新',
+    validate: '验证',
+    moreOptions: '更多选项',
+    timeSettings: '时间设置',
+    pollRate: '轮询间隔',
+    timeout: '超时时间',
+    min: '最小值',
+    max: '最大值',
+    address: '地址',
+    length: '长度',
+    value: '数值',
+    configuration: '配置',
+    ok: '正常',
+    error: '错误'
   },
 
   // Navigation
@@ -44,7 +59,10 @@ export default {
       baudRate: '波特率',
       dataBits: '数据位',
       stopBits: '停止位',
-      parity: '校验位'
+      parity: '校验位',
+      ipAddress: 'IP 地址',
+      tcp: 'TCP',
+      rtu: 'RTU'
     },
     register: {
       title: '寄存器配置',
@@ -54,15 +72,21 @@ export default {
       pollRate: '轮询间隔 (ms)',
       timeout: '超时时间 (ms)',
       littleEndian: '小端模式',
+      bigEndian: '大端模式',
       advancedMode: '高级模式',
       readConfiguration: '使用配置读取',
-      addressBase: '地址基址'
+      addressBase: '地址基址',
+      addressBase0: '地址基址 0',
+      addressBase1: '地址基址 1',
+      configNamePlaceholder: '客户端配置名称'
     },
     actions: {
       startPolling: '开始轮询',
       stopPolling: '停止轮询',
       scanUnitIds: '扫描单元 ID',
-      scanRegisters: '扫描寄存器'
+      scanRegisters: '扫描寄存器',
+      readConfigured: '读取所有已配置寄存器',
+      readAll: '读取所有已配置数据类型的寄存器'
     },
     messages: {
       connected: '已连接到服务器',
@@ -72,6 +96,39 @@ export default {
       alreadyDisconnected: '已经断开',
       cannotRead: '无法读取，未连接',
       cannotScanWhilePolling: '轮询期间无法扫描'
+    },
+    config: {
+      view: '查看配置',
+      viewTooltip: '查看当前数据类型、缩放因子和注释配置',
+      save: '保存配置',
+      saveTooltip: '将数据类型、缩放因子和注释配置保存到 JSON 文件',
+      load: '加载配置',
+      loadTooltip: '加载 modbux 客户端配置文件',
+      clear: '清除配置',
+      clearTooltip: '清除数据类型、缩放因子和注释配置'
+    },
+    scan: {
+      minUnitId: '最小单元 ID',
+      maxUnitId: '最大单元 ID',
+      minAddress: '最小地址',
+      maxAddress: '最大地址',
+      start: '开始扫描',
+      stop: '停止扫描'
+    },
+    options: {
+      advancedMode: '高级模式',
+      show64bit: '显示 64 位数值'
+    },
+    write: {
+      addressValue: '地址 {{address}} 数值',
+      fc6: 'FC6: 写单个寄存器',
+      fc16: 'FC16: 写多个寄存器',
+      fc5: 'FC5: 写单个线圈',
+      fc15: 'FC15: 写多个线圈',
+      writeCoils: '写线圈'
+    },
+    grid: {
+      interpolation: '插值'
     }
   },
 
@@ -79,10 +136,12 @@ export default {
   server: {
     title: 'Modbus 服务端',
     configuration: '服务器配置',
+    configPlaceholder: '服务器名称',
     addServer: '添加服务器',
     removeServer: '删除服务器',
     unitId: '单元 ID',
     port: '端口',
+    portWithNumber: '端口 {{port}}',
     registers: {
       title: '寄存器',
       addRegister: '添加寄存器',
@@ -92,8 +151,20 @@ export default {
       value: '数值',
       length: '长度 (寄存器数)',
       littleEndian: '小端模式',
+      bigEndian: '大端模式',
       scale: '缩放因子',
-      comment: '注释'
+      comment: '注释',
+      minValue: '最小值',
+      maxValue: '最大值',
+      interval: '间隔 (秒)'
+    },
+    booleans: {
+      add: '添加{{type}}',
+      deleteAll: '删除所有{{type}}',
+      toggle: '切换{{type}}地址{{address}}'
+    },
+    sections: {
+      toggle: '折叠/展开{{name}}区域'
     },
     dataTypes: {
       int16: '有符号短整型',
@@ -113,6 +184,11 @@ export default {
       serverStarted: '服务器已启动',
       serverStopped: '服务器已停止',
       portInUse: '端口已被占用'
+    },
+    openSaveClear: {
+      open: '打开配置',
+      save: '保存配置',
+      clear: '清除配置'
     }
   },
 
