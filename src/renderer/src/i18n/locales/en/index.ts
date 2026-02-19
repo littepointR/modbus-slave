@@ -62,7 +62,9 @@ export default {
       parity: 'Parity',
       ipAddress: 'IP Address',
       tcp: 'TCP',
-      rtu: 'RTU'
+      rtu: 'RTU',
+      refreshComPorts: 'Refresh COM ports',
+      validateComPort: 'Validate COM port'
     },
     register: {
       title: 'Register Configuration',

@@ -62,7 +62,9 @@ export default {
       parity: '校验位',
       ipAddress: 'IP 地址',
       tcp: 'TCP',
-      rtu: 'RTU'
+      rtu: 'RTU',
+      refreshComPorts: '刷新串口',
+      validateComPort: '验证串口'
     },
     register: {
       title: '寄存器配置',

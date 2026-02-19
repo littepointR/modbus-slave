@@ -17,6 +17,7 @@ import { maskInputProps } from '@renderer/components/shared/inputs/types'
 import UnitIdInput from '@renderer/components/shared/inputs/UnitIdInput'
 import { useDataZustand } from '@renderer/context/data.zustand'
 import { meme } from '@renderer/components/shared/inputs/meme'
+import { useTranslation } from 'react-i18next'
 
 // Protocol
 const ProtocolSelect = meme(({ protocol }: { protocol: Protocol }) => {
@@ -43,6 +44,7 @@ const ProtocolSelect = meme(({ protocol }: { protocol: Protocol }) => {
 })
 
 const ConnectButton = meme(() => {
+  const { t } = useTranslation()
   const connectState = useRootZustand((z) => z.clientState.connectState)
   const setRegisterData = useDataZustand((z) => z.setRegisterData)
 
@@ -67,13 +69,13 @@ const ConnectButton = meme(() => {
 
   const text =
     connectState === 'connected' ? (
-      'Disconnect'
+      t('common.disconnect')
     ) : connectState === 'disconnected' ? (
-      'Connect'
+      t('common.connect')
     ) : (
       <CircularProgress
         size={18}
-        title="Cancel"
+        title={t('common.cancel')}
         sx={(theme) => ({
           color: theme.palette.warning.contrastText
         })}
@@ -97,11 +99,12 @@ const ConnectButton = meme(() => {
 //
 // Unit Id
 const UnitId = meme(() => {
+  const { t } = useTranslation()
   const unitId = useRootZustand((z) => String(z.connectionConfig.unitId))
 
   return (
     <TextField
-      label="Unit ID"
+      label={t('client.connection.unitId')}
       variant="outlined"
       size="small"
       sx={{ width: 60 }}
