@@ -127,6 +127,22 @@ export default ComponentName
 - Use `data-testid` attributes for selectors
 - Follow existing test patterns in `e2e/app.spec.ts`
 
+### Required Verification Matrix (Current)
+- Always run full unit tests before commit: `yarn test`
+- Always run full E2E before commit: `yarn test:e2e`
+- Keep communication-focused flows covered by:
+  - `e2e/protocol-config.spec.ts`
+  - `e2e/register-types.spec.ts`
+  - `e2e/smoke-and-comm.spec.ts`
+  - `e2e/user-journey.spec.ts`
+- For communication backend changes, add/maintain tests under:
+  - `src/main/modules/__tests__/serverAdapter.test.ts`
+  - `src/main/modules/__tests__/trafficMonitor.test.ts`
+
+### Known Local Lint Caveat
+- In nested worktree setups, `yarn lint` may fail with duplicated `eslint-plugin-react-hooks` resolution from parent + child configs.
+- This is an environment/config issue; do not block functional verification on this error when `yarn test` and `yarn test:e2e` are green.
+
 ## Error Handling
 
 - Use Zod for runtime validation
