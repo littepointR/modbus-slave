@@ -15,6 +15,72 @@ const CONN_ALIAS = 'QA Connection'
 const CONN_ALIAS_EDITED = 'QA Connection Edited'
 const SLAVE_ALIAS = 'QA Slave'
 const CONN_PORT = 15020
+const MODE_TCP_ALIAS = 'QA Mode TCP'
+const MODE_UDP_ALIAS = 'QA Mode UDP'
+const MODE_RTU_TCP_ALIAS = 'QA Mode RTU/TCP'
+const MODE_RTU_UDP_ALIAS = 'QA Mode RTU/UDP'
+const MODE_RTU_ALIAS = 'QA Mode RTU'
+const MODE_ASCII_ALIAS = 'QA Mode ASCII'
+const MATRIX_SLAVE_ALIAS = 'QA Matrix Slave'
+
+type UiConnectionMode = 'tcp' | 'udp' | 'rtuovertcp' | 'rtuoverudp' | 'rtu'
+
+const selectConnectionMode = async (mode: UiConnectionMode): Promise<void> => {
+  const labels: Record<UiConnectionMode, string> = {
+    tcp: 'Modbus TCP/IP',
+    udp: 'Modbus UDP/IP',
+    rtuovertcp: 'Modbus RTU Over TCP/IP',
+    rtuoverudp: 'Modbus RTU Over UDP/IP',
+    rtu: 'Modbus RTU'
+  }
+
+  const dialog = page.getByRole('dialog')
+  await dialog.locator('div[role="combobox"]').first().click()
+  await page.getByRole('option', { name: labels[mode], exact: true }).click()
+}
+
+const createConnectionViaDialog = async ({
+  alias,
+  mode,
+  port,
+  frameFormat = 'rtu'
+}: {
+  alias: string
+  mode: UiConnectionMode
+  port?: number
+  frameFormat?: 'rtu' | 'ascii'
+}): Promise<void> => {
+  await page.getByRole('button', { name: /新建连接|New Connection/ }).click()
+  await expect(page.getByRole('heading', { name: /新建连接|New Connection/ })).toBeVisible()
+
+  await page.getByLabel('Connection Alias').fill(alias)
+  await selectConnectionMode(mode)
+
+  if (mode === 'rtu') {
+    await page
+      .getByRole('combobox', { name: 'Serial Port' })
+      .fill(`/dev/tty.${alias.replace(/\s+/g, '-').toLowerCase()}`)
+    if (frameFormat === 'ascii') {
+      await page.getByLabel('ASCII').check()
+    } else {
+      await page.getByLabel('RTU').check()
+    }
+  } else {
+    await page.getByLabel('IP Address').fill('127.0.0.1')
+    await page.getByLabel('Port').fill(String(port ?? 502))
+  }
+
+  await page.getByRole('button', { name: /确定|OK/ }).click()
+  await expect(page.getByText(alias, { exact: true })).toBeVisible()
+}
+
+const openAndCloseConnection = async (alias: string): Promise<void> => {
+  await page.getByText(alias, { exact: true }).click()
+  await page.getByRole('button', { name: /打开连接|Open Connection/ }).click()
+  await expect(page.getByRole('button', { name: /关闭连接|Close Connection/ })).toBeEnabled()
+  await page.getByRole('button', { name: /关闭连接|Close Connection/ }).click()
+  await expect(page.getByRole('button', { name: /打开连接|Open Connection/ })).toBeEnabled()
+}
 
 const sendReadHoldingRegisters = async (
   host: string,
@@ -194,5 +260,125 @@ test.describe.serial('Server-Centric E2E', () => {
 
     await commPage.getByRole('button', { name: /继续|Continue/ }).click()
     await expect(commPage.getByRole('button', { name: /停止|Stop/ })).toBeEnabled()
+  })
+
+  test('covers all communication modes through e2e flows', async () => {
+    await createConnectionViaDialog({
+      alias: MODE_TCP_ALIAS,
+      mode: 'tcp',
+      port: 15120
+    })
+    await openAndCloseConnection(MODE_TCP_ALIAS)
+
+    await createConnectionViaDialog({
+      alias: MODE_UDP_ALIAS,
+      mode: 'udp',
+      port: 15121
+    })
+    await openAndCloseConnection(MODE_UDP_ALIAS)
+
+    await createConnectionViaDialog({
+      alias: MODE_RTU_TCP_ALIAS,
+      mode: 'rtuovertcp',
+      port: 15122
+    })
+    await openAndCloseConnection(MODE_RTU_TCP_ALIAS)
+
+    await createConnectionViaDialog({
+      alias: MODE_RTU_UDP_ALIAS,
+      mode: 'rtuoverudp',
+      port: 15123
+    })
+    await openAndCloseConnection(MODE_RTU_UDP_ALIAS)
+
+    await createConnectionViaDialog({
+      alias: MODE_RTU_ALIAS,
+      mode: 'rtu',
+      frameFormat: 'rtu'
+    })
+
+    await createConnectionViaDialog({
+      alias: MODE_ASCII_ALIAS,
+      mode: 'rtu',
+      frameFormat: 'ascii'
+    })
+  })
+
+  test('covers connection config changes across protocols', async () => {
+    await page.getByText(MODE_TCP_ALIAS, { exact: true }).click()
+    await page.getByRole('button', { name: /编辑连接|Edit Connection/ }).click()
+    await expect(page.getByRole('heading', { name: /编辑连接|Edit Connection/ })).toBeVisible()
+
+    await selectConnectionMode('udp')
+    await page.getByLabel('IP Address').fill('127.0.0.1')
+    await page.getByLabel('Port').fill('15130')
+    await page.getByRole('button', { name: /保存|Save/ }).click()
+
+    await openAndCloseConnection(MODE_TCP_ALIAS)
+
+    await page.getByText(MODE_TCP_ALIAS, { exact: true }).click()
+    await page.getByRole('button', { name: /编辑连接|Edit Connection/ }).click()
+    await selectConnectionMode('rtuovertcp')
+    await page.getByLabel('IP Address').fill('127.0.0.1')
+    await page.getByLabel('Port').fill('15131')
+    await page.getByRole('button', { name: /保存|Save/ }).click()
+
+    await openAndCloseConnection(MODE_TCP_ALIAS)
+
+    await page.getByText(MODE_RTU_ALIAS, { exact: true }).click()
+    await page.getByRole('button', { name: /编辑连接|Edit Connection/ }).click()
+    await page.getByLabel('ASCII').check()
+    await page.getByRole('button', { name: /保存|Save/ }).click()
+
+    await page.getByText(MODE_RTU_ALIAS, { exact: true }).click()
+    await page.getByRole('button', { name: /编辑连接|Edit Connection/ }).click()
+    await expect(page.getByLabel('ASCII')).toBeChecked()
+    await page.getByRole('button', { name: /取消|Cancel/ }).click()
+  })
+
+  test('covers all register group types in slave config and runtime tabs', async () => {
+    await page.getByText(CONN_ALIAS_EDITED, { exact: true }).click()
+    await page.getByRole('button', { name: /新建从站|New Slave/ }).click()
+    await expect(page.getByRole('heading', { name: /新建从站|New Slave/ })).toBeVisible()
+
+    await page.getByLabel('Slave Alias').fill(MATRIX_SLAVE_ALIAS)
+    await page.getByLabel('Slave ID').fill('3')
+
+    await page.getByLabel('Group Name').first().fill('Coil Group')
+    const slaveDialog = page.getByRole('dialog')
+    await slaveDialog.locator('div[role="combobox"]').nth(2).click()
+    await page.getByRole('option', { name: /01 Coil \(0x\) R\/W/ }).click()
+
+    await page.getByRole('button', { name: 'Add Register Group' }).click()
+    await page.getByLabel('Group Name').nth(1).fill('Discrete Group')
+    await slaveDialog.locator('div[role="combobox"]').nth(3).click()
+    await page.getByRole('option', { name: /02 Discrete Input \(1x\) Read-only/ }).click()
+
+    await page.getByRole('button', { name: 'Add Register Group' }).click()
+    await page.getByLabel('Group Name').nth(2).fill('Holding Group')
+    await slaveDialog.locator('div[role="combobox"]').nth(4).click()
+    await page.getByRole('option', { name: /03 Holding Register \(4x\) R\/W/ }).click()
+
+    await page.getByRole('button', { name: 'Add Register Group' }).click()
+    await page.getByLabel('Group Name').nth(3).fill('Input Group')
+    await slaveDialog.locator('div[role="combobox"]').nth(5).click()
+    await page.getByRole('option', { name: /04 Input Register \(3x\) Read-only/ }).click()
+
+    await page.getByRole('button', { name: /确定|OK/ }).click()
+    await expect(page.getByText(`${MATRIX_SLAVE_ALIAS} (ID:3)`)).toBeVisible()
+
+    const groups: Array<{ name: string; typeHint: RegExp }> = [
+      { name: 'Coil Group', typeHint: /Type:\s*Coil\s*\(0x\)/ },
+      { name: 'Discrete Group', typeHint: /Type:\s*Discrete Input\s*\(1x\)/ },
+      { name: 'Holding Group', typeHint: /Type:\s*Holding Register\s*\(4x\)/ },
+      { name: 'Input Group', typeHint: /Type:\s*Input Register\s*\(3x\)/ }
+    ]
+
+    for (const group of groups) {
+      await page.getByText(group.name, { exact: true }).dblclick()
+      await expect(page.getByRole('tab', { name: group.name })).toBeVisible()
+      await expect(page.getByText(group.typeHint)).toBeVisible()
+      await expect(page.getByText(`Slave: ${MATRIX_SLAVE_ALIAS}`)).toBeVisible()
+    }
   })
 })
