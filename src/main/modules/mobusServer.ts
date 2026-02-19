@@ -21,6 +21,7 @@ import { ValueGenerator } from './modbusServer/valueGenerator'
 import type { IServiceVector, FCallbackVal } from 'modbus-serial'
 import { createServerAdapter, ServerAdapter, TcpServerAdapter } from './modbusServer/serverAdapter'
 import type { ServerConnectionConfig, ServerProtocol } from '@shared'
+import { TrafficMonitor } from './trafficMonitor'
 
 const getDefaultGenerators = (): ValueGenerators => ({
   input_registers: new Map(),
@@ -69,6 +70,7 @@ export class ModbusServer {
   private _configs: Map<string, ServerConnectionConfig> = new Map()
   private _adapters: Map<string, ServerAdapter> = new Map()
   private _windows: Windows
+  private _trafficMonitor: TrafficMonitor
 
   // Map to store server data for each unit ID of a server UUID
   private _serverData: ServerDataMap = new Map()
@@ -80,6 +82,14 @@ export class ModbusServer {
    */
   constructor({ windows }: ServerParams) {
     this._windows = windows
+    this._trafficMonitor = new TrafficMonitor(windows)
+  }
+
+  /**
+   * Get the traffic monitor instance.
+   */
+  getTrafficMonitor(): TrafficMonitor {
+    return this._trafficMonitor
   }
 
   /**

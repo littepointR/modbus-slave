@@ -1,5 +1,6 @@
 export * from './datatype'
 export * from './server'
+export * from './comm'
 export * from './utils'
 export * from './scan'
 export * from './client'

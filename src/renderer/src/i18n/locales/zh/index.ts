@@ -146,6 +146,16 @@ export default {
     unitId: '单元 ID',
     port: '端口',
     portWithNumber: '端口 {{port}}',
+    connection: {
+      protocol: '协议',
+      host: '主机地址',
+      port: '端口',
+      comPort: '串口',
+      baudRate: '波特率',
+      dataBits: '数据位',
+      stopBits: '停止位',
+      parity: '校验位'
+    },
     registers: {
       title: '寄存器',
       addRegister: '添加寄存器',
@@ -304,7 +314,8 @@ export default {
   // Endian Explanation
   endian: {
     title: '大端模式 vs 小端模式字节序',
-    description: '下表展示了32位整数值（305419896，十六进制 0x12345678）的示例，以及它在大端模式和小端模式中如何被分割成16位字。我们还展示了这些字如何被分配到Modbus寄存器，以及SCL（结构化控制语言）赋值语句。',
+    description:
+      '下表展示了32位整数值（305419896，十六进制 0x12345678）的示例，以及它在大端模式和小端模式中如何被分割成16位字。我们还展示了这些字如何被分配到Modbus寄存器，以及SCL（结构化控制语言）赋值语句。',
     table: {
       orderType: '字节序类型',
       register0: '寄存器 0',
@@ -314,13 +325,16 @@ export default {
     bigEndian: '大端模式',
     littleEndian: '小端模式',
     beTitle: '大端模式 (BE)：',
-    beDescription: '在大端模式中，最高有效字节（MSB）先存储，然后是最低有效字节（LSB）。在Modbus中，这是大多数系统的标准，包括西门子S7等PLC。在这个例子中，32位整数 0x12345678 的存储方式如下：',
+    beDescription:
+      '在大端模式中，最高有效字节（MSB）先存储，然后是最低有效字节（LSB）。在Modbus中，这是大多数系统的标准，包括西门子S7等PLC。在这个例子中，32位整数 0x12345678 的存储方式如下：',
     leTitle: '小端模式 (LE)：',
-    leDescription: '在小端模式中，最低有效字节（LSB）先存储，然后是最高有效字节（MSB）。这种格式在Modbus通信中较少见。在同一个例子中，32位整数 0x12345678 的存储方式如下：',
+    leDescription:
+      '在小端模式中，最低有效字节（LSB）先存储，然后是最高有效字节（MSB）。这种格式在Modbus通信中较少见。在同一个例子中，32位整数 0x12345678 的存储方式如下：',
     wordOrder: '字节顺序',
     sclAssignment: 'SCL赋值',
     explanationTitle: '说明：',
-    beExplanation: '在大端模式中，高位字（W1）被分配到第一个寄存器，而低位字（W0）被分配到第二个寄存器。',
+    beExplanation:
+      '在大端模式中，高位字（W1）被分配到第一个寄存器，而低位字（W0）被分配到第二个寄存器。',
     leExplanation: '在小端模式中，低位字（W0）先存储，高位字（W1）后存储。',
     conclusion: '在与Modbus设备通信时，了解设备使用哪种字节序对于确保正确的数据解释至关重要。'
   },

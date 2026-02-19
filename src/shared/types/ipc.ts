@@ -23,7 +23,9 @@ import type {
   WindowsOpen,
   AddressGroup,
   SerialPortInfo,
-  SerialPortValidationResult
+  SerialPortValidationResult,
+  ServerCommPacket,
+  PacketStats
 } from '@shared'
 import { SharedProps } from 'notistack'
 
@@ -68,7 +70,12 @@ export const IPC_CHANNELS = [
   'delete_server',
   'reset_server',
   'list_serial_ports',
-  'validate_serial_port'
+  'validate_serial_port',
+  'start_comm_monitor',
+  'stop_comm_monitor',
+  'clear_comm_monitor',
+  'export_comm_log',
+  'get_comm_stats'
 ] as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[number]
@@ -256,6 +263,36 @@ export interface IpcHandlerSpec {
     args: [string]
     return: SerialPortValidationResult
   }
+
+  /** Start communication monitor */
+  ['start_comm_monitor']: {
+    args: []
+    return: void
+  }
+
+  /** Stop communication monitor */
+  ['stop_comm_monitor']: {
+    args: []
+    return: void
+  }
+
+  /** Clear communication monitor logs */
+  ['clear_comm_monitor']: {
+    args: []
+    return: void
+  }
+
+  /** Export communication log to file */
+  ['export_comm_log']: {
+    args: [string]
+    return: void
+  }
+
+  /** Get communication statistics */
+  ['get_comm_stats']: {
+    args: []
+    return: PacketStats
+  }
 }
 
 export type IpcHandlerMap = {
@@ -276,7 +313,9 @@ export const IPC_EVENTS = [
   'boolean_value',
   'window_update',
   'open_server_window',
-  'address_groups'
+  'address_groups',
+  'comm_packet',
+  'comm_monitor_clear'
 ] as const
 
 export type IpcEvent = (typeof IPC_EVENTS)[number]
@@ -293,6 +332,8 @@ export interface IpcEventPayloadMap {
   ['window_update']: [WindowsOpen]
   ['open_server_window']: []
   ['address_groups']: [AddressGroup[]]
+  ['comm_packet']: [ServerCommPacket]
+  ['comm_monitor_clear']: [void]
 }
 
 export interface BackendMessage {

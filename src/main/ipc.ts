@@ -88,6 +88,14 @@ export const initIpc: InitIpcFn = (app, state, client, server) => {
   ipcHandle('create_server', (_, params) => server.createServer(params))
   ipcHandle('delete_server', (_, uuid) => server.deleteServer(uuid))
 
+  ipcHandle('start_comm_monitor', () => server.getTrafficMonitor().start())
+  ipcHandle('stop_comm_monitor', () => server.getTrafficMonitor().stop())
+  ipcHandle('clear_comm_monitor', () => server.getTrafficMonitor().clear())
+  ipcHandle('export_comm_log', (_, filepath: string) =>
+    server.getTrafficMonitor().exportToFile(filepath)
+  )
+  ipcHandle('get_comm_stats', () => server.getTrafficMonitor().getStats())
+
   // App Version
   ipcHandle('get_app_version', () => app.getVersion())
 
