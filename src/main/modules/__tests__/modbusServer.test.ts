@@ -2,54 +2,42 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { UnitIdString, Windows } from '@shared'
 import type { IServiceVector } from 'modbus-serial/ServerTCP'
-
-// Configurable port availability for net mock
-let portAvailableResults: boolean[] = []
-
-// Mock modbus-serial before importing ModbusServer
-vi.mock('modbus-serial', () => ({
-  // Must use `function` (not arrow) so it can be called with `new`
-  ServerTCP: vi.fn().mockImplementation(function () {
-    return { close: vi.fn((cb: (err: Error | null) => void) => cb(null)) }
-  })
-}))
-
-// Mock net — fires events synchronously in listen() for fake timer compatibility
-vi.mock('net', () => ({
-  default: {
-    createServer: vi.fn(() => {
-      const handlers: Record<string, (...args: unknown[]) => void> = {}
-      return {
-        once: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
-          handlers[event] = handler
-        }),
-        listen: vi.fn(() => {
-          const available = portAvailableResults.length > 0 ? portAvailableResults.shift()! : true
-          if (available && handlers['listening']) {
-            handlers['listening']()
-          } else if (handlers['error']) {
-            handlers['error']()
-          }
-        }),
-        close: vi.fn((cb: () => void) => cb())
-      }
-    })
-  }
+const { adapterInstances } = vi.hoisted(() => ({
+  adapterInstances: [] as Array<{
+    start: ReturnType<typeof vi.fn>
+    stop: ReturnType<typeof vi.fn>
+    isRunning: ReturnType<typeof vi.fn>
+    getAddress: ReturnType<typeof vi.fn>
+    getProtocol: ReturnType<typeof vi.fn>
+  }>
 }))
 
 import { ModbusServer, SERVER_DEVICE_FAILURE, ILLEGAL_DATA_ADDRESS } from '../mobusServer'
-import { ServerTCP } from 'modbus-serial'
+import { createServerAdapter } from '../modbusServer/serverAdapter'
 
 // Mock serverAdapter to avoid ServerTCP instantiation issues
 vi.mock('../modbusServer/serverAdapter', () => ({
-  createServerAdapter: vi.fn().mockImplementation((_protocol: string, _vector: IServiceVector) => {
-    return {
-      start: vi.fn().mockResolvedValue(undefined),
-      stop: vi.fn().mockResolvedValue(undefined),
-      isRunning: vi.fn().mockReturnValue(true),
-      getAddress: vi.fn().mockReturnValue('0.0.0.0:5020'),
-      getProtocol: vi.fn().mockReturnValue('ModbusTcp')
+  createServerAdapter: vi.fn().mockImplementation(
+    (protocol: string, _vector: IServiceVector, config: { host?: string; port?: number }) => {
+      const host = config.host ?? '0.0.0.0'
+      const port = config.port ?? 502
+      const suffix = protocol === 'ModbusTcp' ? '' : '/mock'
+      const adapter = {
+        start: vi.fn().mockResolvedValue(undefined),
+        stop: vi.fn().mockResolvedValue(undefined),
+        isRunning: vi.fn().mockReturnValue(true),
+        getAddress: vi.fn().mockReturnValue(`${host}:${port}${suffix}`),
+        getProtocol: vi.fn().mockReturnValue(protocol)
+      }
+      adapterInstances.push(adapter)
+      return adapter
     }
+  )
+}))
+
+vi.mock('modbus-serial', () => ({
+  ServerTCP: vi.fn().mockImplementation(function () {
+    return { close: vi.fn((cb: (err: Error | null) => void) => cb(null)) }
   })
 }))
 
@@ -63,8 +51,8 @@ describe('ModbusServer', () => {
 
   beforeEach(() => {
     vi.useFakeTimers()
-    portAvailableResults = []
-    vi.mocked(ServerTCP).mockClear()
+    adapterInstances.length = 0
+    vi.mocked(createServerAdapter).mockClear()
     windows = createMockWindows()
     server = new ModbusServer({ windows })
   })
@@ -759,37 +747,25 @@ describe('ModbusServer', () => {
 
   describe('createServer', () => {
     it('creates a server on the specified port', async () => {
-      const port = await server.createServer({
+      const address = await server.createServer({
         uuid,
         config: { protocol: 'ModbusTcp', host: '0.0.0.0', port: 5020 }
       })
-      expect(port).toBe(5020)
-      expect(ServerTCP).toHaveBeenCalledWith(expect.any(Object), {
+      expect(address).toBe('0.0.0.0:5020')
+      expect(createServerAdapter).toHaveBeenCalledWith('ModbusTcp', expect.any(Object), {
         host: '0.0.0.0',
-        port: 5020
+        port: 5020,
+        serial: undefined
       })
+      expect(adapterInstances[0].start).toHaveBeenCalled()
     })
 
-    // ! Coverage-only: exercises port ?? DEFAULT_MOBUS_PORT branch
     it('uses default port (502) when port is not provided', async () => {
-      const port = await server.createServer({
+      const address = await server.createServer({
         uuid,
         config: { protocol: 'ModbusTcp', host: '0.0.0.0', port: undefined as unknown as number }
       })
-      expect(port).toBe(502)
-      expect(ServerTCP).toHaveBeenCalledWith(expect.any(Object), {
-        host: '0.0.0.0',
-        port: 502
-      })
-    })
-
-    it('increments port when first port is unavailable', async () => {
-      portAvailableResults = [false, false, true]
-      const port = await server.createServer({
-        uuid,
-        config: { protocol: 'ModbusTcp', host: '0.0.0.0', port: 5020 }
-      })
-      expect(port).toBe(5022)
+      expect(address).toBe('0.0.0.0:502')
     })
 
     it('closes existing server before recreating', async () => {
@@ -797,13 +773,13 @@ describe('ModbusServer', () => {
         uuid,
         config: { protocol: 'ModbusTcp', host: '0.0.0.0', port: 5020 }
       })
-      const firstInstance = vi.mocked(ServerTCP).mock.results[0].value
+      const firstInstance = adapterInstances[0]
 
       await server.createServer({
         uuid,
         config: { protocol: 'ModbusTcp', host: '0.0.0.0', port: 5021 }
       })
-      expect(firstInstance.close).toHaveBeenCalled()
+      expect(firstInstance.stop).toHaveBeenCalled()
     })
 
     it('emits error when closing existing server fails', async () => {
@@ -811,29 +787,40 @@ describe('ModbusServer', () => {
         uuid,
         config: { protocol: 'ModbusTcp', host: '0.0.0.0', port: 5020 }
       })
-      const firstInstance = vi.mocked(ServerTCP).mock.results[0].value
-      firstInstance.close.mockImplementation((cb: (err: Error | null) => void) =>
-        cb(new Error('close error'))
-      )
+      const firstInstance = adapterInstances[0]
+      firstInstance.stop.mockRejectedValueOnce(new Error('close error'))
 
-      await server.createServer({
-        uuid,
-        config: { protocol: 'ModbusTcp', host: '0.0.0.0', port: 5021 }
-      })
-      const messages = getWindowCalls('backend_message')
-      expect(messages.some((m) => m[1].message === 'Error closing server')).toBe(true)
+      await expect(
+        server.createServer({
+          uuid,
+          config: { protocol: 'ModbusTcp', host: '0.0.0.0', port: 5021 }
+        })
+      ).rejects.toThrow('close error')
     })
 
-    it('throws when no port available after 100 attempts', async () => {
-      portAvailableResults = new Array(100).fill(false)
+    it('emits backend error and rethrows when start fails', async () => {
+      vi.mocked(createServerAdapter).mockImplementationOnce(
+        (_protocol: string, _vector: IServiceVector, _config: { host?: string; port?: number }) => {
+          const adapter = {
+            start: vi.fn().mockRejectedValue(new Error('start failed')),
+            stop: vi.fn().mockResolvedValue(undefined),
+            isRunning: vi.fn().mockReturnValue(false),
+            getAddress: vi.fn().mockReturnValue('0.0.0.0:5020'),
+            getProtocol: vi.fn().mockReturnValue('ModbusTcp')
+          }
+          adapterInstances.push(adapter)
+          return adapter
+        }
+      )
+
       await expect(
         server.createServer({
           uuid,
           config: { protocol: 'ModbusTcp', host: '0.0.0.0', port: 5020 }
         })
-      ).rejects.toThrow('No available port found')
+      ).rejects.toThrow('start failed')
       const messages = getWindowCalls('backend_message')
-      expect(messages.some((m) => m[1].message === 'No available port found')).toBe(true)
+      expect(messages.some((m) => m[1].message === 'Failed to start ModbusTcp server')).toBe(true)
     })
   })
 
@@ -845,13 +832,13 @@ describe('ModbusServer', () => {
       })
       await server.deleteServer(uuid)
       // Creating again should work without close call on old server
-      vi.mocked(ServerTCP).mockClear()
+      adapterInstances.length = 0
       await server.createServer({
         uuid,
         config: { protocol: 'ModbusTcp', host: '0.0.0.0', port: 5020 }
       })
-      // Only the new ServerTCP was created, no close on old
-      expect(vi.mocked(ServerTCP).mock.results[0].value.close).not.toHaveBeenCalled()
+      // Only the new adapter was created in this section
+      expect(adapterInstances[0].stop).not.toHaveBeenCalled()
     })
 
     it('emits error when server not found', async () => {
@@ -865,9 +852,7 @@ describe('ModbusServer', () => {
         uuid,
         config: { protocol: 'ModbusTcp', host: '0.0.0.0', port: 5020 }
       })
-      vi.mocked(ServerTCP).mock.results[0].value.close.mockImplementation(
-        (cb: (err: Error | null) => void) => cb(new Error('close error'))
-      )
+      adapterInstances[0].stop.mockRejectedValueOnce(new Error('close error'))
 
       await server.deleteServer(uuid)
       const messages = getWindowCalls('backend_message')
@@ -925,8 +910,8 @@ describe('ModbusServer', () => {
         .filter((c) => c[0] === 'register_value')
       expect(newCalls.length).toBe(0)
 
-      // Server was recreated (ServerTCP called again)
-      expect(vi.mocked(ServerTCP).mock.calls.length).toBeGreaterThanOrEqual(2)
+      // Server was recreated (new adapter created)
+      expect(vi.mocked(createServerAdapter).mock.calls.length).toBeGreaterThanOrEqual(2)
     })
 
     it('handles reset when no generators exist', async () => {
@@ -939,9 +924,9 @@ describe('ModbusServer', () => {
     })
 
     it('skips server recreation when no port is stored', async () => {
-      const callsBefore = vi.mocked(ServerTCP).mock.calls.length
+      const callsBefore = vi.mocked(createServerAdapter).mock.calls.length
       await server.resetServer('unknown-uuid')
-      expect(vi.mocked(ServerTCP).mock.calls.length).toBe(callsBefore)
+      expect(vi.mocked(createServerAdapter).mock.calls.length).toBe(callsBefore)
     })
   })
 
