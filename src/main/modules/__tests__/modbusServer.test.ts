@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/explicit-function-return-type */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import type { UnitIdString, Windows } from '@shared'
+import type { CreateServerParams, UnitIdString, Windows } from '@shared'
 import type { IServiceVector } from 'modbus-serial/ServerTCP'
 const { adapterInstances } = vi.hoisted(() => ({
   adapterInstances: [] as Array<{
@@ -823,6 +823,59 @@ describe('ModbusServer', () => {
       const messages = getWindowCalls('backend_message')
       expect(messages.some((m) => m[1].message === 'Failed to start ModbusTcp server')).toBe(true)
     })
+
+    it.each([
+      { protocol: 'ModbusTcp', config: { host: '127.0.0.1', port: 1502 }, expectedAddress: '127.0.0.1:1502' },
+      {
+        protocol: 'ModbusUdp',
+        config: { host: '127.0.0.1', port: 1503 },
+        expectedAddress: '127.0.0.1:1503/mock'
+      },
+      {
+        protocol: 'ModbusRtuOverTcp',
+        config: { host: '127.0.0.1', port: 1504 },
+        expectedAddress: '127.0.0.1:1504/mock'
+      },
+      {
+        protocol: 'ModbusRtuOverUdp',
+        config: { host: '127.0.0.1', port: 1505 },
+        expectedAddress: '127.0.0.1:1505/mock'
+      },
+      {
+        protocol: 'ModbusRtu',
+        config: {
+          serial: { port: '/dev/tty.usbmodem-rtu', baudRate: 9600, dataBits: 8, stopBits: 1, parity: 'none' as const }
+        },
+        expectedAddress: '0.0.0.0:502/mock'
+      },
+      {
+        protocol: 'ModbusAscii',
+        config: {
+          serial: { port: '/dev/tty.usbmodem-ascii', baudRate: 9600, dataBits: 8, stopBits: 1, parity: 'none' as const }
+        },
+        expectedAddress: '0.0.0.0:502/mock'
+      }
+    ])(
+      'creates server for protocol $protocol with expected adapter wiring',
+      async ({ protocol, config, expectedAddress }) => {
+        const address = await server.createServer({
+          uuid: `${uuid}-${protocol}`,
+          config: { protocol: protocol as CreateServerParams['config']['protocol'], ...config }
+        })
+
+        expect(address).toBe(expectedAddress)
+        expect(createServerAdapter).toHaveBeenLastCalledWith(
+          protocol,
+          expect.any(Object),
+          expect.objectContaining({
+            host: (config as { host?: string }).host,
+            port: (config as { port?: number }).port,
+            serial: (config as { serial?: unknown }).serial,
+            onPacket: expect.any(Function)
+          })
+        )
+      }
+    )
   })
 
   describe('deleteServer', () => {
@@ -938,6 +991,75 @@ describe('ModbusServer', () => {
         config: { protocol: 'ModbusTcp', host: '0.0.0.0', port: 5020 }
       })
       expect(address).toBe('0.0.0.0:5020')
+    })
+
+    it('keeps existing protocol when only host/port changes', async () => {
+      await server.createServer({
+        uuid,
+        config: { protocol: 'ModbusUdp', host: '0.0.0.0', port: 1502 }
+      })
+
+      await server.setPort({
+        uuid,
+        config: { host: '127.0.0.1', port: 1506 } as unknown as CreateServerParams['config']
+      })
+
+      expect(createServerAdapter).toHaveBeenLastCalledWith(
+        'ModbusUdp',
+        expect.any(Object),
+        expect.objectContaining({ host: '127.0.0.1', port: 1506 })
+      )
+    })
+
+    it('applies protocol switch in config change', async () => {
+      await server.createServer({
+        uuid,
+        config: { protocol: 'ModbusTcp', host: '0.0.0.0', port: 1502 }
+      })
+
+      await server.setPort({
+        uuid,
+        config: { protocol: 'ModbusRtuOverTcp', host: '127.0.0.1', port: 1510 }
+      })
+
+      expect(createServerAdapter).toHaveBeenLastCalledWith(
+        'ModbusRtuOverTcp',
+        expect.any(Object),
+        expect.objectContaining({ host: '127.0.0.1', port: 1510 })
+      )
+    })
+
+    it('keeps serial protocol and applies serial config updates', async () => {
+      const serialA = {
+        port: '/dev/tty.usbmodem-a',
+        baudRate: 9600,
+        dataBits: 8,
+        stopBits: 1,
+        parity: 'none' as const
+      }
+      const serialB = {
+        port: '/dev/tty.usbmodem-b',
+        baudRate: 19200,
+        dataBits: 7,
+        stopBits: 2,
+        parity: 'even' as const
+      }
+
+      await server.createServer({
+        uuid,
+        config: { protocol: 'ModbusRtu', serial: serialA }
+      })
+
+      await server.setPort({
+        uuid,
+        config: { serial: serialB } as unknown as CreateServerParams['config']
+      })
+
+      expect(createServerAdapter).toHaveBeenLastCalledWith(
+        'ModbusRtu',
+        expect.any(Object),
+        expect.objectContaining({ serial: serialB })
+      )
     })
   })
 

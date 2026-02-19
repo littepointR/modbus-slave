@@ -143,6 +143,35 @@ describe('serverAdapter', () => {
     expect(rtuUdp.getAddress()).toBe('127.0.0.1:1504/RTU/udp')
   })
 
+  it('starts and stops RTU-over-TCP adapter', async () => {
+    const adapter = new RtuOverTcpServerAdapter(vector, '127.0.0.1', 1507)
+    const startPromise = adapter.start()
+    tcpInstances[0].handlers.listening?.()
+    await startPromise
+
+    expect(adapter.isRunning()).toBe(true)
+    expect(adapter.getProtocol()).toBe('ModbusRtuOverTcp')
+    expect(adapter.getAddress()).toBe('127.0.0.1:1507/RTU')
+
+    await adapter.stop()
+    expect(tcpInstances[0].close).toHaveBeenCalledTimes(1)
+    expect(adapter.isRunning()).toBe(false)
+  })
+
+  it('starts and stops RTU-over-UDP adapter', async () => {
+    const adapter = new RtuOverUdpServerAdapter(vector, '127.0.0.1', 1508)
+    await adapter.start()
+
+    expect(adapter.isRunning()).toBe(true)
+    expect(adapter.getProtocol()).toBe('ModbusRtuOverUdp')
+    expect(adapter.getAddress()).toBe('127.0.0.1:1508/RTU/udp')
+    expect(udpSockets[0].bind).toHaveBeenCalledWith(1508, '127.0.0.1')
+
+    await adapter.stop()
+    expect(udpSockets[0].close).toHaveBeenCalledTimes(1)
+    expect(adapter.isRunning()).toBe(false)
+  })
+
   it('requires serial config for RTU and ASCII', () => {
     expect(() => createServerAdapter('ModbusRtu', vector, {})).toThrow(
       'Serial config required for RTU'
