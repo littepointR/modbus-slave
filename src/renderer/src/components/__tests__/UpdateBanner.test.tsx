@@ -5,6 +5,22 @@ import { userEvent } from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import UpdateBanner from '../UpdateBanner'
 
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({
+    t: (key: string, params?: { version?: string }) => {
+      const dict: Record<string, string> = {
+        'update.title': 'New version available',
+        'update.download': 'Download now',
+        'update.close': 'Close'
+      }
+      if (key === 'update.message') {
+        return `Version ${params?.version ?? ''} is now available`
+      }
+      return dict[key] ?? key
+    }
+  })
+}))
+
 // Mock window.api
 const mockGetAppVersion = vi.fn()
 // @ts-expect-error - Mocking window.api for tests
