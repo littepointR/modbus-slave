@@ -36,7 +36,9 @@ export default {
     value: 'Value',
     configuration: 'Configuration',
     ok: 'OK',
-    error: 'ERROR'
+    error: 'ERROR',
+    bigEndian: 'Big-Endian',
+    littleEndian: 'Little-Endian'
   },
 
   // Navigation
@@ -257,8 +259,18 @@ export default {
   snackbar: {
     configOpened: 'Configuration opened successfully',
     configOpenedLegacy: 'Configuration opened successfully (legacy format), consider saving with the new format.',
+    configMigrated: 'Configuration updated from older format',
     invalidConfig: 'Invalid Config',
-    invalidJson: 'INVALID JSON: {{message}}'
+    invalidJson: 'INVALID JSON: {{message}}',
+    futureVersion: 'This config was created with a newer version of Modbux. Some features may not work correctly.',
+    mixedEndianness: 'Warning: Config had mixed byte order settings. Now using {{endian}} globally. Please verify.'
+  },
+
+  // Data Types (Extended)
+  dataTypesExtended: {
+    unix: 'Unix Timestamp',
+    datetime: 'Datetime (IEC 870-5)',
+    utf8: 'UTF-8 String'
   },
 
   // Register Types

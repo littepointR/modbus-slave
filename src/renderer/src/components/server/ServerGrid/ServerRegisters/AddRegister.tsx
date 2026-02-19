@@ -21,7 +21,9 @@ import DataTypeSelectInput from '@renderer/components/shared/inputs/DataTypeSele
 import { useMinMaxInteger } from '@renderer/hooks'
 import { useServerZustand } from '@renderer/context/server.zustand'
 import { Delete } from '@mui/icons-material'
-import { useTranslation } from 'react-i18next'
+import { DateTimePicker, LocalizationProvider } from '@mui/x-date-pickers'
+import { AdapterLuxon } from '@mui/x-date-pickers/AdapterLuxon'
+import { DateTime } from 'luxon'
 
 //
 //
@@ -33,8 +35,9 @@ const AddressInputForward = forwardRef<HTMLInputElement, MaskInputProps>((props,
 
   // Set maximum address based on data type
   const maxAddress = useAddRegisterZustand((z) => {
-    if (['int32', 'uint32', 'float'].includes(z.dataType)) return 65534
-    if (['int64', 'uint64', 'double'].includes(z.dataType)) return 65532
+    if (['int32', 'uint32', 'float', 'unix'].includes(z.dataType)) return 65534
+    if (['int64', 'uint64', 'double', 'datetime'].includes(z.dataType)) return 65532
+    if (z.dataType === 'utf8') return Math.max(0, 65535 - (Number(z.registerLength) || 10) + 1)
     return 65535
   })
 
@@ -55,7 +58,6 @@ AddressInputForward.displayName = 'AddressInput'
 const AddressInput = meme(AddressInputForward)
 
 const AddressField = meme(() => {
-  const { t } = useTranslation()
   const address = useAddRegisterZustand((z) => String(z.address))
   const addressInUse = useAddRegisterZustand((z) => z.addressInUse)
   const addressFitError = useAddRegisterZustand((z) => z.addressFitError)
@@ -67,7 +69,7 @@ const AddressField = meme(() => {
       <TextField
         data-testid="add-reg-address-input"
         error={!valid}
-        label={t('server.registers.address')}
+        label="Address"
         variant="outlined"
         size="small"
         sx={{ width: 90 }}
@@ -82,8 +84,8 @@ const AddressField = meme(() => {
           }
         }}
       />
-      {addressInUse && <FormHelperText>{t('server.registers.validation.inUse')}</FormHelperText>}
-      {addressFitError && <FormHelperText>{t('server.registers.validation.dataTypeDoesNotFit')}</FormHelperText>}
+      {addressInUse && <FormHelperText>In use</FormHelperText>}
+      {addressFitError && <FormHelperText>Data type does not fit at this address</FormHelperText>}
     </FormControl>
   )
 })
@@ -105,9 +107,12 @@ const DataTypeSelect = meme(() => {
 //
 // Fixed Or Generator
 const FixedOrGenerator = meme(() => {
-  const { t } = useTranslation()
   const fixed = useAddRegisterZustand((z) => z.fixed)
   const setFixed = useAddRegisterZustand((z) => z.setFixed)
+  const dataType = useAddRegisterZustand((z) => z.dataType)
+
+  // UTF-8 is always fixed — hide toggle
+  if (dataType === 'utf8') return null
 
   return (
     <ToggleButtonGroup
@@ -119,14 +124,14 @@ const FixedOrGenerator = meme(() => {
       sx={{ flex: 1 }}
     >
       <ToggleButton data-testid="add-reg-fixed-btn" sx={{ flex: 1, flexBasis: 0 }} value={true}>
-        {t('server.registers.mode.fixed')}
+        Fixed
       </ToggleButton>
       <ToggleButton
         data-testid="add-reg-generator-btn"
         sx={{ flex: 1, flexBasis: 0 }}
         value={false}
       >
-        {t('server.registers.mode.generator')}
+        Generator
       </ToggleButton>
     </ToggleButtonGroup>
   )
@@ -167,7 +172,6 @@ ValueInputForward.displayName = 'ValueInput'
 const ValueInput = meme(ValueInputForward)
 
 const ValueInputComponent = meme(() => {
-  const { t } = useTranslation()
   const value = useAddRegisterZustand((z) => z.value)
   const valid = useAddRegisterZustand((z) => z.valid.value)
   const setValue = useAddRegisterZustand((z) => z.setValue)
@@ -175,7 +179,7 @@ const ValueInputComponent = meme(() => {
   return (
     <TextField
       data-testid="add-reg-value-input"
-      label={t('server.registers.value')}
+      label="Value"
       variant="outlined"
       size="small"
       sx={{ minWidth: 100 }}
@@ -257,7 +261,6 @@ const MaxInput = meme(MaxInputForward)
 //
 // Min Max components
 const MinTextField = meme(() => {
-  const { t } = useTranslation()
   const min = useAddRegisterZustand((z) => String(z.min))
   const valid = useAddRegisterZustand((z) => z.valid.min)
   const setMin = useAddRegisterZustand((z) => z.setMin)
@@ -266,7 +269,7 @@ const MinTextField = meme(() => {
     <TextField
       data-testid="add-reg-min-input"
       error={!valid}
-      label={t('server.registers.minValue')}
+      label="Min Value"
       variant="outlined"
       size="small"
       sx={{ width: 90 }}
@@ -282,7 +285,6 @@ const MinTextField = meme(() => {
 })
 
 const MaxTextField = meme(() => {
-  const { t } = useTranslation()
   const max = useAddRegisterZustand((z) => String(z.max))
   const valid = useAddRegisterZustand((z) => z.valid.max)
   const setMax = useAddRegisterZustand((z) => z.setMax)
@@ -291,7 +293,7 @@ const MaxTextField = meme(() => {
     <TextField
       data-testid="add-reg-max-input"
       error={!valid}
-      label={t('server.registers.maxValue')}
+      label="Max Value"
       variant="outlined"
       size="small"
       sx={{ width: 90 }}
@@ -336,7 +338,6 @@ IntervalInputForward.displayName = 'IntervalInput'
 const IntervalInput = meme(IntervalInputForward)
 
 const IntervalTextField = meme(() => {
-  const { t } = useTranslation()
   const interval = useAddRegisterZustand((z) => String(z.interval))
   const valid = useAddRegisterZustand((z) => z.valid.interval)
   const setInterval = useAddRegisterZustand((z) => z.setInterval)
@@ -345,7 +346,7 @@ const IntervalTextField = meme(() => {
     <TextField
       data-testid="add-reg-interval-input"
       error={!valid}
-      label={t('server.registers.interval')}
+      label="Interval (s)"
       variant="outlined"
       size="small"
       sx={{ width: 90 }}
@@ -364,13 +365,172 @@ const IntervalTextField = meme(() => {
 //
 //
 //
+// DateTimePicker for unix/datetime fixed mode
+const DateTimeField = meme(() => {
+  const value = useAddRegisterZustand((z) => z.value)
+  const showDatePickerUtc = useAddRegisterZustand((z) => z.showDatePickerUtc)
+  const setValue = useAddRegisterZustand((z) => z.setValue)
+  const setShowDatePickerUtc = useAddRegisterZustand((z) => z.setShowDatePickerUtc)
+
+  const dateValue = value && value !== '0' ? DateTime.fromMillis(Number(value)) : DateTime.now()
+
+  return (
+    <LocalizationProvider dateAdapter={AdapterLuxon}>
+      <DateTimePicker
+        timezone={showDatePickerUtc ? 'UTC' : undefined}
+        label="Date & Time"
+        value={dateValue}
+        onChange={(dt) => {
+          if (dt && dt.isValid) {
+            setValue(String(dt.toMillis()), true)
+          }
+        }}
+        ampm={false}
+        slotProps={{
+          textField: {
+            size: 'small',
+            sx: { minWidth: 220 },
+            inputProps: { 'data-testid': 'add-reg-datetime-input' }
+          }
+        }}
+      />
+      <ToggleButtonGroup size="small" value={showDatePickerUtc} color="primary">
+        <ToggleButton
+          value={true}
+          data-testid="add-reg-datetime-show-utc"
+          aria-label="Show UTC time for datepicker"
+          title="Show UTC time for datepicker"
+          onChange={() => setShowDatePickerUtc(!showDatePickerUtc)}
+        >
+          UTC
+        </ToggleButton>
+      </ToggleButtonGroup>
+    </LocalizationProvider>
+  )
+})
+
+//
+//
+//
+//
+// String value input for utf8
+const StringValueField = meme(() => {
+  const stringValue = useAddRegisterZustand((z) => z.stringValue)
+  const setStringValue = useAddRegisterZustand((z) => z.setStringValue)
+  const maxBytes = useAddRegisterZustand((z) => (Number(z.registerLength) || 10) * 2)
+  const valid = useAddRegisterZustand((z) => z.valid.stringValue)
+
+  useEffect(() => {
+    // Reevaluate string length when changing register Length
+    setStringValue(useAddRegisterZustand.getState().stringValue)
+  }, [maxBytes, setStringValue])
+
+  const helperText = `${new TextEncoder().encode(stringValue).length} / ${maxBytes} bytes`
+
+  return (
+    <TextField
+      data-testid="add-reg-string-input"
+      label="String Value"
+      variant="outlined"
+      size="small"
+      sx={{ minWidth: 200, flex: 1 }}
+      value={stringValue}
+      onChange={(e) => setStringValue(e.target.value)}
+      helperText={helperText}
+      error={!valid}
+    />
+  )
+})
+
+//
+//
+//
+//
+// Register length input for utf8
+const RegisterLengthForward = forwardRef<HTMLInputElement, MaskInputProps>((props, ref) => {
+  const { set, ...other } = props
+
+  return (
+    <IMaskInput
+      {...other}
+      mask={IMask.MaskedNumber}
+      min={1}
+      max={124}
+      autofix
+      scale={0}
+      thousandsSeparator=""
+      inputRef={ref}
+      onAccept={(value) => set(value, notEmpty(value))}
+    />
+  )
+})
+
+RegisterLengthForward.displayName = 'RegisterLengthInput'
+const RegisterLengthInput = meme(RegisterLengthForward)
+
+const RegisterLengthField = meme(() => {
+  const registerLength = useAddRegisterZustand((z) => z.registerLength)
+  const valid = useAddRegisterZustand((z) => z.valid.registerLength)
+  const setRegisterLength = useAddRegisterZustand((z) => z.setRegisterLength)
+
+  return (
+    <TextField
+      data-testid="add-reg-length-input"
+      error={!valid}
+      label="Registers"
+      variant="outlined"
+      size="small"
+      sx={{ width: 90 }}
+      value={registerLength}
+      slotProps={{
+        input: {
+          inputComponent: RegisterLengthInput as unknown as ElementType<
+            InputBaseComponentProps,
+            'input'
+          >,
+          inputProps: maskInputProps({ set: setRegisterLength })
+        }
+      }}
+    />
+  )
+})
+
+//
+//
+//
+//
 // ValueParameters
 const ValueParameters = meme(() => {
   const fixed = useAddRegisterZustand((z) => z.fixed)
+  const dataType = useAddRegisterZustand((z) => z.dataType)
 
-  return fixed ? (
-    <ValueInputComponent />
-  ) : (
+  // UTF-8: string input + register length
+  if (dataType === 'utf8') {
+    return (
+      <>
+        <StringValueField />
+        <RegisterLengthField />
+      </>
+    )
+  }
+
+  // Unix/datetime fixed: date picker
+  if (['unix', 'datetime'].includes(dataType) && fixed) {
+    return <DateTimeField />
+  }
+
+  // Unix/datetime generator: only interval
+  if (['unix', 'datetime'].includes(dataType) && !fixed) {
+    return <IntervalTextField />
+  }
+
+  // Numeric fixed: value input
+  if (fixed) {
+    return <ValueInputComponent />
+  }
+
+  // Numeric generator: min/max/interval
+  return (
     <>
       <MinTextField />
       <MaxTextField />
@@ -385,14 +545,13 @@ const ValueParameters = meme(() => {
 //
 // Comment
 const CommentField = meme(() => {
-  const { t } = useTranslation()
   const comment = useAddRegisterZustand((z) => z.comment)
   const setComment = useAddRegisterZustand((z) => z.setComment)
 
   return (
     <TextField
       data-testid="add-reg-comment-input"
-      label={t('server.registers.comment')}
+      label="Comment"
       variant="outlined"
       size="small"
       value={comment}
@@ -405,35 +564,7 @@ const CommentField = meme(() => {
 //
 //
 //
-// Toggle endianness button
-const ToggleEndianButton = meme(() => {
-  const { t } = useTranslation()
-  const littleEndian = useAddRegisterZustand((z) => z.littleEndian)
-  const setLittleEndian = useAddRegisterZustand((z) => z.setLittleEndian)
-
-  return (
-    <ToggleButtonGroup
-      sx={{ height: 37.13 }}
-      size="small"
-      exclusive
-      color="primary"
-      value={littleEndian}
-      onChange={(_, v) => v !== null && setLittleEndian(v)}
-    >
-      <ToggleButton
-        data-testid="add-reg-be-btn"
-        aria-label={t('server.registers.bigEndian')}
-        value={false}
-        sx={{ whiteSpace: 'nowrap' }}
-      >
-        BE
-      </ToggleButton>
-      <ToggleButton data-testid="add-reg-le-btn" aria-label={t('server.registers.littleEndian')} value={true}>
-        LE
-      </ToggleButton>
-    </ToggleButtonGroup>
-  )
-})
+// Toggle endianness button removed - now global per server
 
 //
 //
@@ -451,7 +582,8 @@ function submitRegister(isEdit: boolean): { address: number; dataType: BaseDataT
     max,
     interval,
     comment,
-    littleEndian,
+    stringValue,
+    registerLength,
     serverRegisterEdit
   } = useAddRegisterZustand.getState()
   if (!registerType) return undefined
@@ -460,12 +592,12 @@ function submitRegister(isEdit: boolean): { address: number; dataType: BaseDataT
   const uuid = z.selectedUuid
   const unitId = z.getUnitId(uuid)
 
-  const commonParams: Omit<AddRegisterParams, 'params'> = { uuid, unitId }
+  const littleEndian = z.littleEndian[uuid] ?? false
+  const commonParams: Omit<AddRegisterParams, 'params'> = { uuid, unitId, littleEndian }
   const baseRegisterParams: RegisterParamsBasePart = {
     address: Number(address),
     dataType,
     comment,
-    littleEndian,
     registerType
   }
 
@@ -476,7 +608,35 @@ function submitRegister(isEdit: boolean): { address: number; dataType: BaseDataT
     }
   }
 
-  if (fixed) {
+  if (dataType === 'utf8') {
+    // UTF-8: always fixed, pass stringValue and length
+    z.addRegister({
+      ...commonParams,
+      params: {
+        ...baseRegisterParams,
+        value: 0,
+        stringValue,
+        length: Number(registerLength) || 10
+      }
+    })
+  } else if (['unix', 'datetime'].includes(dataType)) {
+    if (fixed) {
+      // Fixed timestamp from date picker (value stored as ms)
+      const timestamp = dataType === 'unix' ? Math.floor(Number(value) / 1000) : Number(value)
+      z.addRegister({ ...commonParams, params: { ...baseRegisterParams, value: timestamp } })
+    } else {
+      // Generator: system time, only interval matters
+      z.addRegister({
+        ...commonParams,
+        params: {
+          ...baseRegisterParams,
+          min: 0,
+          max: 0,
+          interval: Number(interval) * 1000
+        }
+      })
+    }
+  } else if (fixed) {
     z.addRegister({ ...commonParams, params: { ...baseRegisterParams, value: Number(value) } })
   } else {
     z.addRegister({
@@ -495,9 +655,14 @@ function submitRegister(isEdit: boolean): { address: number; dataType: BaseDataT
 
 // Add buttons
 const AddButtons = meme(() => {
-  const { t } = useTranslation()
   const edit = useAddRegisterZustand((z) => z.serverRegisterEdit !== undefined)
   const valid = useAddRegisterZustand((z) => {
+    if (z.dataType === 'utf8') {
+      return z.valid.address && z.valid.stringValue && z.valid.registerLength
+    }
+    if (['unix', 'datetime'].includes(z.dataType)) {
+      return z.fixed ? z.valid.address : z.valid.address && z.valid.interval
+    }
     if (z.fixed) return z.valid.address && z.valid.value
     return z.valid.address && z.valid.min && z.valid.max && z.valid.interval
   })
@@ -514,15 +679,18 @@ const AddButtons = meme(() => {
     const result = submitRegister(false)
     if (!result) return
     const { address, dataType } = result
-    const size = ['double', 'uint64', 'int64'].includes(dataType)
-      ? 4
-      : ['uint32', 'int32', 'float'].includes(dataType)
-        ? 2
-        : 1
     const state = useAddRegisterZustand.getState()
+    const size = ['double', 'uint64', 'int64', 'datetime'].includes(dataType)
+      ? 4
+      : ['uint32', 'int32', 'float', 'unix'].includes(dataType)
+        ? 2
+        : dataType === 'utf8'
+          ? Number(state.registerLength) || 10
+          : 1
     // Reset value and comment, keep dataType/LE/fixed/min/max/interval
     state.setValue('0', true)
     state.setComment('')
+    if (dataType === 'utf8') state.setStringValue('')
     state.initNextUnusedAddress(address + size)
   }, [])
 
@@ -544,7 +712,7 @@ const AddButtons = meme(() => {
         color="primary"
         onClick={handleEditSubmit}
       >
-        {t('server.registers.actions.submitChange')}
+        Submit Change
       </Button>
     )
   }
@@ -559,7 +727,7 @@ const AddButtons = meme(() => {
         color="primary"
         onClick={handleAddAndClose}
       >
-        {t('server.registers.actions.addAndClose')}
+        Add & Close
       </Button>
       <Button
         data-testid="add-reg-next-btn"
@@ -569,14 +737,13 @@ const AddButtons = meme(() => {
         color="primary"
         onClick={handleAddAndNext}
       >
-        {t('server.registers.actions.addAndNext')}
+        Add & Next
       </Button>
     </>
   )
 })
 
 const DeleteButton = meme(() => {
-  const { t } = useTranslation()
   const [over, setOver] = useState(false)
   const handleClick = useCallback(() => {
     const { address, registerType, setRegisterType, setEditRegister } =
@@ -609,7 +776,7 @@ const DeleteButton = meme(() => {
       onMouseEnter={() => setOver(true)}
       onMouseLeave={() => setOver(false)}
     >
-      {t('server.registers.actions.remove')}
+      Remove
     </Button>
   )
 })
@@ -620,7 +787,6 @@ const DeleteButton = meme(() => {
 //
 // MAIN
 const AddRegister = meme(() => {
-  const { t } = useTranslation()
   const edit = useAddRegisterZustand((z) => z.serverRegisterEdit !== undefined)
   const registerType = useAddRegisterZustand((z) => z.registerType)
   const setRegisterType = useAddRegisterZustand((z) => z.setRegisterType)
@@ -641,18 +807,39 @@ const AddRegister = meme(() => {
     const state = useAddRegisterZustand.getState()
     if (!state.serverRegisterEdit) return
 
-    const { address, comment, dataType, littleEndian, registerType, interval, max, min, value } =
-      state.serverRegisterEdit.params
+    const {
+      address,
+      comment,
+      dataType,
+      registerType,
+      interval,
+      max,
+      min,
+      value,
+      stringValue,
+      length
+    } = state.serverRegisterEdit.params
 
     state.setFixed(value !== undefined)
     state.setAddress(String(address))
     state.setRegisterType(registerType)
     state.setComment(comment)
-    state.setLittleEndian(littleEndian)
     state.setInterval(interval ? String(interval / 1000) : '1')
     state.setMax(String(max))
     state.setMin(String(min))
-    state.setValue(String(value))
+
+    if (dataType === 'utf8') {
+      state.setStringValue(stringValue ?? '')
+      state.setRegisterLength(String(length ?? 10), true)
+      state.setValue('0', true)
+    } else if (['unix', 'datetime'].includes(dataType) && value !== undefined) {
+      // Convert stored value back to ms for the date picker
+      const ms = dataType === 'unix' ? Number(value) * 1000 : Number(value)
+      state.setValue(String(ms), true)
+    } else {
+      state.setValue(String(value))
+    }
+
     state.setDataType(dataType)
   }, [edit])
 
@@ -677,14 +864,11 @@ const AddRegister = meme(() => {
         sx={{ display: 'flex', flexDirection: 'column', gap: 2, p: 2, height: 'fit-content' }}
       >
         <Typography variant="subtitle2" sx={{ px: 0.5 }}>
-          {edit ? t('server.registers.titles.edit') : t('server.registers.titles.add')}{' '}
-          {registerType === 'input_registers'
-            ? t('server.registers.titles.inputRegister')
-            : t('server.registers.titles.holdingRegister')}
+          {edit ? 'Edit' : 'Add'}{' '}
+          {registerType === 'input_registers' ? 'Input Register' : 'Holding Register'}
         </Typography>
         <FixedOrGenerator />
         <Box sx={{ display: 'flex', gap: 2 }}>
-          <ToggleEndianButton />
           <AddressField />
           <DataTypeSelect />
           <ValueParameters />

@@ -38,8 +38,9 @@ export const RegisterParamsBasePartSchema = z.object({
   address: z.number(),
   registerType: NumberRegistersSchema,
   dataType: BaseDataTypeSchema,
-  littleEndian: z.boolean(),
-  comment: z.string()
+  comment: z.string(),
+  length: z.number().optional(),
+  stringValue: z.string().optional()
 })
 export type RegisterParamsBasePart = z.infer<typeof RegisterParamsBasePartSchema>
 
@@ -81,9 +82,12 @@ export const ServerRegistersPerUnitSchema = z.record(
 )
 export type ServerRegistersPerUnit = z.infer<typeof ServerRegistersPerUnitSchema>
 
-// Final server config schema
+// Final server config schema (v2 with metadata)
 export const ServerConfigSchema = z.object({
+  version: z.number(),
+  modbuxVersion: z.string(),
   name: z.string(),
+  littleEndian: z.boolean(),
   serverRegistersPerUnit: ServerRegistersPerUnitSchema
 })
 export type ServerConfig = z.infer<typeof ServerConfigSchema>
@@ -99,6 +103,7 @@ export type AddRegisterParams = {
   uuid: string
   unitId: UnitIdString
   params: RegisterParams
+  littleEndian: boolean
 }
 export interface RemoveRegisterParams {
   uuid: string
@@ -111,6 +116,7 @@ export interface SyncRegisterValueParams {
   uuid: string
   unitId: UnitIdString
   registerValues: RegisterParams[]
+  littleEndian: boolean
 }
 
 export interface ResetRegistersParams {

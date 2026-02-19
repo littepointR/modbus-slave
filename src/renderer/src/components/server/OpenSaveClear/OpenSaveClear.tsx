@@ -2,14 +2,8 @@ import { FileOpen, Save, Delete } from '@mui/icons-material'
 import { Box, IconButton } from '@mui/material'
 import { meme } from '@renderer/components/shared/inputs/meme'
 import { useServerZustand } from '@renderer/context/server.zustand'
-import { checkHasConfig } from '@shared'
-import {
-  ServerConfig,
-  ServerConfigSchema,
-  ServerRegistersPerUnit,
-  ServerRegistersSchema,
-  UnitIdStringSchema
-} from '@shared'
+import { checkHasConfig, migrateServerConfig } from '@shared'
+import { ServerConfig, ServerRegistersPerUnit, UnitIdStringSchema } from '@shared'
 import { snakeCase } from 'lodash'
 import { useSnackbar } from 'notistack'
 import { useRef, useState, useCallback } from 'react'
@@ -50,55 +44,62 @@ const useOpen: UseOpenHook = () => {
       // to ensure that the state is in a clean state
       state.clean(state.selectedUuid)
 
-      let content = await file.text()
+      const content = await file.text()
 
       try {
-        // replace legacy strings
-        content = content.replaceAll('InputRegisters', 'input_registers')
-        content = content.replaceAll('DiscreteInputs', 'discrete_inputs')
-        content = content.replaceAll('Coils', 'coils')
-        content = content.replaceAll('HoldingRegisters', 'holding_registers')
+        // Use migration framework to handle all config versions
+        const migrationResult = migrateServerConfig(content)
+        const { config, migrated, warning, wasMixedEndianness } = migrationResult
 
-        const configObject = JSON.parse(content)
-        const configResult = ServerConfigSchema.safeParse(configObject)
+        // Set name and littleEndian
+        state.setName(config.name)
+        state.setLittleEndian(config.littleEndian)
 
-        if (configResult.success) {
-          const { serverRegistersPerUnit, name } = configResult.data
-          state.setName(name)
-          UnitIdStringSchema.options.forEach(async (unitId) => {
-            const serverRegisters = serverRegistersPerUnit[unitId]
-            if (!serverRegisters) return
-            const hasConfig = checkHasConfig(serverRegisters)
-            if (!hasConfig) return
-            state.replaceServerRegisters(unitId, serverRegisters)
-            await new Promise((r) => setTimeout(r, 1))
+        // Load all unit configs
+        UnitIdStringSchema.options.forEach(async (unitId) => {
+          const serverRegisters = config.serverRegistersPerUnit[unitId]
+          if (!serverRegisters) return
+          const hasConfig = checkHasConfig(serverRegisters)
+          if (!hasConfig) return
+          state.replaceServerRegisters(unitId, serverRegisters)
+          await new Promise((r) => setTimeout(r, 1))
+        })
+
+        // Show success notification
+        if (migrated) {
+          enqueueSnackbar({
+            variant: 'info',
+            message: t('snackbar.configMigrated'),
+            autoHideDuration: 5000
           })
-
-          enqueueSnackbar({ variant: 'success', message: t('snackbar.configOpened') })
+        } else {
+          enqueueSnackbar({
+            variant: 'success',
+            message: t('snackbar.configOpened')
+          })
         }
 
-        // Legacy format, without name
-        const legacyConfigResult = ServerRegistersSchema.safeParse(configObject)
-
-        if (legacyConfigResult.success) {
-          state.setName('')
-          state.replaceServerRegisters('0', legacyConfigResult.data)
+        // Show warning for mixed endianness
+        if (wasMixedEndianness) {
           enqueueSnackbar({
             variant: 'warning',
-            message: t('snackbar.configOpenedLegacy')
+            message: t('snackbar.mixedEndianness', { endian: config.littleEndian ? t('common.littleEndian') : t('common.bigEndian') }),
+            autoHideDuration: 8000
           })
         }
 
-        if (!configResult.success && !legacyConfigResult.success) {
-          enqueueSnackbar({ variant: 'error', message: t('snackbar.invalidConfig') })
-          console.warn({
-            configResult: configResult.error,
-            legacyConfigResult: legacyConfigResult.error
+        // Show warning for future version
+        if (warning === 'FUTURE_VERSION') {
+          enqueueSnackbar({
+            variant: 'warning',
+            message: t('snackbar.futureVersion'),
+            persist: true
           })
         }
       } catch (error) {
         const tError = error as Error
         enqueueSnackbar({ variant: 'error', message: t('snackbar.invalidJson', { message: tError.message }) })
+        console.error('Config load error:', error)
       }
 
       // Synchronize only the selected server after opening the configuration
@@ -121,9 +122,9 @@ type UseSaveHook = () => {
 }
 
 const useSave: UseSaveHook = () => {
-  const save = useCallback(() => {
+  const save = useCallback(async () => {
     const z = useServerZustand.getState()
-    const { serverRegisters, selectedUuid } = z
+    const { serverRegisters, selectedUuid, littleEndian } = z
     const name = z.name[selectedUuid] ?? ''
 
     const serverRegistersPerUnit: ServerRegistersPerUnit = {}
@@ -136,11 +137,17 @@ const useSave: UseSaveHook = () => {
       serverRegistersPerUnit[unitId] = registers
     })
 
+    // Get app version
+    const modbuxVersion = await window.api.getAppVersion()
+
     const config: ServerConfig = {
+      version: 2,
+      modbuxVersion,
       name,
+      littleEndian: littleEndian[selectedUuid] ?? false,
       serverRegistersPerUnit
     }
-    const configJson = JSON.stringify(config)
+    const configJson = JSON.stringify(config, null, 2)
 
     const element = document.createElement('a')
     element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(configJson))
@@ -180,7 +187,7 @@ const OpenSaveClear = meme(() => {
   }, [])
 
   return (
-    <Box sx={{ display: 'flex' }}>
+    <Box sx={{ display: 'flex', gap: 1 }}>
       <div>
         {!opening && (
           <input

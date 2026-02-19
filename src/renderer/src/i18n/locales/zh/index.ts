@@ -36,7 +36,9 @@ export default {
     value: '数值',
     configuration: '配置',
     ok: '正常',
-    error: '错误'
+    error: '错误',
+    bigEndian: '大端模式',
+    littleEndian: '小端模式'
   },
 
   // Navigation
@@ -257,8 +259,11 @@ export default {
   snackbar: {
     configOpened: '配置打开成功',
     configOpenedLegacy: '配置打开成功（旧格式），建议保存为新格式。',
+    configMigrated: '配置已从旧格式更新',
     invalidConfig: '无效配置',
-    invalidJson: '无效的 JSON: {{message}}'
+    invalidJson: '无效的 JSON: {{message}}',
+    futureVersion: '此配置是使用较新版本的 Modbux 创建的。某些功能可能无法正常工作。',
+    mixedEndianness: '警告：配置具有混合的字节序设置。现已全局使用 {{endian}}。请验证。'
   },
 
   // Register Types

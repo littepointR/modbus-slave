@@ -38,7 +38,10 @@ export const RegisterMappingSchema = z.object({
 })
 export type RegisterMapping = z.infer<typeof RegisterMappingSchema>
 
+// Client config schema (v2 with metadata)
 export const RegisterMapConfigSchema = z.object({
+  version: z.number(),
+  modbuxVersion: z.string(),
   name: z.string().optional(),
   registerMapping: RegisterMappingSchema
 })
@@ -176,7 +179,8 @@ export const RegisterConfigSchema = z.object({
   advancedMode: z.boolean(),
   show64BitValues: z.boolean(),
   addressBase: z.enum(['0', '1']),
-  readConfiguration: z.boolean()
+  readConfiguration: z.boolean(),
+  readLocalTime: z.boolean()
 })
 export type RegisterConfig = z.infer<typeof RegisterConfigSchema>
 

@@ -8,7 +8,7 @@ import { useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 
 const SaveButton = meme(() => {
-  const saveRegisterConfig = useCallback(() => {
+  const saveRegisterConfig = useCallback(async () => {
     const z = useRootZustand.getState()
     const { registerMapping, name } = z
 
@@ -21,7 +21,12 @@ const SaveButton = meme(() => {
       })
     })
 
+    // Get app version
+    const modbuxVersion = await window.api.getAppVersion()
+
     const registerMapConfig: RegisterMapConfig = {
+      version: 2,
+      modbuxVersion,
       name,
       registerMapping
     }

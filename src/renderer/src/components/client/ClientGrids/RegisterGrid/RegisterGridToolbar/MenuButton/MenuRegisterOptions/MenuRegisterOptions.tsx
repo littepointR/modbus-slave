@@ -9,6 +9,7 @@ const MenuRegisterOptions = (): JSX.Element | null => {
 
   const advanceMode = useRootZustand((z) => z.registerConfig.advancedMode)
   const show64BitValues = useRootZustand((z) => z.registerConfig.show64BitValues)
+  const readLocalTime = useRootZustand((z) => z.registerConfig.readLocalTime)
 
   const registers16Bit = ['input_registers', 'holding_registers'].includes(type)
   if (!registers16Bit) return null
@@ -37,6 +38,17 @@ const MenuRegisterOptions = (): JSX.Element | null => {
           />
         }
         label={t('client.options.show64bit')}
+      />
+      <FormControlLabel
+        control={
+          <Checkbox
+            size="small"
+            checked={readLocalTime}
+            onChange={(e) => useRootZustand.getState().setReadLocalTime(e.target.checked)}
+            data-testid="read-local-time-checkbox"
+          />
+        }
+        label="Read local time"
       />
     </>
   )
