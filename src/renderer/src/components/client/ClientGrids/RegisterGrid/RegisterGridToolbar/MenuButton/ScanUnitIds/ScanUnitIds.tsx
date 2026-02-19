@@ -18,6 +18,7 @@ import useScanUnitIdColumns from './_columns'
 import { useScanUnitIdZustand } from './_zustand'
 import { ScanProgress, TimeoutInput } from '../ScanProgress/ScanProgress'
 import { meme } from '@renderer/components/shared/inputs/meme'
+import { useTranslation } from 'react-i18next'
 
 //
 //
@@ -67,11 +68,12 @@ const MinTextField = (): JSX.Element => {
   const scanning = useRootZustand((z) => z.clientState.scanningUniId)
   const min = useScanUnitIdZustand((z) => String(z.range[0]))
   const setMinRange = useScanUnitIdZustand((z) => z.setMinRange)
+  const { t } = useTranslation()
 
   return (
     <TextField
       disabled={scanning}
-      label="Min Unit ID"
+      label={t('client.scan.minUnitId')}
       variant="outlined"
       size="small"
       sx={{ width: 90 }}
@@ -91,11 +93,12 @@ const MaxTextField = (): JSX.Element => {
   const scanning = useRootZustand((z) => z.clientState.scanningUniId)
   const max = useScanUnitIdZustand((z) => String(z.range[1]))
   const setMaxRange = useScanUnitIdZustand((z) => z.setMaxRange)
+  const { t } = useTranslation()
 
   return (
     <TextField
       disabled={scanning}
-      label="Max Unit ID"
+      label={t('client.scan.maxUnitId')}
       variant="outlined"
       size="small"
       sx={{ width: 90 }}
@@ -120,11 +123,12 @@ const AddressField = (): JSX.Element => {
   const scanning = useRootZustand((z) => z.clientState.scanningUniId)
   const address = useScanUnitIdZustand((z) => String(z.address))
   const setAddress = useScanUnitIdZustand((z) => z.setAddress)
+  const { t } = useTranslation()
 
   return (
     <TextField
       disabled={scanning}
-      label="Address"
+      label={t('common.address')}
       variant="outlined"
       size="small"
       sx={{ width: 90 }}
@@ -149,11 +153,12 @@ const LengthField = (): JSX.Element => {
   const scanning = useRootZustand((z) => z.clientState.scanningUniId)
   const length = useScanUnitIdZustand((z) => String(z.length))
   const setLength = useScanUnitIdZustand((z) => z.setLength)
+  const { t } = useTranslation()
 
   return (
     <TextField
       disabled={scanning}
-      label="Length"
+      label={t('common.length')}
       variant="outlined"
       size="small"
       sx={{ width: 60 }}
@@ -178,11 +183,12 @@ const TimeoutField = (): JSX.Element => {
   const scanning = useRootZustand((z) => z.clientState.scanningUniId)
   const timeout = useScanUnitIdZustand((z) => String(z.timeout))
   const setTimeout = useScanUnitIdZustand((z) => z.setTimeout)
+  const { t } = useTranslation()
 
   return (
     <TextField
       disabled={scanning}
-      label="Timeout (ms)"
+      label={`${t('common.timeout')} (ms)`}
       variant="outlined"
       size="small"
       sx={{ width: 90 }}
@@ -207,6 +213,7 @@ const SelectRegisterTypes = (): JSX.Element => {
   const scanning = useRootZustand((z) => z.clientState.scanningUniId)
   const registerTypes = useScanUnitIdZustand((z) => z.registerTypes)
   const setRegisterTypes = useScanUnitIdZustand((z) => z.setRegisterTypes)
+  const { t } = useTranslation()
 
   return (
     <ToggleButtonGroup
@@ -217,10 +224,10 @@ const SelectRegisterTypes = (): JSX.Element => {
       onChange={(_, rt) => setRegisterTypes(rt)}
       aria-label="text formatting"
     >
-      <ToggleButton value={'coils'}>Coils</ToggleButton>
-      <ToggleButton value={'discrete_inputs'}>Discrete Inputs</ToggleButton>
-      <ToggleButton value={'input_registers'}>Input Registers</ToggleButton>
-      <ToggleButton value={'holding_registers'}>Holding Registers</ToggleButton>
+      <ToggleButton value={'coils'}>{t('registerTypes.coils')}</ToggleButton>
+      <ToggleButton value={'discrete_inputs'}>{t('registerTypes.discrete_inputs')}</ToggleButton>
+      <ToggleButton value={'input_registers'}>{t('registerTypes.input_registers')}</ToggleButton>
+      <ToggleButton value={'holding_registers'}>{t('registerTypes.holding_registers')}</ToggleButton>
     </ToggleButtonGroup>
   )
 }
@@ -234,6 +241,7 @@ const ScanButton = (): JSX.Element => {
   const scanning = useRootZustand((z) => z.clientState.scanningUniId)
   const polling = useRootZustand((z) => z.clientState.polling)
   const disabled = useScanUnitIdZustand((z) => z.registerTypes.length === 0)
+  const { t } = useTranslation()
 
   const scan = useCallback(() => {
     if (scanning) {
@@ -259,7 +267,7 @@ const ScanButton = (): JSX.Element => {
     })
   }, [scanning])
 
-  const text = useMemo(() => (scanning ? 'Stop Scanning' : 'Start Scanning'), [scanning])
+  const text = useMemo(() => (scanning ? t('client.scan.stop') : t('client.scan.start')), [scanning, t])
   const color = useMemo(() => (scanning ? 'warning' : 'primary'), [scanning])
 
   return (
@@ -282,6 +290,7 @@ const ScanButton = (): JSX.Element => {
 // Scan result grid
 const ScanResultGrid = meme(() => {
   const scanResults = useRootZustand((z) => z.scanUnitIdResults)
+  const { t } = useTranslation()
 
   const columns = useScanUnitIdColumns()
 
@@ -309,7 +318,7 @@ const ScanResultGrid = meme(() => {
         }
       })}
       localeText={{
-        noRowsLabel: 'No scan results yet'
+        noRowsLabel: t('scan.noResults')
       }}
     />
   )
@@ -321,6 +330,7 @@ const ScanResultGrid = meme(() => {
 const ScanUnitIdsButton = (): JSX.Element => {
   const disabled = useRootZustand((z) => z.clientState.connectState !== 'connected')
   const setScanUnitIdsOpen = useScanUnitIdZustand((z) => z.setOpen)
+  const { t } = useTranslation()
   return (
     <Button
       disabled={disabled}
@@ -330,7 +340,7 @@ const ScanUnitIdsButton = (): JSX.Element => {
       onClick={() => setScanUnitIdsOpen(true)}
       data-testid="scan-unitids-btn"
     >
-      Scan Unit ID{`'`}s
+      {t('client.actions.scanUnitIds')}
     </Button>
   )
 }

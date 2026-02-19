@@ -22,6 +22,7 @@ import { ElementType, forwardRef, RefObject, useCallback, useEffect, useMemo } f
 import { IMaskInput, IMask } from 'react-imask'
 import { create } from 'zustand'
 import { mutative } from 'zustand-mutative'
+import { useTranslation } from 'react-i18next'
 
 interface ValueInputZusand {
   dataType: BaseDataType
@@ -107,10 +108,11 @@ const ValueInputComponent = meme(({ address }: { address: number }) => {
   const value = useValueInputZustand((z) => z.value)
   const valid = useValueInputZustand((z) => z.valid)
   const setValue = useValueInputZustand((z) => z.setValue)
+  const { t } = useTranslation()
 
   return (
     <TextField
-      label={`Address ${address} value`}
+      label={t('client.write.addressValue', { address })}
       variant="outlined"
       size="small"
       sx={{ minWidth: 100 }}
@@ -152,6 +154,7 @@ const WriteRegistersButton = meme(() => {
   const address = useValueInputZustand((z) => z.address)
   const dataType = useValueInputZustand((z) => z.dataType)
   const value = useValueInputZustand((z) => z.value)
+  const { t } = useTranslation()
 
   const handleWrite = useCallback(
     (single: boolean) => {
@@ -173,7 +176,7 @@ const WriteRegistersButton = meme(() => {
   return (
     <ButtonGroup size="small">
       <Button
-        title="FC6: Write single register"
+        title={t('client.write.fc6')}
         disabled={singleDisabled}
         variant="outlined"
         color="primary"
@@ -183,7 +186,7 @@ const WriteRegistersButton = meme(() => {
         6
       </Button>
       <Button
-        title="FC16: Write multiple registers"
+        title={t('client.write.fc16')}
         variant="outlined"
         color="primary"
         onClick={() => handleWrite(false)}
@@ -201,6 +204,7 @@ const CoilFunctionSelect = meme(() => {
   const coils = useValueInputZustand((z) => z.coils)
   const coilFunction = useValueInputZustand((z) => z.coilFunction)
   const setCoilFunction = useValueInputZustand((z) => z.setCoilFunction)
+  const { t } = useTranslation()
 
   const handleWrite = useCallback(() => {
     window.api.write({
@@ -223,7 +227,7 @@ const CoilFunctionSelect = meme(() => {
       >
         <ToggleButton
           sx={{ flex: 1, flexBasis: 0 }}
-          title="FC5: Write single coils"
+          title={t('client.write.fc5')}
           value={5}
           data-testid="write-fc5-btn"
         >
@@ -231,7 +235,7 @@ const CoilFunctionSelect = meme(() => {
         </ToggleButton>
         <ToggleButton
           sx={{ flex: 1, flexBasis: 0 }}
-          title="FC15: Write multiple coils"
+          title={t('client.write.fc15')}
           value={15}
           data-testid="write-fc15-btn"
         >
@@ -243,7 +247,7 @@ const CoilFunctionSelect = meme(() => {
         color="primary"
         onClick={handleWrite}
         data-testid="write-submit-btn"
-        aria-label="Write coils"
+        aria-label={t('client.write.writeCoils')}
       >
         <Publish />
       </Button>

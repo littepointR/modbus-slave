@@ -224,7 +224,41 @@ export default {
     request: '请求',
     response: '响应',
     error: '错误',
-    noTransactions: '暂无通讯记录'
+    noTransactions: '暂无通讯记录',
+    export: '导出',
+    clear: '清空'
+  },
+
+  // Data Type
+  dataType: {
+    label: '类型'
+  },
+
+  // Scan Results
+  scan: {
+    noResults: '暂无扫描结果',
+    unitId: '单元 ID',
+    coils: '线圈',
+    discreteInputs: '离散输入',
+    inputRegisters: '输入寄存器',
+    holdingRegisters: '保持寄存器',
+    error: '错误'
+  },
+
+  // Update Banner
+  update: {
+    title: '新版本可用',
+    message: '版本 {{version}} 现已可用。',
+    download: '下载最新版本',
+    close: '关闭'
+  },
+
+  // Snackbar Messages
+  snackbar: {
+    configOpened: '配置打开成功',
+    configOpenedLegacy: '配置打开成功（旧格式），建议保存为新格式。',
+    invalidConfig: '无效配置',
+    invalidJson: '无效的 JSON: {{message}}'
   },
 
   // Register Types

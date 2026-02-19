@@ -1,6 +1,7 @@
 import { FormControl, InputLabel, Select, MenuItem } from '@mui/material'
 import { BaseDataType } from '@shared'
 import { meme } from './meme'
+import { useTranslation } from 'react-i18next'
 
 interface Props {
   disabled?: boolean
@@ -10,15 +11,17 @@ interface Props {
 
 const DataTypeSelectInput = meme(({ disabled, dataType, setDataType }: Props) => {
   const labelId = 'data-type-select'
+  const { t } = useTranslation()
+  const label = t('dataType.label')
   return (
     <FormControl disabled={disabled} size="small">
-      <InputLabel id={labelId}>Type</InputLabel>
+      <InputLabel id={labelId}>{label}</InputLabel>
       <Select
         data-testid="add-reg-type-select"
         size="small"
         labelId={labelId}
         value={dataType}
-        label="Type"
+        label={label}
         onChange={(e) => setDataType(e.target.value as BaseDataType)}
       >
         <MenuItem value={'int16'}>INT16</MenuItem>

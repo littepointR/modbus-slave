@@ -7,12 +7,14 @@ import { useSnackbar } from 'notistack'
 import { useRef, useState, useCallback } from 'react'
 import { showMapping } from '../ViewConfigButton/ViewConfigButton'
 import { meme } from '@renderer/components/shared/inputs/meme'
+import { useTranslation } from 'react-i18next'
 
 const LoadButton = meme((): JSX.Element => {
   const openingRef = useRef(false)
   const [opening, setOpening] = useState(false)
 
   const { enqueueSnackbar } = useSnackbar()
+  const { t } = useTranslation()
 
   const openConfig = useCallback(
     async (file: File | undefined) => {
@@ -39,7 +41,7 @@ const LoadButton = meme((): JSX.Element => {
           const { name, registerMapping } = configResult.data
           if (name) state.setName(name)
           state.replaceRegisterMapping(registerMapping)
-          enqueueSnackbar({ variant: 'success', message: 'Configuration opened successfully' })
+          enqueueSnackbar({ variant: 'success', message: t('snackbar.configOpened') })
         }
 
         // Legacy format, without name
@@ -50,13 +52,12 @@ const LoadButton = meme((): JSX.Element => {
           state.replaceRegisterMapping(legacyConfigResult.data)
           enqueueSnackbar({
             variant: 'warning',
-            message:
-              'Configuration opened successfully (legacy format), consider saving with the new format.'
+            message: t('snackbar.configOpenedLegacy')
           })
         }
 
         if (!configResult.success && !legacyConfigResult.success) {
-          enqueueSnackbar({ variant: 'error', message: 'Invalid Config' })
+          enqueueSnackbar({ variant: 'error', message: t('snackbar.invalidConfig') })
           console.warn({
             configResult: configResult.error,
             legacyConfigResult: legacyConfigResult.error
@@ -64,7 +65,7 @@ const LoadButton = meme((): JSX.Element => {
         }
       } catch (error) {
         const tError = error as Error
-        enqueueSnackbar({ variant: 'error', message: `INVALID JSON: ${tError.message}` })
+        enqueueSnackbar({ variant: 'error', message: t('snackbar.invalidJson', { message: tError.message }) })
       }
 
       openingRef.current = false
@@ -72,7 +73,7 @@ const LoadButton = meme((): JSX.Element => {
       showMapping()
       useRootZustand.getState().setReadConfiguration(false)
     },
-    [enqueueSnackbar]
+    [enqueueSnackbar, t]
   )
 
   return (
@@ -90,12 +91,12 @@ const LoadButton = meme((): JSX.Element => {
       <label htmlFor="contained-button-file">
         <IconButton
           data-testid="load-config-btn"
-          aria-label="Load configuration"
+          aria-label={t('client.config.load')}
           size="small"
           disabled={opening}
           color="primary"
           component="span"
-          title="load a modbux client configuration file"
+          title={t('client.config.loadTooltip')}
         >
           <FileOpen fontSize="small" />
         </IconButton>

@@ -11,6 +11,7 @@ import LengthInput from '@renderer/components/shared/inputs/LengthInput'
 import { useDataZustand } from '@renderer/context/data.zustand'
 import { ScanProgress, TimeoutInput } from '../../ScanProgress/ScanProgress'
 import { meme } from '@renderer/components/shared/inputs/meme'
+import { useTranslation } from 'react-i18next'
 
 interface ScanRegistersZustand {
   open: boolean
@@ -100,11 +101,12 @@ const MinTextField = (): JSX.Element => {
   const scanning = useRootZustand((z) => z.clientState.scanningUniId)
   const min = useScanRegistersZustand((z) => String(z.range[0]))
   const setMinRange = useScanRegistersZustand((z) => z.setMinRange)
+  const { t } = useTranslation()
 
   return (
     <TextField
       disabled={scanning}
-      label="Min Address"
+      label={t('client.scan.minAddress')}
       variant="outlined"
       size="small"
       sx={{ width: 90 }}
@@ -124,11 +126,12 @@ const MaxTextField = (): JSX.Element => {
   const scanning = useRootZustand((z) => z.clientState.scanningUniId)
   const max = useScanRegistersZustand((z) => String(z.range[1]))
   const setMaxRange = useScanRegistersZustand((z) => z.setMaxRange)
+  const { t } = useTranslation()
 
   return (
     <TextField
       disabled={scanning}
-      label="Max Address"
+      label={t('client.scan.maxAddress')}
       variant="outlined"
       size="small"
       sx={{ width: 90 }}
@@ -175,16 +178,18 @@ const LengthField = (): JSX.Element => {
 //
 //
 //
+//
 // Timeout field
 const TimeoutField = (): JSX.Element => {
   const scanning = useRootZustand((z) => z.clientState.scanningUniId)
   const timeout = useScanRegistersZustand((z) => String(z.timeout))
   const setTimeout = useScanRegistersZustand((z) => z.setTimeout)
+  const { t } = useTranslation()
 
   return (
     <TextField
       disabled={scanning}
-      label="Timeout (ms)"
+      label={`${t('common.timeout')} (ms)`}
       variant="outlined"
       size="small"
       sx={{ width: 90 }}
@@ -207,6 +212,7 @@ const TimeoutField = (): JSX.Element => {
 // Scan button
 const ScanButton = (): JSX.Element => {
   const scanning = useRootZustand((z) => z.clientState.scanningRegisters)
+  const { t } = useTranslation()
 
   const scan = useCallback(async () => {
     if (scanning) {
@@ -234,7 +240,7 @@ const ScanButton = (): JSX.Element => {
     useScanRegistersZustand.getState().setOpen(false)
   }, [scanning])
 
-  const text = useMemo(() => (scanning ? 'Stop Scanning' : 'Start Scanning'), [scanning])
+  const text = useMemo(() => (scanning ? t('client.scan.stop') : t('client.scan.start')), [scanning, t])
   const color = useMemo(() => (scanning ? 'warning' : 'primary'), [scanning])
 
   return (

@@ -3,9 +3,11 @@ import IconButton from '@mui/material/IconButton'
 
 import { useRootZustand } from '@renderer/context/root.zustand'
 import { useCallback, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 const ClearConfigButton = (): JSX.Element => {
   const [warn, setWarn] = useState(false)
+  const { t } = useTranslation()
 
   const handleClick = useCallback(() => {
     useRootZustand.getState().setName('')
@@ -16,11 +18,11 @@ const ClearConfigButton = (): JSX.Element => {
   return (
     <IconButton
       data-testid="clear-config-btn"
-      aria-label="Clear configuration"
+      aria-label={t('client.config.clear')}
       size="small"
       onClick={handleClick}
       color={warn ? 'error' : 'primary'}
-      title="clear datatype, scaling and comment configuration"
+      title={t('client.config.clearTooltip')}
       onMouseEnter={() => setWarn(true)}
       onMouseLeave={() => setWarn(false)}
     >

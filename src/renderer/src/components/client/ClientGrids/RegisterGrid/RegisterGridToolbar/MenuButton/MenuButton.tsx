@@ -9,6 +9,7 @@ import FormGroup from '@mui/material/FormGroup'
 import Button from '@mui/material/Button'
 import { Settings } from '@mui/icons-material'
 import Popover from '@mui/material/Popover'
+import { useTranslation } from 'react-i18next'
 
 const MenuContent = meme(({ setAnchor }: SetAnchorProps) => {
   return (
@@ -26,13 +27,14 @@ const MenuButton = meme((): JSX.Element => {
   const scanRegistersOpen = useScanRegistersZustand((z) => z.open)
   const buttonRef = useRef<HTMLButtonElement | null>(null)
   const [anchor, setAnchor] = useState<HTMLElement | null>(null)
+  const { t } = useTranslation()
 
   return (
     <>
       <Button
         data-testid="menu-btn"
-        aria-label="More options"
-        title="More options"
+        aria-label={t('common.moreOptions')}
+        title={t('common.moreOptions')}
         ref={buttonRef}
         size="small"
         variant={'outlined'}

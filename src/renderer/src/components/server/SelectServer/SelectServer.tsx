@@ -9,6 +9,7 @@ import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
 import ToggleButton from '@mui/material/ToggleButton'
+import { useTranslation } from 'react-i18next'
 
 const SelectServerToggle = meme(({ uuid }: { uuid: string }) => {
   const port = useServerZustand((z) => z.port[uuid])
@@ -23,6 +24,7 @@ const SelectServer = meme(() => {
   const serverUuids = useServerZustand((z) => z.uuids)
   const selectedUuid = useServerZustand((z) => z.selectedUuid)
   const addDisabled = useServerZustand((z) => Object.keys(z.uuids).length >= 10)
+  const { t } = useTranslation()
 
   const addServer = useCallback(async () => {
     const z = useServerZustand.getState()
@@ -41,8 +43,8 @@ const SelectServer = meme(() => {
       <ButtonGroup variant="contained" color="primary" sx={{ height: 36 }}>
         <Button
           data-testid="add-server-btn"
-          aria-label="Add server"
-          title="Add server"
+          aria-label={t('server.addServer')}
+          title={t('server.addServer')}
           onClick={addServer}
           disabled={addDisabled}
         >
@@ -50,8 +52,8 @@ const SelectServer = meme(() => {
         </Button>
         <Button
           data-testid="delete-server-btn"
-          aria-label="Delete server"
-          title="Delete server"
+          aria-label={t('server.removeServer')}
+          title={t('server.removeServer')}
           onClick={deleteServer}
           variant="outlined"
           disabled={selectedUuid === MAIN_SERVER_UUID}

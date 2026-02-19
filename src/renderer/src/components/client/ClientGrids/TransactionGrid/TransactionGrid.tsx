@@ -10,6 +10,7 @@ import { useRootZustand } from '@renderer/context/root.zustand'
 import useTransactionGridColumns from './_columns'
 import { DateTime } from 'luxon'
 import { meme } from '@renderer/components/shared/inputs/meme'
+import { useTranslation } from 'react-i18next'
 
 //
 //
@@ -18,6 +19,7 @@ import { meme } from '@renderer/components/shared/inputs/meme'
 // Log export button exports the transaction log as a CSV file
 const ExportButton = (): JSX.Element => {
   const api = useGridApiContext()
+  const { t } = useTranslation()
 
   return (
     <Button
@@ -29,7 +31,7 @@ const ExportButton = (): JSX.Element => {
         })
       }
     >
-      Export
+      {t('transaction.export')}
     </Button>
   )
 }
@@ -41,9 +43,10 @@ const ExportButton = (): JSX.Element => {
 // Clears the transaction log
 const ClearButton = (): JSX.Element => {
   const clear = useRootZustand((z) => z.clearTransactions)
+  const { t } = useTranslation()
   return (
     <Button size="small" variant="outlined" onClick={clear}>
-      Clear
+      {t('transaction.clear')}
     </Button>
   )
 }
@@ -71,6 +74,7 @@ const CustomFooter = (): JSX.Element => {
 // Datagrid
 const TransactionGridContent = meme(() => {
   const api = useGridApiRef()
+  const { t } = useTranslation()
 
   const transactions = useRootZustand((z) => z.transactions)
   const columns = useTransactionGridColumns()
@@ -101,7 +105,7 @@ const TransactionGridContent = meme(() => {
         }
       })}
       localeText={{
-        noRowsLabel: 'No transactions logged yet'
+        noRowsLabel: t('transaction.noTransactions')
       }}
       slots={{ footer: CustomFooter }}
     />

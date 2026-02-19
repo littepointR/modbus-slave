@@ -224,7 +224,41 @@ export default {
     request: 'Request',
     response: 'Response',
     error: 'Error',
-    noTransactions: 'No transactions logged yet'
+    noTransactions: 'No transactions logged yet',
+    export: 'Export',
+    clear: 'Clear'
+  },
+
+  // Data Type
+  dataType: {
+    label: 'Type'
+  },
+
+  // Scan Results
+  scan: {
+    noResults: 'No scan results yet',
+    unitId: 'Unit ID',
+    coils: 'Coils',
+    discreteInputs: 'Inputs',
+    inputRegisters: 'Input Reg.',
+    holdingRegisters: 'Holding',
+    error: 'Error'
+  },
+
+  // Update Banner
+  update: {
+    title: 'New version available',
+    message: 'Version {{version}} is now available.',
+    download: 'Download latest release',
+    close: 'close'
+  },
+
+  // Snackbar Messages
+  snackbar: {
+    configOpened: 'Configuration opened successfully',
+    configOpenedLegacy: 'Configuration opened successfully (legacy format), consider saving with the new format.',
+    invalidConfig: 'Invalid Config',
+    invalidJson: 'INVALID JSON: {{message}}'
   },
 
   // Register Types
