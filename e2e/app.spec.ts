@@ -6,6 +6,7 @@ import {
   type Page
 } from '@playwright/test'
 import { resolve } from 'path'
+import net from 'net'
 
 let app: ElectronApplication
 let page: Page
@@ -13,6 +14,47 @@ let page: Page
 const CONN_ALIAS = 'QA Connection'
 const CONN_ALIAS_EDITED = 'QA Connection Edited'
 const SLAVE_ALIAS = 'QA Slave'
+const CONN_PORT = 15020
+
+const sendReadHoldingRegisters = async (
+  host: string,
+  port: number,
+  unitId: number,
+  address: number,
+  quantity: number
+): Promise<Buffer> =>
+  await new Promise((resolvePromise, reject) => {
+    const socket = new net.Socket()
+    const request = Buffer.from([
+      0x00,
+      0x01,
+      0x00,
+      0x00,
+      0x00,
+      0x06,
+      unitId & 0xff,
+      0x03,
+      (address >> 8) & 0xff,
+      address & 0xff,
+      (quantity >> 8) & 0xff,
+      quantity & 0xff
+    ])
+
+    socket.setTimeout(5000)
+    socket.connect(port, host, () => socket.write(request))
+    socket.once('data', (data) => {
+      resolvePromise(Buffer.from(data))
+      socket.destroy()
+    })
+    socket.once('timeout', () => {
+      socket.destroy()
+      reject(new Error('TCP request timeout'))
+    })
+    socket.once('error', (error) => {
+      socket.destroy()
+      reject(error)
+    })
+  })
 
 test.beforeAll(async () => {
   app = await electron.launch({
@@ -58,7 +100,7 @@ test.describe.serial('Server-Centric E2E', () => {
 
     await page.getByLabel('Connection Alias').fill(CONN_ALIAS)
     await page.getByLabel('IP Address').fill('127.0.0.1')
-    await page.getByLabel('Port').fill('502')
+    await page.getByLabel('Port').fill(String(CONN_PORT))
 
     await page.getByRole('button', { name: /确定|OK/ }).click()
     await expect(page.getByText(CONN_ALIAS, { exact: true })).toBeVisible()
@@ -120,6 +162,9 @@ test.describe.serial('Server-Centric E2E', () => {
 
   test('can open communication log window', async () => {
     await page.getByText(CONN_ALIAS_EDITED, { exact: true }).click()
+    await page.getByRole('button', { name: /打开连接|Open Connection/ }).click()
+    await expect(page.getByRole('button', { name: /关闭连接|Close Connection/ })).toBeEnabled()
+
     await page.getByRole('button', { name: /通讯详情|Communication Details/ }).click()
 
     await expect.poll(async () => app.windows().length).toBeGreaterThan(1)
@@ -136,25 +181,12 @@ test.describe.serial('Server-Centric E2E', () => {
     await expect(commPage.getByRole('button', { name: /清空|Clear/ })).toBeVisible()
     await expect(commPage.getByRole('button', { name: /保存|Save/ })).toBeDisabled()
 
-    await app.evaluate((electron) => {
-      const packet = {
-        id: 1,
-        timestamp: Date.now(),
-        direction: 'RX' as const,
-        protocol: 'ModbusTcp' as const,
-        frameType: 'MBAP' as const,
-        clientAddr: '127.0.0.1:502',
-        slaveId: 2,
-        functionCode: 3,
-        data: new Uint8Array([0x01, 0x03, 0x00, 0x00, 0x00, 0x02]),
-        parsed: { isException: false }
-      }
-      electron.BrowserWindow.getAllWindows().forEach((win) => {
-        win.webContents.send('comm_packet', packet)
-      })
-    })
+    const response = await sendReadHoldingRegisters('127.0.0.1', CONN_PORT, 2, 0, 2)
+    expect(response.length).toBeGreaterThan(0)
 
-    await expect(commPage.getByText(/RX\s+\|\s+Unit:002\s+\|\s+01 03 00 00 00 02/)).toBeVisible()
+    await expect(
+      commPage.getByText(/RX\s+\|\s+Unit:002\s+\|\s+00 01 00 00 00 06 02 03 00 00 00 02/)
+    ).toBeVisible()
     await expect(commPage.getByRole('button', { name: /保存|Save/ })).toBeEnabled()
 
     await commPage.getByRole('button', { name: /停止|Stop/ }).click()
