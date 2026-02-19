@@ -180,9 +180,14 @@ export function getFunctionCodeName(code: number): string {
     0x04: 'Read Input Registers',
     0x05: 'Write Single Coil',
     0x06: 'Write Single Register',
+    0x08: 'Diagnostics',
+    0x0b: 'Get Comm Event Counter',
     0x0f: 'Write Multiple Coils',
     0x10: 'Write Multiple Registers',
-    0x17: 'Read/Write Multiple Registers'
+    0x11: 'Report Server ID',
+    0x16: 'Mask Write Register',
+    0x17: 'Read/Write Multiple Registers',
+    0x2b: 'Read Device Identification'
   }
 
   return codes[code] || `Function ${code.toString(16).toUpperCase()}`

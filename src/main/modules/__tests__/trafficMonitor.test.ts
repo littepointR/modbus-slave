@@ -167,6 +167,9 @@ describe('trafficMonitor parsers', () => {
 
   it('returns function code names and fallback label', () => {
     expect(getFunctionCodeName(0x03)).toBe('Read Holding Registers')
+    expect(getFunctionCodeName(0x16)).toBe('Mask Write Register')
+    expect(getFunctionCodeName(0x17)).toBe('Read/Write Multiple Registers')
+    expect(getFunctionCodeName(0x2b)).toBe('Read Device Identification')
     expect(getFunctionCodeName(0x7f)).toBe('Function 7F')
   })
 })

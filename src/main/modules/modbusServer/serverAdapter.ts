@@ -389,6 +389,30 @@ export class RtuServerAdapter extends BaseServerAdapter {
     this._processRequest(unitId, functionCode, data, true)
   }
 
+  private async _readHoldingRegister(address: number, unitId: number): Promise<number> {
+    const getter = this._vector.getHoldingRegister
+    if (!getter) return 0
+    return new Promise<number>((resolve) => {
+      getter(address, unitId, (_err, value) => resolve((value ?? 0) & 0xffff))
+    })
+  }
+
+  private async _writeHoldingRegister(address: number, value: number, unitId: number): Promise<void> {
+    const setter = this._vector.setRegister
+    if (!setter) return
+    await new Promise<void>((resolve) => {
+      setter(address, value & 0xffff, unitId, () => resolve())
+    })
+  }
+
+  private async _readHoldingRange(address: number, quantity: number, unitId: number): Promise<number[]> {
+    const values: number[] = []
+    for (let i = 0; i < quantity; i++) {
+      values.push(await this._readHoldingRegister(address + i, unitId))
+    }
+    return values
+  }
+
   private async _processRequest(
     unitId: number,
     functionCode: number,
@@ -483,6 +507,23 @@ export class RtuServerAdapter extends BaseServerAdapter {
           break
         }
 
+        case 0x08: {
+          // Diagnostics (serial only) - echo request data.
+          response = Buffer.concat([Buffer.from([functionCode]), data])
+          break
+        }
+
+        case 0x0b: {
+          // Get Comm Event Counter (serial only).
+          const status = 0x0000
+          const eventCount = 0x0000
+          const payload = Buffer.alloc(4)
+          payload.writeUInt16BE(status, 0)
+          payload.writeUInt16BE(eventCount, 2)
+          response = Buffer.concat([Buffer.from([functionCode]), payload])
+          break
+        }
+
         case 0x0f: {
           const quantity = data.readUInt16BE(2)
           const byteCount = data[4]
@@ -520,6 +561,79 @@ export class RtuServerAdapter extends BaseServerAdapter {
           }
 
           response = Buffer.concat([Buffer.from([functionCode]), data.slice(0, 4)])
+          break
+        }
+
+        case 0x11: {
+          // Report Server ID (serial only).
+          const serverId = 0x01
+          const runIndicator = 0xff
+          const description = Buffer.from('MODBUX', 'ascii')
+          const byteCount = 2 + description.length
+          response = Buffer.concat([
+            Buffer.from([functionCode, byteCount, serverId, runIndicator]),
+            description
+          ])
+          break
+        }
+
+        case 0x16: {
+          // Mask Write Register
+          const andMask = data.readUInt16BE(2)
+          const orMask = data.readUInt16BE(4)
+          const current = await this._readHoldingRegister(address, unitId)
+          const next = (current & andMask) | (orMask & (~andMask & 0xffff))
+          await this._writeHoldingRegister(address, next, unitId)
+          response = Buffer.concat([Buffer.from([functionCode]), data.slice(0, 6)])
+          break
+        }
+
+        case 0x17: {
+          // Read/Write Multiple Registers
+          const readAddress = data.readUInt16BE(0)
+          const readQuantity = data.readUInt16BE(2)
+          const writeAddress = data.readUInt16BE(4)
+          const writeQuantity = data.readUInt16BE(6)
+          const writeByteCount = data[8]
+          const writeData = data.slice(9, 9 + writeByteCount)
+
+          for (let i = 0; i < writeQuantity; i++) {
+            const value = writeData.readUInt16BE(i * 2)
+            await this._writeHoldingRegister(writeAddress + i, value, unitId)
+          }
+
+          const readValues = await this._readHoldingRange(readAddress, readQuantity, unitId)
+          const readBuffer = Buffer.alloc(readQuantity * 2)
+          readValues.forEach((value, index) => readBuffer.writeUInt16BE(value, index * 2))
+          response = Buffer.concat([Buffer.from([functionCode, readQuantity * 2]), readBuffer])
+          break
+        }
+
+        case 0x2b: {
+          // Read Device Identification (MEI type 0x0E)
+          const meiType = data[0]
+          if (meiType !== 0x0e) {
+            response = Buffer.from([functionCode | 0x80, 0x01])
+            break
+          }
+          const readDeviceIdCode = data[2] ?? 0x01
+          const vendor = Buffer.from('Modbux', 'ascii')
+          const product = Buffer.from('Server Emulator', 'ascii')
+          const revision = Buffer.from('1.0', 'ascii')
+
+          const objectList = Buffer.concat([
+            Buffer.from([0x00, vendor.length]),
+            vendor,
+            Buffer.from([0x01, product.length]),
+            product,
+            Buffer.from([0x02, revision.length]),
+            revision
+          ])
+
+          response = Buffer.concat([
+            Buffer.from([functionCode, 0x0e, readDeviceIdCode, 0x01, 0x00, 0x00, 0x03]),
+            objectList
+          ])
           break
         }
 

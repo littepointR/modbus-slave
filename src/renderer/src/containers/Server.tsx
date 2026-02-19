@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, memo, useCallback, type MouseEvent } from 'react'
+import { useState, useRef, useEffect, memo, useCallback, type MouseEvent as ReactMouseEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { onEvent, sendEvent } from '@renderer/events'
 import {
@@ -225,6 +225,24 @@ interface TypedSpanHint {
   span: number
   mode: PlotInterpretation
   index: number
+}
+
+type TableColumnKey = 'type' | 'address' | 'variable' | 'value' | 'comments'
+
+const DEFAULT_TABLE_COLUMN_WIDTHS: Record<TableColumnKey, number> = {
+  type: 140,
+  address: 140,
+  variable: 220,
+  value: 260,
+  comments: 260
+}
+
+const MIN_TABLE_COLUMN_WIDTHS: Record<TableColumnKey, number> = {
+  type: 110,
+  address: 100,
+  variable: 140,
+  value: 180,
+  comments: 150
 }
 
 // =============================================================================
@@ -1524,6 +1542,15 @@ const Server = (): JSX.Element => {
   const [tablePagination, setTablePagination] = useState<
     Record<string, { page: number; rowsPerPage: number }>
   >({})
+  const [tableColumnWidths, setTableColumnWidths] = useState<
+    Record<string, Partial<Record<TableColumnKey, number>>>
+  >({})
+  const [columnResizeState, setColumnResizeState] = useState<{
+    tabId: string
+    column: TableColumnKey
+    startX: number
+    startWidth: number
+  } | null>(null)
   const [plotWindows, setPlotWindows] = useState<PlotWindowState[]>([])
 
   useEffect(() => {
@@ -1567,6 +1594,36 @@ const Server = (): JSX.Element => {
       clearInterval(timer)
     }
   }, [connections, plotWindows])
+
+  useEffect(() => {
+    if (!columnResizeState) return
+
+    const onMouseMove = (event: MouseEvent): void => {
+      const deltaX = event.clientX - columnResizeState.startX
+      const nextWidth = Math.max(
+        MIN_TABLE_COLUMN_WIDTHS[columnResizeState.column],
+        Math.round(columnResizeState.startWidth + deltaX)
+      )
+      setTableColumnWidths((prev) => ({
+        ...prev,
+        [columnResizeState.tabId]: {
+          ...prev[columnResizeState.tabId],
+          [columnResizeState.column]: nextWidth
+        }
+      }))
+    }
+
+    const onMouseUp = (): void => {
+      setColumnResizeState(null)
+    }
+
+    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('mouseup', onMouseUp)
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove)
+      window.removeEventListener('mouseup', onMouseUp)
+    }
+  }, [columnResizeState])
 
   const toggleConnection = (id: string) => {
     setExpandedConnections((prev) => {
@@ -1707,7 +1764,7 @@ const Server = (): JSX.Element => {
   }
 
   const handleOpenTypedBatchMenu = (
-    event: MouseEvent<HTMLTableRowElement>,
+    event: ReactMouseEvent<HTMLTableRowElement>,
     tabId: string
   ): void => {
     event.preventDefault()
@@ -1720,7 +1777,7 @@ const Server = (): JSX.Element => {
   }
 
   const handleOpenTypedValueEditMenu = (
-    event: MouseEvent<HTMLElement>,
+    event: ReactMouseEvent<HTMLElement>,
     tabId: string,
     address: number
   ): void => {
@@ -2219,6 +2276,43 @@ const Server = (): JSX.Element => {
                   tab.selectedAddresses,
                   typedBatchMode
                 )
+                const currentWidths = {
+                  ...DEFAULT_TABLE_COLUMN_WIDTHS,
+                  ...(tableColumnWidths[activeTabId] || {})
+                }
+                const getAutoFitWidth = (column: TableColumnKey): number => {
+                  const headerText: Record<TableColumnKey, string> = {
+                    type: 'Register Type',
+                    address: 'Address',
+                    variable: 'Variable Name',
+                    value: 'Value',
+                    comments: 'Comments'
+                  }
+                  const values = group.registers.map((register) => {
+                    if (column === 'type') return getRegisterTypeName(group.type)
+                    if (column === 'address') return formatAddress(register.address)
+                    if (column === 'variable') return register.variableName || 'Double-click to edit'
+                    if (column === 'value') return String(register.value)
+                    return register.comment || 'Add comment...'
+                  })
+                  const maxLen = Math.max(
+                    headerText[column].length,
+                    ...values.map((value) => value.length),
+                    6
+                  )
+                  const estimated = Math.round(maxLen * 8.5 + 36)
+                  return Math.max(
+                    MIN_TABLE_COLUMN_WIDTHS[column],
+                    Math.min(estimated, 640)
+                  )
+                }
+                const tableMinWidth =
+                  56 +
+                  currentWidths.type +
+                  currentWidths.address +
+                  currentWidths.variable +
+                  currentWidths.value +
+                  currentWidths.comments
 
                 return (
                   <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -2265,8 +2359,12 @@ const Server = (): JSX.Element => {
 
                         return (
                           <>
-                            <TableContainer component={Paper} variant="outlined" sx={{ flex: 1 }}>
-                              <Table size="small" stickyHeader>
+                            <TableContainer
+                              component={Paper}
+                              variant="outlined"
+                              sx={{ flex: 1, overflowX: 'auto' }}
+                            >
+                              <Table size="small" stickyHeader sx={{ minWidth: tableMinWidth }}>
                                 <TableHead>
                                   <TableRow sx={{ bgcolor: 'action.hover' }}>
                                     <TableCell padding="checkbox" sx={{ bgcolor: 'action.hover' }}>
@@ -2287,41 +2385,217 @@ const Server = (): JSX.Element => {
                                     <TableCell
                                       sx={{
                                         fontWeight: 'bold',
-                                        width: 120,
-                                        bgcolor: 'action.hover'
+                                        width: currentWidths.type,
+                                        minWidth: currentWidths.type,
+                                        bgcolor: 'action.hover',
+                                        whiteSpace: 'nowrap',
+                                        position: 'relative'
                                       }}
                                     >
                                       Register Type
+                                      <Box
+                                        data-testid="col-resize-type"
+                                        onMouseDown={(event) => {
+                                          event.preventDefault()
+                                          setColumnResizeState({
+                                            tabId: activeTabId,
+                                            column: 'type',
+                                            startX: event.clientX,
+                                            startWidth: currentWidths.type
+                                          })
+                                        }}
+                                        onDoubleClick={(event) => {
+                                          event.preventDefault()
+                                          setTableColumnWidths((prev) => ({
+                                            ...prev,
+                                            [activeTabId]: {
+                                              ...prev[activeTabId],
+                                              type: getAutoFitWidth('type')
+                                            }
+                                          }))
+                                        }}
+                                        sx={{
+                                          position: 'absolute',
+                                          top: 0,
+                                          right: -2,
+                                          width: 6,
+                                          height: '100%',
+                                          cursor: 'col-resize',
+                                          zIndex: 2
+                                        }}
+                                      />
                                     </TableCell>
                                     <TableCell
                                       sx={{
                                         fontWeight: 'bold',
-                                        width: 100,
-                                        bgcolor: 'action.hover'
+                                        width: currentWidths.address,
+                                        minWidth: currentWidths.address,
+                                        bgcolor: 'action.hover',
+                                        whiteSpace: 'nowrap',
+                                        position: 'relative'
                                       }}
                                     >
                                       Address
+                                      <Box
+                                        data-testid="col-resize-address"
+                                        onMouseDown={(event) => {
+                                          event.preventDefault()
+                                          setColumnResizeState({
+                                            tabId: activeTabId,
+                                            column: 'address',
+                                            startX: event.clientX,
+                                            startWidth: currentWidths.address
+                                          })
+                                        }}
+                                        onDoubleClick={(event) => {
+                                          event.preventDefault()
+                                          setTableColumnWidths((prev) => ({
+                                            ...prev,
+                                            [activeTabId]: {
+                                              ...prev[activeTabId],
+                                              address: getAutoFitWidth('address')
+                                            }
+                                          }))
+                                        }}
+                                        sx={{
+                                          position: 'absolute',
+                                          top: 0,
+                                          right: -2,
+                                          width: 6,
+                                          height: '100%',
+                                          cursor: 'col-resize',
+                                          zIndex: 2
+                                        }}
+                                      />
                                     </TableCell>
                                     <TableCell
                                       sx={{
                                         fontWeight: 'bold',
-                                        width: 180,
-                                        bgcolor: 'action.hover'
+                                        width: currentWidths.variable,
+                                        minWidth: currentWidths.variable,
+                                        bgcolor: 'action.hover',
+                                        whiteSpace: 'nowrap',
+                                        position: 'relative'
                                       }}
                                     >
                                       Variable Name
+                                      <Box
+                                        data-testid="col-resize-variable"
+                                        onMouseDown={(event) => {
+                                          event.preventDefault()
+                                          setColumnResizeState({
+                                            tabId: activeTabId,
+                                            column: 'variable',
+                                            startX: event.clientX,
+                                            startWidth: currentWidths.variable
+                                          })
+                                        }}
+                                        onDoubleClick={(event) => {
+                                          event.preventDefault()
+                                          setTableColumnWidths((prev) => ({
+                                            ...prev,
+                                            [activeTabId]: {
+                                              ...prev[activeTabId],
+                                              variable: getAutoFitWidth('variable')
+                                            }
+                                          }))
+                                        }}
+                                        sx={{
+                                          position: 'absolute',
+                                          top: 0,
+                                          right: -2,
+                                          width: 6,
+                                          height: '100%',
+                                          cursor: 'col-resize',
+                                          zIndex: 2
+                                        }}
+                                      />
                                     </TableCell>
                                     <TableCell
                                       sx={{
                                         fontWeight: 'bold',
-                                        width: 120,
-                                        bgcolor: 'action.hover'
+                                        width: currentWidths.value,
+                                        minWidth: currentWidths.value,
+                                        bgcolor: 'action.hover',
+                                        whiteSpace: 'nowrap',
+                                        position: 'relative'
                                       }}
                                     >
                                       Value
+                                      <Box
+                                        data-testid="col-resize-value"
+                                        onMouseDown={(event) => {
+                                          event.preventDefault()
+                                          setColumnResizeState({
+                                            tabId: activeTabId,
+                                            column: 'value',
+                                            startX: event.clientX,
+                                            startWidth: currentWidths.value
+                                          })
+                                        }}
+                                        onDoubleClick={(event) => {
+                                          event.preventDefault()
+                                          setTableColumnWidths((prev) => ({
+                                            ...prev,
+                                            [activeTabId]: {
+                                              ...prev[activeTabId],
+                                              value: getAutoFitWidth('value')
+                                            }
+                                          }))
+                                        }}
+                                        sx={{
+                                          position: 'absolute',
+                                          top: 0,
+                                          right: -2,
+                                          width: 6,
+                                          height: '100%',
+                                          cursor: 'col-resize',
+                                          zIndex: 2
+                                        }}
+                                      />
                                     </TableCell>
-                                    <TableCell sx={{ fontWeight: 'bold', bgcolor: 'action.hover' }}>
+                                    <TableCell
+                                      sx={{
+                                        fontWeight: 'bold',
+                                        bgcolor: 'action.hover',
+                                        width: currentWidths.comments,
+                                        minWidth: currentWidths.comments,
+                                        whiteSpace: 'nowrap',
+                                        position: 'relative'
+                                      }}
+                                    >
                                       Comments
+                                      <Box
+                                        data-testid="col-resize-comments"
+                                        onMouseDown={(event) => {
+                                          event.preventDefault()
+                                          setColumnResizeState({
+                                            tabId: activeTabId,
+                                            column: 'comments',
+                                            startX: event.clientX,
+                                            startWidth: currentWidths.comments
+                                          })
+                                        }}
+                                        onDoubleClick={(event) => {
+                                          event.preventDefault()
+                                          setTableColumnWidths((prev) => ({
+                                            ...prev,
+                                            [activeTabId]: {
+                                              ...prev[activeTabId],
+                                              comments: getAutoFitWidth('comments')
+                                            }
+                                          }))
+                                        }}
+                                        sx={{
+                                          position: 'absolute',
+                                          top: 0,
+                                          right: -2,
+                                          width: 6,
+                                          height: '100%',
+                                          cursor: 'col-resize',
+                                          zIndex: 2
+                                        }}
+                                      />
                                     </TableCell>
                                   </TableRow>
                                 </TableHead>
@@ -2367,9 +2641,23 @@ const Server = (): JSX.Element => {
                                         <TableCell padding="checkbox">
                                           <Checkbox checked={isSelected} />
                                         </TableCell>
-                                        <TableCell>{getRegisterTypeChip(group.type)}</TableCell>
                                         <TableCell
-                                          sx={{ fontFamily: 'monospace', fontWeight: 'bold' }}
+                                          sx={{
+                                            width: currentWidths.type,
+                                            minWidth: currentWidths.type,
+                                            whiteSpace: 'nowrap'
+                                          }}
+                                        >
+                                          {getRegisterTypeChip(group.type)}
+                                        </TableCell>
+                                        <TableCell
+                                          sx={{
+                                            fontFamily: 'monospace',
+                                            fontWeight: 'bold',
+                                            width: currentWidths.address,
+                                            minWidth: currentWidths.address,
+                                            whiteSpace: 'nowrap'
+                                          }}
                                         >
                                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                             {typedSpanHint ? (
@@ -2410,7 +2698,7 @@ const Server = (): JSX.Element => {
                                             ) : null}
                                           </Box>
                                         </TableCell>
-                                        <TableCell>
+                                        <TableCell sx={{ width: currentWidths.variable, minWidth: currentWidths.variable }}>
                                           <EditableCell
                                             value={register.variableName}
                                             onChange={(value) =>
@@ -2425,7 +2713,14 @@ const Server = (): JSX.Element => {
                                             placeholder="Double-click to edit"
                                           />
                                         </TableCell>
-                                        <TableCell sx={{ bgcolor: valueBackground }}>
+                                        <TableCell
+                                          sx={{
+                                            bgcolor: valueBackground,
+                                            color: 'text.primary',
+                                            width: currentWidths.value,
+                                            minWidth: currentWidths.value
+                                          }}
+                                        >
                                           {group.type === '01' || group.type === '02' ? (
                                             <Box
                                               sx={{
@@ -2471,7 +2766,15 @@ const Server = (): JSX.Element => {
                                               />
                                             </Box>
                                           ) : (
-                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                            <Box
+                                              sx={{
+                                                display: 'flex',
+                                                flexDirection: 'row',
+                                                alignItems: 'center',
+                                                justifyContent: 'space-between',
+                                                gap: 1
+                                              }}
+                                            >
                                               <TextField
                                                 size="small"
                                                 value={register.value}
@@ -2486,8 +2789,13 @@ const Server = (): JSX.Element => {
                                                 }
                                                 sx={{
                                                   flex: 1,
+                                                  minWidth: 96,
                                                   '& .MuiInputBase-root': {
                                                     bgcolor: valueBackground
+                                                  },
+                                                  '& .MuiInputBase-input': {
+                                                    color: 'text.primary',
+                                                    fontWeight: 600
                                                   }
                                                 }}
                                                 inputProps={{
@@ -2505,6 +2813,7 @@ const Server = (): JSX.Element => {
                                                 label={`${currentTypedMode.toUpperCase()} (${getWordSpanForInterpretation(
                                                   currentTypedMode
                                                 )}w)`}
+                                                sx={{ flexShrink: 0 }}
                                                 onDoubleClick={(event) => {
                                                   if (!isSelected) {
                                                     updateTab(activeTabId, {
@@ -2522,7 +2831,7 @@ const Server = (): JSX.Element => {
                                             </Box>
                                           )}
                                         </TableCell>
-                                        <TableCell>
+                                        <TableCell sx={{ width: currentWidths.comments, minWidth: currentWidths.comments }}>
                                           <EditableCell
                                             value={register.comment}
                                             onChange={(value) =>

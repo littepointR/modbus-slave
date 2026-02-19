@@ -199,10 +199,15 @@ test.describe.serial('Server Smoke And Comm E2E', () => {
     const firstValueCell = firstRow.locator('td').nth(4)
     const secondValueCell = secondRow.locator('td').nth(4)
     const thirdValueCell = thirdRow.locator('td').nth(4)
+    const firstValueInput = firstValueCell.locator('input[type="number"]').first()
 
     const bg1 = await firstValueCell.evaluate((el) => getComputedStyle(el).backgroundColor)
     const bg2 = await secondValueCell.evaluate((el) => getComputedStyle(el).backgroundColor)
     const bg3 = await thirdValueCell.evaluate((el) => getComputedStyle(el).backgroundColor)
+    await expect(firstValueInput).toBeVisible()
+    await expect(firstValueInput).toHaveValue('123')
+    const firstInputWidth = await firstValueInput.evaluate((el) => (el as HTMLInputElement).clientWidth)
+    expect(firstInputWidth).toBeGreaterThan(70)
 
     expect(bg1).toBe(bg2)
     expect(bg1).not.toBe('rgba(0, 0, 0, 0)')

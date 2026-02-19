@@ -130,16 +130,80 @@ const RegisterPlotWindow = (): JSX.Element => {
   }
 
   return (
-    <Box sx={{ p: 2, height: '100dvh', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <Paper variant="outlined" sx={{ p: 2 }}>
-        <Typography variant="h6">{config.title}</Typography>
-        <Typography variant="caption" color="text.secondary">
-          {config.connectionAlias} / {config.slaveAlias} / {config.registerGroupName}
-        </Typography>
-      </Paper>
-
-      <Paper variant="outlined" sx={{ p: 1.5 }}>
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+    <Box
+      sx={{
+        p: 1,
+        height: '100dvh',
+        boxSizing: 'border-box',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 1
+      }}
+    >
+      <Paper variant="outlined" sx={{ p: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+          <Box sx={{ minWidth: 0 }}>
+            <Typography variant="subtitle1" sx={{ lineHeight: 1.2 }}>
+              {config.title}
+            </Typography>
+            <Typography variant="caption" color="text.secondary" noWrap>
+              {config.connectionAlias} / {config.slaveAlias} / {config.registerGroupName}
+            </Typography>
+          </Box>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, justifyContent: 'flex-end' }}>
+            <Button
+              size="small"
+              variant={paused ? 'contained' : 'outlined'}
+              onClick={() => setPaused((prev) => !prev)}
+            >
+              {paused ? 'Resume' : 'Pause'}
+            </Button>
+            <FormControlLabel
+              sx={{ mr: 0 }}
+              control={
+                <Checkbox
+                  size="small"
+                  checked={xAutoScale}
+                  onChange={(e) => {
+                    if (!e.target.checked) {
+                      setXRangeLock(dynamicXRange)
+                    }
+                    setXAutoScale(e.target.checked)
+                  }}
+                />
+              }
+              label="X Auto"
+            />
+            <FormControlLabel
+              sx={{ mr: 0 }}
+              control={
+                <Checkbox
+                  size="small"
+                  checked={yAutoScale}
+                  onChange={(e) => setYAutoScale(e.target.checked)}
+                />
+              }
+              label="Y Auto"
+            />
+            <TextField
+              size="small"
+              label="Y Min"
+              value={yMinInput}
+              onChange={(e) => setYMinInput(e.target.value)}
+              disabled={yAutoScale}
+              sx={{ width: 96 }}
+            />
+            <TextField
+              size="small"
+              label="Y Max"
+              value={yMaxInput}
+              onChange={(e) => setYMaxInput(e.target.value)}
+              disabled={yAutoScale}
+              sx={{ width: 96 }}
+            />
+          </Box>
+        </Box>
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
           {config.series.map((series, idx) => {
             return (
               <Box key={series.address} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -164,53 +228,7 @@ const RegisterPlotWindow = (): JSX.Element => {
         </Box>
       </Paper>
 
-      <Paper variant="outlined" sx={{ p: 1.5 }}>
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'center' }}>
-          <Button
-            size="small"
-            variant={paused ? 'contained' : 'outlined'}
-            onClick={() => setPaused((prev) => !prev)}
-          >
-            {paused ? 'Resume' : 'Pause'}
-          </Button>
-          <FormControlLabel
-            control={
-              <Checkbox
-                checked={xAutoScale}
-                onChange={(e) => {
-                  if (!e.target.checked) {
-                    setXRangeLock(dynamicXRange)
-                  }
-                  setXAutoScale(e.target.checked)
-                }}
-              />
-            }
-            label="X Auto"
-          />
-          <FormControlLabel
-            control={<Checkbox checked={yAutoScale} onChange={(e) => setYAutoScale(e.target.checked)} />}
-            label="Y Auto"
-          />
-          <TextField
-            size="small"
-            label="Y Min"
-            value={yMinInput}
-            onChange={(e) => setYMinInput(e.target.value)}
-            disabled={yAutoScale}
-            sx={{ width: 120 }}
-          />
-          <TextField
-            size="small"
-            label="Y Max"
-            value={yMaxInput}
-            onChange={(e) => setYMaxInput(e.target.value)}
-            disabled={yAutoScale}
-            sx={{ width: 120 }}
-          />
-        </Box>
-      </Paper>
-
-      <Paper variant="outlined" sx={{ p: 1.5, flex: 1, minHeight: 320 }}>
+      <Paper variant="outlined" sx={{ p: 1, flex: 1, minHeight: 360 }}>
         <svg viewBox={`0 0 ${width} ${height}`} width="100%" height="100%" preserveAspectRatio="none">
           <rect x={padding} y={padding} width={plotWidth} height={plotHeight} fill="none" stroke="#c7c7c7" strokeWidth="1" />
           {([0.25, 0.5, 0.75] as const).map((ratio) => (

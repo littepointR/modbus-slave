@@ -239,4 +239,70 @@ describe('serverAdapter', () => {
     expect(serialInstances[0].close).toHaveBeenCalledTimes(1)
     expect(adapter.isRunning()).toBe(false)
   })
+
+  it('handles FC22 mask write register on RTU adapter', async () => {
+    const getHoldingRegister = vi.fn((address: number, unitId: number, cb: (err: null, value: number) => void) => {
+      expect(address).toBe(0x0012)
+      expect(unitId).toBe(7)
+      cb(null, 0x1234)
+    })
+    const setRegister = vi.fn(
+      (address: number, value: number, unitId: number, cb: (err?: Error | null) => void) => {
+        expect(address).toBe(0x0012)
+        expect(unitId).toBe(7)
+        expect(value).toBe(0x12f4)
+        cb(null)
+      }
+    )
+
+    const adapter = new RtuServerAdapter(
+      {
+        ...vector,
+        getHoldingRegister,
+        setRegister
+      } as IServiceVector,
+      serial
+    )
+
+    const request = Buffer.from([0x00, 0x12, 0x0f, 0x0f, 0x10, 0xf0])
+    await (adapter as any)._processRequest(7, 0x16, request, true)
+
+    expect(getHoldingRegister).toHaveBeenCalledTimes(1)
+    expect(setRegister).toHaveBeenCalledTimes(1)
+  })
+
+  it('handles FC23 read/write multiple registers on RTU adapter', async () => {
+    const setRegister = vi.fn(
+      (address: number, value: number, unitId: number, cb: (err?: Error | null) => void) => {
+        expect(unitId).toBe(9)
+        if (address === 0x0030) expect(value).toBe(0x0011)
+        if (address === 0x0031) expect(value).toBe(0x0022)
+        cb(null)
+      }
+    )
+    const getHoldingRegister = vi.fn((address: number, unitId: number, cb: (err: null, value: number) => void) => {
+      expect(unitId).toBe(9)
+      cb(null, address + 0x1000)
+    })
+
+    const adapter = new RtuServerAdapter(
+      {
+        ...vector,
+        getHoldingRegister,
+        setRegister
+      } as IServiceVector,
+      serial
+    )
+
+    // Read start=0x20 qty=2, write start=0x30 qty=2, byteCount=4, values=0x0011 0x0022
+    const request = Buffer.from([
+      0x00, 0x20, 0x00, 0x02, 0x00, 0x30, 0x00, 0x02, 0x04, 0x00, 0x11, 0x00, 0x22
+    ])
+    await (adapter as any)._processRequest(9, 0x17, request, true)
+
+    expect(setRegister).toHaveBeenCalledTimes(2)
+    expect(getHoldingRegister).toHaveBeenCalledTimes(2)
+    expect(getHoldingRegister).toHaveBeenNthCalledWith(1, 0x0020, 9, expect.any(Function))
+    expect(getHoldingRegister).toHaveBeenNthCalledWith(2, 0x0021, 9, expect.any(Function))
+  })
 })
