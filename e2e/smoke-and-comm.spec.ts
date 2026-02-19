@@ -1,4 +1,4 @@
-import { test, expect, type ElectronApplication, type Page } from '@playwright/test'
+import { test, expect, type ElectronApplication, type Page, type Locator } from '@playwright/test'
 import {
   closeApp,
   launchMainWindow,
@@ -97,13 +97,63 @@ test.describe.serial('Server Smoke And Comm E2E', () => {
     await expect(stringTab).toHaveAttribute('aria-selected', 'true')
   })
 
-  test('can open plot window, change interpretation and reflect table highlighting', async () => {
+  test('typed decode supports constrained options and batch apply', async () => {
+    const ensureChecked = async (rowIndex: number) => {
+      const checkbox = page.locator('tbody tr').nth(rowIndex).locator('td input[type="checkbox"]').first()
+      if (!(await checkbox.isChecked())) {
+        await checkbox.click()
+      }
+    }
+
+    await ensureChecked(0)
+    await ensureChecked(1)
+    await ensureChecked(2)
+    await ensureChecked(3)
+
+    const typedTab = page.getByRole('tab', { name: 'Typed Decode' })
+    await typedTab.click()
+    await expect(typedTab).toHaveAttribute('aria-selected', 'true')
+
+    const batchMode = page.getByTestId('typed-batch-mode')
+    await batchMode.click()
+    await page.getByRole('option', { name: /^INT \(2w\)$/ }).click()
+    await page.getByTestId('typed-batch-apply').click()
+
+    await expect(page.getByTestId('typed-row-0')).toContainText('INT (2w)')
+    await expect(page.getByTestId('typed-row-2')).toContainText('INT (2w)')
+    await expect(page.getByTestId('typed-row-1')).toContainText('SHORT (1w)')
+
+    await page.getByTestId('typed-row-2').getByRole('combobox').click()
+    await expect(page.getByRole('option', { name: /DOUBLE \(4w\)/ })).toHaveAttribute(
+      'aria-disabled',
+      'true'
+    )
+    await page.keyboard.press('Escape')
+  })
+
+  test('can open plot window with fixed interpretation and reflect table highlighting', async () => {
     const firstRow = page.locator('tbody tr').nth(0)
     const secondRow = page.locator('tbody tr').nth(1)
     const thirdRow = page.locator('tbody tr').nth(2)
+    const fourthRow = page.locator('tbody tr').nth(3)
 
-    await firstRow.locator('td input[type="checkbox"]').first().click()
-    await secondRow.locator('td input[type="checkbox"]').first().click()
+    const ensureChecked = async (row: Locator) => {
+      const checkbox = row.locator('td input[type="checkbox"]').first()
+      if (!(await checkbox.isChecked())) {
+        await checkbox.click()
+      }
+    }
+    const ensureUnchecked = async (row: Locator) => {
+      const checkbox = row.locator('td input[type="checkbox"]').first()
+      if (await checkbox.isChecked()) {
+        await checkbox.click()
+      }
+    }
+
+    await ensureChecked(firstRow)
+    await ensureChecked(secondRow)
+    await ensureUnchecked(thirdRow)
+    await ensureUnchecked(fourthRow)
 
     await page.getByRole('button', { name: /Plot Selected \(2\)/ }).click()
     let plotPage: Page | null = null
@@ -131,11 +181,15 @@ test.describe.serial('Server Smoke And Comm E2E', () => {
     await expect(plotPage!.getByText(/Plot -/)).toBeVisible()
     await expect(plotPage!.getByText(/0x0000/i)).toBeVisible()
     await expect(plotPage!.getByText(/0x0001/i)).toBeVisible()
-
-    const firstInterpret = plotPage!.locator('[role="combobox"]').first()
-    await expect(firstInterpret).toBeVisible()
-    await firstInterpret.click()
-    await plotPage!.getByRole('option', { name: /DOUBLE \(4w\)/ }).click()
+    await expect(plotPage!.getByText(/SHORT \(1w\)/)).toBeVisible()
+    await expect(plotPage!.getByRole('checkbox', { name: 'X Auto' })).toBeChecked()
+    await expect(plotPage!.getByRole('checkbox', { name: 'Y Auto' })).toBeChecked()
+    await expect(plotPage!.getByLabel('Y Min')).toBeDisabled()
+    await expect(plotPage!.getByRole('button', { name: 'Pause' })).toBeVisible()
+    await plotPage!.getByRole('button', { name: 'Pause' }).click()
+    await expect(plotPage!.getByRole('button', { name: 'Resume' })).toBeVisible()
+    await plotPage!.getByRole('checkbox', { name: 'Y Auto' }).click()
+    await expect(plotPage!.getByLabel('Y Min')).toBeEnabled()
 
     const firstValueCell = firstRow.locator('td').nth(4)
     const secondValueCell = secondRow.locator('td').nth(4)

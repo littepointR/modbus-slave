@@ -3,11 +3,11 @@ import {
   Box,
   Typography,
   Paper,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  Chip
+  Chip,
+  TextField,
+  Checkbox,
+  FormControlLabel,
+  Button
 } from '@mui/material'
 import type { PlotInterpretation, RegisterPlotData, RegisterPlotWindowInit } from '@shared'
 import { onEvent } from '@renderer/events'
@@ -15,37 +15,27 @@ import { decodePlotValue, getWordSpanForInterpretation } from './register-plot.h
 
 interface PlotSample extends RegisterPlotData {}
 
-const INTERPRETATION_OPTIONS: PlotInterpretation[] = [
-  'short',
-  'ushort',
-  'int',
-  'uint',
-  'long',
-  'ulong',
-  'float',
-  'double'
-]
-
 const STROKE_PATTERNS = ['', '6 4', '2 3', '10 4', '4 2 1 2']
 
 const RegisterPlotWindow = (): JSX.Element => {
   const [config, setConfig] = useState<RegisterPlotWindowInit | null>(null)
   const [samples, setSamples] = useState<PlotSample[]>([])
-  const [seriesMode, setSeriesMode] = useState<Record<number, PlotInterpretation>>({})
+  const [paused, setPaused] = useState(false)
+  const [xAutoScale, setXAutoScale] = useState(true)
+  const [yAutoScale, setYAutoScale] = useState(true)
+  const [xRangeLock, setXRangeLock] = useState<{ min: number; max: number }>({ min: 0, max: 1 })
+  const [yMinInput, setYMinInput] = useState('-1')
+  const [yMaxInput, setYMaxInput] = useState('1')
 
   useEffect(() => {
     const offInit = onEvent('register_plot_init', (init) => {
       setConfig(init)
-      const nextModes: Record<number, PlotInterpretation> = {}
-      init.series.forEach((s) => {
-        nextModes[s.address] = s.interpretation
-      })
-      setSeriesMode(nextModes)
       document.title = init.title
     })
 
     const offData = onEvent('register_plot_data', (packet) => {
       setSamples((prev) => {
+        if (paused) return prev
         if (!config) return prev
         if (config && packet.chartId !== config.chartId) {
           return prev
@@ -60,12 +50,12 @@ const RegisterPlotWindow = (): JSX.Element => {
       offInit()
       offData()
     }
-  }, [config])
+  }, [config, paused])
 
   const chartSeries = useMemo(() => {
     if (!config) return []
     return config.series.map((series, idx) => {
-      const mode = seriesMode[series.address] ?? series.interpretation
+      const mode = series.interpretation
       const points = samples
         .map((sample, sampleIdx) => ({
           x: sampleIdx,
@@ -79,9 +69,9 @@ const RegisterPlotWindow = (): JSX.Element => {
         points
       }
     })
-  }, [config, samples, seriesMode])
+  }, [config, samples])
 
-  const yRange = useMemo(() => {
+  const autoYRange = useMemo(() => {
     const allValues = chartSeries.flatMap((s) => s.points.map((p) => p.y as number))
     if (allValues.length === 0) return { min: -1, max: 1 }
     const min = Math.min(...allValues)
@@ -90,20 +80,38 @@ const RegisterPlotWindow = (): JSX.Element => {
     return { min, max }
   }, [chartSeries])
 
+  useEffect(() => {
+    if (!yAutoScale) return
+    setYMinInput(String(autoYRange.min))
+    setYMaxInput(String(autoYRange.max))
+  }, [autoYRange, yAutoScale])
+
+  const yRange = useMemo(() => {
+    if (yAutoScale) return autoYRange
+    const yMin = Number(yMinInput)
+    const yMax = Number(yMaxInput)
+    if (!Number.isFinite(yMin) || !Number.isFinite(yMax) || yMin >= yMax) return autoYRange
+    return { min: yMin, max: yMax }
+  }, [autoYRange, yAutoScale, yMinInput, yMaxInput])
+
   const width = 1000
   const height = 360
   const padding = 40
   const plotWidth = width - padding * 2
   const plotHeight = height - padding * 2
-  const maxX = Math.max(samples.length - 1, 1)
+  const dynamicXRange = { min: 0, max: Math.max(samples.length - 1, 1) }
+  const xRange = xAutoScale ? dynamicXRange : xRangeLock
+  const xSpan = Math.max(xRange.max - xRange.min, 1)
+  const ySpan = Math.max(yRange.max - yRange.min, 1e-9)
 
-  const toX = (x: number): number => padding + (x / maxX) * plotWidth
-  const toY = (y: number): number => padding + ((yRange.max - y) / (yRange.max - yRange.min)) * plotHeight
+  const toX = (x: number): number => padding + ((x - xRange.min) / xSpan) * plotWidth
+  const toY = (y: number): number => padding + ((yRange.max - y) / ySpan) * plotHeight
 
   const buildPath = (points: Array<{ x: number; y: number | null }>): string => {
     let path = ''
     points.forEach((point) => {
       if (!Number.isFinite(point.y)) return
+      if (point.x < xRange.min || point.x > xRange.max) return
       const x = toX(point.x)
       const y = toY(point.y as number)
       path += path ? ` L ${x} ${y}` : `M ${x} ${y}`
@@ -133,7 +141,6 @@ const RegisterPlotWindow = (): JSX.Element => {
       <Paper variant="outlined" sx={{ p: 1.5 }}>
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
           {config.series.map((series, idx) => {
-            const mode = seriesMode[series.address] ?? series.interpretation
             return (
               <Box key={series.address} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <Chip
@@ -141,31 +148,65 @@ const RegisterPlotWindow = (): JSX.Element => {
                   size="small"
                   sx={{ bgcolor: series.color, border: '1px solid rgba(0,0,0,0.12)' }}
                 />
-                <FormControl size="small" sx={{ minWidth: 120 }}>
-                  <InputLabel>Interpret</InputLabel>
-                  <Select
-                    label="Interpret"
-                    value={mode}
-                    onChange={(e) =>
-                      setSeriesMode((prev) => ({
-                        ...prev,
-                        [series.address]: e.target.value as PlotInterpretation
-                      }))
-                    }
-                  >
-                    {INTERPRETATION_OPTIONS.map((option) => (
-                      <MenuItem key={option} value={option}>
-                        {option.toUpperCase()} ({getWordSpanForInterpretation(option)}w)
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
+                <Chip
+                  variant="outlined"
+                  label={`${series.interpretation.toUpperCase()} (${getWordSpanForInterpretation(
+                    series.interpretation
+                  )}w)`}
+                  size="small"
+                />
                 <Typography variant="caption" color="text.secondary">
                   #{idx + 1}
                 </Typography>
               </Box>
             )
           })}
+        </Box>
+      </Paper>
+
+      <Paper variant="outlined" sx={{ p: 1.5 }}>
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'center' }}>
+          <Button
+            size="small"
+            variant={paused ? 'contained' : 'outlined'}
+            onClick={() => setPaused((prev) => !prev)}
+          >
+            {paused ? 'Resume' : 'Pause'}
+          </Button>
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={xAutoScale}
+                onChange={(e) => {
+                  if (!e.target.checked) {
+                    setXRangeLock(dynamicXRange)
+                  }
+                  setXAutoScale(e.target.checked)
+                }}
+              />
+            }
+            label="X Auto"
+          />
+          <FormControlLabel
+            control={<Checkbox checked={yAutoScale} onChange={(e) => setYAutoScale(e.target.checked)} />}
+            label="Y Auto"
+          />
+          <TextField
+            size="small"
+            label="Y Min"
+            value={yMinInput}
+            onChange={(e) => setYMinInput(e.target.value)}
+            disabled={yAutoScale}
+            sx={{ width: 120 }}
+          />
+          <TextField
+            size="small"
+            label="Y Max"
+            value={yMaxInput}
+            onChange={(e) => setYMaxInput(e.target.value)}
+            disabled={yAutoScale}
+            sx={{ width: 120 }}
+          />
         </Box>
       </Paper>
 

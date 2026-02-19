@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
+  canSelectInterpretationAtAddress,
   decodePlotValue,
+  getBatchAssignableAddresses,
   getRegisterColor,
   getWordSpanForInterpretation
 } from '../register-plot.helpers'
@@ -58,5 +60,27 @@ describe('register-plot.helpers', () => {
   it('returns deterministic color per address', () => {
     expect(getRegisterColor(42)).toBe(getRegisterColor(42))
     expect(getRegisterColor(42)).not.toBe(getRegisterColor(43))
+  })
+
+  it('requires enough selected words for multi-word interpretations at a given address', () => {
+    const selected = new Set([10, 11, 12, 13])
+    expect(canSelectInterpretationAtAddress(selected, 10, 'int')).toBe(true)
+    expect(canSelectInterpretationAtAddress(selected, 11, 'int')).toBe(true)
+    expect(canSelectInterpretationAtAddress(selected, 12, 'int')).toBe(true)
+    expect(canSelectInterpretationAtAddress(selected, 13, 'int')).toBe(false)
+    expect(canSelectInterpretationAtAddress(selected, 10, 'double')).toBe(true)
+    expect(canSelectInterpretationAtAddress(selected, 11, 'double')).toBe(false)
+  })
+
+  it('returns assignable starts for batch apply when selection can be evenly grouped', () => {
+    const selected = new Set([0, 1, 2, 3, 8, 9])
+    expect(getBatchAssignableAddresses(selected, 'int')).toEqual([0, 2, 8])
+    expect(getBatchAssignableAddresses(selected, 'short')).toEqual([0, 1, 2, 3, 8, 9])
+  })
+
+  it('returns empty batch starts when selection cannot match span groups', () => {
+    const selected = new Set([0, 1, 2])
+    expect(getBatchAssignableAddresses(selected, 'int')).toEqual([])
+    expect(getBatchAssignableAddresses(selected, 'double')).toEqual([])
   })
 })

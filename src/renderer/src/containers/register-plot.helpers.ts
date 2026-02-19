@@ -24,6 +24,51 @@ export const getWordSpanForInterpretation = (mode: PlotInterpretation): number =
   }
 }
 
+export const canSelectInterpretationAtAddress = (
+  selectedAddresses: Set<number>,
+  address: number,
+  mode: PlotInterpretation
+): boolean => {
+  const span = getWordSpanForInterpretation(mode)
+  if (span <= 1) return true
+  for (let i = 0; i < span; i++) {
+    if (!selectedAddresses.has(address + i)) return false
+  }
+  return true
+}
+
+export const getBatchAssignableAddresses = (
+  selectedAddresses: Set<number>,
+  mode: PlotInterpretation
+): number[] => {
+  const span = getWordSpanForInterpretation(mode)
+  const sorted = [...selectedAddresses].sort((a, b) => a - b)
+  if (sorted.length === 0) return []
+  if (span === 1) return sorted
+
+  const starts: number[] = []
+  let segmentStart = 0
+
+  const flushSegment = (endExclusive: number): boolean => {
+    const segment = sorted.slice(segmentStart, endExclusive)
+    if (segment.length % span !== 0) return false
+    for (let i = 0; i < segment.length; i += span) {
+      starts.push(segment[i])
+    }
+    return true
+  }
+
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i] !== sorted[i - 1] + 1) {
+      if (!flushSegment(i)) return []
+      segmentStart = i
+    }
+  }
+
+  if (!flushSegment(sorted.length)) return []
+  return starts
+}
+
 export const decodePlotValue = (
   rawRegisters: Record<number, number>,
   startAddress: number,

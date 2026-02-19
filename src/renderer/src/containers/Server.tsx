@@ -69,7 +69,9 @@ import type {
   ServerConnectionConfig
 } from '@shared'
 import {
+  canSelectInterpretationAtAddress,
   decodePlotValue,
+  getBatchAssignableAddresses,
   getPlotSelectionColor,
   getRegisterColor,
   getWordSpanForInterpretation
@@ -191,6 +193,17 @@ const ENCODING_OPTIONS = [
   'GBK',
   'GB18030',
   'ISO-8859-1'
+]
+
+const TYPED_INTERPRETATION_OPTIONS: PlotInterpretation[] = [
+  'short',
+  'ushort',
+  'int',
+  'uint',
+  'long',
+  'ulong',
+  'float',
+  'double'
 ]
 
 // =============================================================================
@@ -1446,6 +1459,7 @@ const Server = (): JSX.Element => {
   const [editSlaveOpen, setEditSlaveOpen] = useState(false)
   const [editingSlave, setEditingSlave] = useState<Slave | undefined>(undefined)
   const [editingSlaveConnectionId, setEditingSlaveConnectionId] = useState<string | null>(null)
+  const [typedBatchMode, setTypedBatchMode] = useState<PlotInterpretation>('short')
 
   const [tablePagination, setTablePagination] = useState<
     Record<string, { page: number; rowsPerPage: number }>
@@ -1805,7 +1819,7 @@ const Server = (): JSX.Element => {
         address: reg.address,
         label: reg.variableName || formatAddress(reg.address),
         color: getRegisterColor(reg.address),
-        interpretation: defaultInterpretation
+        interpretation: tab.typedInterpretation[reg.address] || defaultInterpretation
       }))
     }
 
@@ -2084,9 +2098,16 @@ const Server = (): JSX.Element => {
                 const selectedRegisters = group.registers.filter((r) =>
                   tab.selectedAddresses.has(r.address)
                 )
+                const rawRegisterMap = Object.fromEntries(
+                  group.registers.map((r) => [r.address, r.value])
+                )
                 const longGroups = extractConsecutiveGroups(selectedRegisters, 2)
                 const floatGroups = extractConsecutiveGroups(selectedRegisters, 2)
                 const doubleGroups = extractConsecutiveGroups(selectedRegisters, 4)
+                const batchAssignableStarts = getBatchAssignableAddresses(
+                  tab.selectedAddresses,
+                  typedBatchMode
+                )
 
                 return (
                   <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -2597,10 +2618,69 @@ const Server = (): JSX.Element => {
                           )
                         ) : tab.interpretationTab === 'typed' ? (
                           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                            <Paper
+                              variant="outlined"
+                              sx={{
+                                p: 1.5,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 1.5,
+                                flexWrap: 'wrap'
+                              }}
+                            >
+                              <Typography variant="subtitle2" sx={{ minWidth: 150 }}>
+                                Set Type For Selection
+                              </Typography>
+                              <FormControl size="small" sx={{ minWidth: 170 }}>
+                                <InputLabel>Type</InputLabel>
+                                <Select
+                                  label="Type"
+                                  value={typedBatchMode}
+                                  SelectDisplayProps={{ 'data-testid': 'typed-batch-mode' }}
+                                  onChange={(e) =>
+                                    setTypedBatchMode(e.target.value as PlotInterpretation)
+                                  }
+                                >
+                                  {TYPED_INTERPRETATION_OPTIONS.map((opt) => (
+                                    <MenuItem key={opt} value={opt}>
+                                      {opt.toUpperCase()} ({getWordSpanForInterpretation(opt)}w)
+                                    </MenuItem>
+                                  ))}
+                                </Select>
+                              </FormControl>
+                              <Button
+                                size="small"
+                                variant="contained"
+                                disabled={batchAssignableStarts.length === 0}
+                                data-testid="typed-batch-apply"
+                                onClick={() =>
+                                  updateTab(activeTabId, {
+                                    typedInterpretation: {
+                                      ...tab.typedInterpretation,
+                                      ...Object.fromEntries(
+                                        batchAssignableStarts.map((addr) => [addr, typedBatchMode])
+                                      )
+                                    }
+                                  })
+                                }
+                              >
+                                Apply To {batchAssignableStarts.length} Start Address
+                                {batchAssignableStarts.length === 1 ? '' : 'es'}
+                              </Button>
+                              <Typography variant="caption" color="text.secondary">
+                                {batchAssignableStarts.length > 0
+                                  ? `Current selection can be grouped by ${getWordSpanForInterpretation(
+                                      typedBatchMode
+                                    )} word(s).`
+                                  : `Selection must be consecutive and divisible by ${getWordSpanForInterpretation(
+                                      typedBatchMode
+                                    )} word(s).`}
+                              </Typography>
+                            </Paper>
                             {selectedRegisters.map((reg) => {
                               const mode = tab.typedInterpretation[reg.address] || 'short'
                               const decoded = decodePlotValue(
-                                Object.fromEntries(group.registers.map((r) => [r.address, r.value])),
+                                rawRegisterMap,
                                 reg.address,
                                 mode
                               )
@@ -2609,6 +2689,7 @@ const Server = (): JSX.Element => {
                                 <Paper
                                   key={reg.address}
                                   variant="outlined"
+                                  data-testid={`typed-row-${reg.address}`}
                                   sx={{ p: 1.5, display: 'flex', alignItems: 'center', gap: 1.5 }}
                                 >
                                   <Typography sx={{ minWidth: 110, fontFamily: 'monospace' }}>
@@ -2619,6 +2700,9 @@ const Server = (): JSX.Element => {
                                     <Select
                                       label="Type"
                                       value={mode}
+                                      SelectDisplayProps={{
+                                        'data-testid': `typed-type-${reg.address}`
+                                      }}
                                       onChange={(e) =>
                                         updateTab(activeTabId, {
                                           typedInterpretation: {
@@ -2628,19 +2712,18 @@ const Server = (): JSX.Element => {
                                         })
                                       }
                                     >
-                                      {(
-                                        [
-                                          'short',
-                                          'ushort',
-                                          'int',
-                                          'uint',
-                                          'long',
-                                          'ulong',
-                                          'float',
-                                          'double'
-                                        ] as PlotInterpretation[]
-                                      ).map((opt) => (
-                                        <MenuItem key={opt} value={opt}>
+                                      {TYPED_INTERPRETATION_OPTIONS.map((opt) => (
+                                        <MenuItem
+                                          key={opt}
+                                          value={opt}
+                                          disabled={
+                                            !canSelectInterpretationAtAddress(
+                                              tab.selectedAddresses,
+                                              reg.address,
+                                              opt
+                                            )
+                                          }
+                                        >
                                           {opt.toUpperCase()} ({getWordSpanForInterpretation(opt)}w)
                                         </MenuItem>
                                       ))}
