@@ -702,7 +702,6 @@ const NumericRegisterInput = memo(
         }}
         type={mode === 'hex16' || mode === 'bin16' ? 'text' : 'number'}
         InputProps={{ readOnly: !editable }}
-        helperText={editable ? ' ' : `Requires ${getDisplayWordSpan(mode)} registers`}
       />
     )
   }
@@ -2535,22 +2534,36 @@ const Server = (): JSX.Element => {
                 const selectedRegisters = group.registers.filter((r) =>
                   tab.selectedAddresses.has(r.address)
                 )
+                const MAX_PANEL_REGISTERS = 120
+                const panelRegisters =
+                  selectedRegisters.length > MAX_PANEL_REGISTERS
+                    ? selectedRegisters.slice(0, MAX_PANEL_REGISTERS)
+                    : selectedRegisters
                 const defaultTypedInterpretation = getDefaultTypedInterpretation(group.type)
                 const rawRegisterMap = Object.fromEntries(
                   group.registers.map((r) => [r.address, r.value])
                 )
                 const allRegisterAddresses = group.registers.map((r) => r.address)
-                const longGroups = extractConsecutiveGroups(selectedRegisters, 2)
-                const floatGroups = extractConsecutiveGroups(selectedRegisters, 2)
-                const doubleGroups = extractConsecutiveGroups(selectedRegisters, 4)
+                const longGroups =
+                  tab.interpretationTab === 'long'
+                    ? extractConsecutiveGroups(panelRegisters, 2)
+                    : []
+                const floatGroups =
+                  tab.interpretationTab === 'float'
+                    ? extractConsecutiveGroups(panelRegisters, 2)
+                    : []
+                const doubleGroups =
+                  tab.interpretationTab === 'double'
+                    ? extractConsecutiveGroups(panelRegisters, 4)
+                    : []
                 const typedSpanHints = buildTypedSpanHints(
                   new Set(group.registers.map((r) => r.address)),
                   tab.typedInterpretation
                 )
-                const batchAssignableStarts = getBatchAssignableAddresses(
-                  tab.selectedAddresses,
-                  typedBatchMode
-                )
+                const batchAssignableStarts =
+                  tab.interpretationTab === 'typed'
+                    ? getBatchAssignableAddresses(tab.selectedAddresses, typedBatchMode)
+                    : []
                 const currentWidths = {
                   ...DEFAULT_TABLE_COLUMN_WIDTHS,
                   ...(tableColumnWidths[activeTabId] || {})
@@ -2665,7 +2678,16 @@ const Server = (): JSX.Element => {
                               variant="outlined"
                               sx={{ flex: 1, overflowX: 'auto' }}
                             >
-                              <Table size="small" stickyHeader sx={{ minWidth: tableMinWidth }}>
+                              <Table
+                                size="small"
+                                stickyHeader
+                                sx={{
+                                  minWidth: tableMinWidth,
+                                  '& .MuiTableCell-root': {
+                                    py: 0.45
+                                  }
+                                }}
+                              >
                                 <TableHead>
                                   <TableRow sx={{ bgcolor: 'action.hover' }}>
                                     <TableCell padding="checkbox" sx={{ bgcolor: 'action.hover' }}>
@@ -3291,7 +3313,15 @@ const Server = (): JSX.Element => {
                               Select registers to view/edit data interpretation
                             </Typography>
                           </Box>
-                        ) : tab.interpretationTab === 'basic' ? (
+                        ) : (
+                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
+                            {selectedRegisters.length > MAX_PANEL_REGISTERS ? (
+                              <Typography variant="caption" color="warning.main">
+                                Showing first {MAX_PANEL_REGISTERS} of {selectedRegisters.length}{' '}
+                                selected registers for performance.
+                              </Typography>
+                            ) : null}
+                            {tab.interpretationTab === 'basic' ? (
                           <Box
                             sx={{
                               display: 'grid',
@@ -3299,7 +3329,7 @@ const Server = (): JSX.Element => {
                               gap: 2
                             }}
                           >
-                            {selectedRegisters.map((reg) => (
+                            {panelRegisters.map((reg) => (
                               <Paper key={reg.address} variant="outlined" sx={{ p: 2 }}>
                                 <Typography variant="subtitle2" gutterBottom>
                                   {formatAddress(reg.address)}
@@ -3549,7 +3579,7 @@ const Server = (): JSX.Element => {
                                 gap: 1.25
                               }}
                             >
-                              {selectedRegisters.map((reg) => {
+                              {panelRegisters.map((reg) => {
                                 const mode =
                                   tab.typedInterpretation[reg.address] || defaultTypedInterpretation
                                 const decoded = decodePlotValue(
@@ -3658,7 +3688,7 @@ const Server = (): JSX.Element => {
                             <TextField
                               multiline
                               rows={3}
-                              value={selectedRegisters
+                              value={panelRegisters
                                 .map((r) =>
                                   String.fromCharCode(r.value & 0xff, (r.value >> 8) & 0xff)
                                 )
@@ -3668,6 +3698,8 @@ const Server = (): JSX.Element => {
                             />
                           </Box>
                         ) : null}
+                          </Box>
+                        )}
                       </Box>
                     </Paper>
                     <Menu
