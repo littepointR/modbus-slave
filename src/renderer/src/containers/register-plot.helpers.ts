@@ -27,8 +27,24 @@ export const getWordSpanForInterpretation = (mode: PlotInterpretation): number =
 export const canSelectInterpretationAtAddress = (
   selectedAddresses: Set<number>,
   address: number,
-  mode: PlotInterpretation
+  mode: PlotInterpretation,
+  typedInterpretation?: Record<number, PlotInterpretation>
 ): boolean => {
+  if (typedInterpretation) {
+    const starts = Object.keys(typedInterpretation)
+      .map((k) => Number(k))
+      .filter((start) => Number.isFinite(start) && start < address)
+      .sort((a, b) => a - b)
+
+    for (const start of starts) {
+      const startMode = typedInterpretation[start]
+      if (!startMode) continue
+      const existingSpan = getWordSpanForInterpretation(startMode)
+      if (existingSpan <= 1) continue
+      if (address < start + existingSpan) return false
+    }
+  }
+
   const span = getWordSpanForInterpretation(mode)
   if (span <= 1) return true
   for (let i = 0; i < span; i++) {

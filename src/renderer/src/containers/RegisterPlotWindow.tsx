@@ -9,7 +9,7 @@ import {
   FormControlLabel,
   Button
 } from '@mui/material'
-import type { PlotInterpretation, RegisterPlotData, RegisterPlotWindowInit } from '@shared'
+import type { RegisterPlotData, RegisterPlotWindowInit } from '@shared'
 import { onEvent } from '@renderer/events'
 import { decodePlotValue, getWordSpanForInterpretation } from './register-plot.helpers'
 import { useTranslation } from 'react-i18next'

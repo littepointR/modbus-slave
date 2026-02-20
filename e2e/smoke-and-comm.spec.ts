@@ -34,18 +34,24 @@ test.describe.serial('Server Smoke And Comm E2E', () => {
   test('can switch theme mode and theme color from settings', async () => {
     await page.getByTestId('settings-btn').click()
 
-    await page.getByTestId('theme-mode-select').click()
+    const settingsPaper = page.locator('.MuiPopover-paper')
+    const themeModeCombobox = settingsPaper.locator('[role="combobox"]').first()
+    await themeModeCombobox.click()
     await page.getByRole('option', { name: /Light|亮色/ }).click()
     await expect(
       page.evaluate(() => localStorage.getItem('modbux.theme.mode'))
     ).resolves.toBe('light')
 
+    const colorPickerToggle = page.getByLabel('toggle-theme-color-picker')
+    if ((await colorPickerToggle.count()) > 0) {
+      await colorPickerToggle.click()
+    }
     await page.getByLabel(/Blue|蓝色/).click()
     await expect(
       page.evaluate(() => localStorage.getItem('modbux.theme.color'))
     ).resolves.toBe('blue')
 
-    await page.getByTestId('theme-mode-select').click()
+    await themeModeCombobox.click()
     await page.getByRole('option', { name: /Auto|自动/ }).click()
     await expect(
       page.evaluate(() => localStorage.getItem('modbux.theme.mode'))
@@ -138,7 +144,7 @@ test.describe.serial('Server Smoke And Comm E2E', () => {
     await typedTab.click()
     await expect(typedTab).toHaveAttribute('aria-selected', 'true')
 
-    const batchMode = page.getByTestId('typed-batch-mode')
+    const batchMode = page.getByRole('combobox', { name: /^Type$/ }).first()
     await batchMode.click()
     await page.getByRole('option', { name: /^INT \(2w\)$/ }).click()
     await page.getByTestId('typed-batch-apply').click()
@@ -183,6 +189,33 @@ test.describe.serial('Server Smoke And Comm E2E', () => {
     await ensureUnchecked(thirdRow)
     await ensureUnchecked(fourthRow)
 
+    const firstValueInput = firstRow.getByTestId('register-value-input-0')
+
+    const getValueCellBackground = async (row: Locator, address: number): Promise<string | null> =>
+      await row.evaluate((el, targetAddress) => {
+        const input = el.querySelector(
+          `[data-testid="register-value-input-${targetAddress}"]`
+        ) as HTMLElement | null
+        const cell = input?.closest('td')
+        if (!cell) return null
+        return getComputedStyle(cell).backgroundColor
+      }, address)
+
+    const bg1 = await getValueCellBackground(firstRow, 0)
+    const bg2 = await getValueCellBackground(secondRow, 1)
+    const bg3 = await getValueCellBackground(thirdRow, 2)
+    await expect(firstValueInput).toBeVisible()
+    await expect(firstValueInput).toHaveValue('123')
+    const firstInputWidth = await firstValueInput.evaluate((el) => (el as HTMLInputElement).clientWidth)
+    expect(firstInputWidth).toBeGreaterThan(70)
+
+    expect(bg1).not.toBeNull()
+    expect(bg2).not.toBeNull()
+    expect(bg3).not.toBeNull()
+    expect(bg1).not.toBe(bg2)
+    expect(bg1).not.toBe('rgba(0, 0, 0, 0)')
+    expect(bg3).toBe(bg2)
+
     await page.getByRole('button', { name: /Plot Selected \(2\)/ }).click()
     let plotPage: Page | null = null
     await expect
@@ -220,28 +253,29 @@ test.describe.serial('Server Smoke And Comm E2E', () => {
     await plotPage!.getByRole('checkbox', { name: /Y Auto|Y 轴自适应/ }).click()
     await expect(plotPage!.getByLabel(/Y Min|Y 最小值/)).toBeEnabled()
 
-    const firstValueCell = firstRow.locator('td').nth(5)
-    const secondValueCell = secondRow.locator('td').nth(5)
-    const thirdValueCell = thirdRow.locator('td').nth(5)
-    const firstValueInput = firstValueCell.locator('input[type="number"]').first()
-
-    const bg1 = await firstValueCell.evaluate((el) => getComputedStyle(el).backgroundColor)
-    const bg2 = await secondValueCell.evaluate((el) => getComputedStyle(el).backgroundColor)
-    const bg3 = await thirdValueCell.evaluate((el) => getComputedStyle(el).backgroundColor)
-    await expect(firstValueInput).toBeVisible()
-    await expect(firstValueInput).toHaveValue('123')
-    const firstInputWidth = await firstValueInput.evaluate((el) => (el as HTMLInputElement).clientWidth)
-    expect(firstInputWidth).toBeGreaterThan(70)
-
-    expect(bg1).toBe(bg2)
-    expect(bg1).not.toBe('rgba(0, 0, 0, 0)')
-    expect(bg3).toBe(bg1)
-
     await plotPage!.close()
     await expect.poll(async () => app.windows().length).toBe(1)
   })
 
   test('can open communication log window', async () => {
+    const newConnectionBtn = page.getByRole('button', { name: /新建连接|New Connection/ })
+    const hasToolbar = (await newConnectionBtn.count()) > 0 && (await newConnectionBtn.first().isVisible())
+    if (!hasToolbar) {
+      await closeApp(app)
+      const relaunched = await launchMainWindow()
+      app = relaunched.app
+      page = relaunched.page
+    }
+
+    const editedConnection = page.getByText(CONN_ALIAS_EDITED, { exact: true })
+    if ((await editedConnection.count()) === 0) {
+      await page.getByRole('button', { name: /新建连接|New Connection/ }).click()
+      await page.getByLabel('Connection Alias').fill(CONN_ALIAS_EDITED)
+      await page.getByLabel('IP Address').fill('127.0.0.1')
+      await page.getByLabel('Port').fill(String(CONN_PORT))
+      await page.getByRole('button', { name: /确定|OK/ }).click()
+    }
+
     await page.getByText(CONN_ALIAS_EDITED, { exact: true }).click()
     await page.getByRole('button', { name: /打开连接|Open Connection/ }).click()
     await expect(page.getByRole('button', { name: /关闭连接|Close Connection/ })).toBeEnabled()

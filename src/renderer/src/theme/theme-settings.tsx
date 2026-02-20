@@ -35,7 +35,16 @@ const getInitialThemeMode = (): ThemeModePreference => {
 
 const getInitialThemeColor = (): ThemePrimaryPreset => {
   const saved = localStorage.getItem(THEME_COLOR_KEY)
-  if (saved === 'green' || saved === 'blue' || saved === 'orange' || saved === 'rose') {
+  if (
+    saved === 'green' ||
+    saved === 'blue' ||
+    saved === 'orange' ||
+    saved === 'rose' ||
+    saved === 'teal' ||
+    saved === 'indigo' ||
+    saved === 'red' ||
+    saved === 'amber'
+  ) {
     return saved
   }
   return 'green'

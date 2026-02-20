@@ -1,7 +1,15 @@
 import { createTheme } from '@mui/material'
 
 export type ThemeModePreference = 'light' | 'dark' | 'system'
-export type ThemePrimaryPreset = 'green' | 'blue' | 'orange' | 'rose'
+export type ThemePrimaryPreset =
+  | 'green'
+  | 'blue'
+  | 'orange'
+  | 'rose'
+  | 'teal'
+  | 'indigo'
+  | 'red'
+  | 'amber'
 
 interface ThemePreset {
   primary: string
@@ -29,6 +37,26 @@ const PRESETS: Record<ThemePrimaryPreset, ThemePreset> = {
     primary: '#c2185b',
     secondary: '#880e4f',
     success: '#2e7d32'
+  },
+  teal: {
+    primary: '#00796b',
+    secondary: '#004d40',
+    success: '#2e7d32'
+  },
+  indigo: {
+    primary: '#3949ab',
+    secondary: '#1a237e',
+    success: '#2e7d32'
+  },
+  red: {
+    primary: '#d32f2f',
+    secondary: '#8b1e1e',
+    success: '#2e7d32'
+  },
+  amber: {
+    primary: '#ff8f00',
+    secondary: '#e65100',
+    success: '#2e7d32'
   }
 }
 
@@ -40,6 +68,7 @@ export const createAppTheme = (mode: 'light' | 'dark', preset: ThemePrimaryPrese
   const colors = getThemePreset(preset)
 
   return createTheme({
+    spacing: 8,
     breakpoints: {
       values: {
         xs: 0,
@@ -80,9 +109,60 @@ export const createAppTheme = (mode: 'light' | 'dark', preset: ThemePrimaryPrese
         main: colors.success
       }
     },
+    shape: {
+      borderRadius: 4
+    },
+    typography: {
+      fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif',
+      button: {
+        textTransform: 'none',
+        fontWeight: 500
+      },
+      subtitle2: {
+        fontWeight: 500
+      }
+    },
     components: {
+      MuiPaper: {
+        defaultProps: {
+          elevation: 0
+        },
+        styleOverrides: {
+          root: {
+            borderRadius: 4
+          }
+        }
+      },
+      MuiAppBar: {
+        defaultProps: {
+          elevation: 0,
+          color: 'default'
+        }
+      },
       MuiButton: {
-        defaultProps: { variant: 'contained' }
+        defaultProps: { variant: 'text', size: 'small' },
+        styleOverrides: {
+          root: {
+            borderRadius: 4
+          }
+        }
+      },
+      MuiTableCell: {
+        styleOverrides: {
+          root: {
+            borderBottomStyle: 'solid'
+          },
+          head: {
+            fontWeight: 500
+          }
+        }
+      },
+      MuiChip: {
+        styleOverrides: {
+          sizeSmall: {
+            height: 20
+          }
+        }
       }
     }
   })

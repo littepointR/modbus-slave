@@ -72,7 +72,7 @@ test('realistic server user journey e2e', async () => {
   await typedTab.click()
   await expect(typedTab).toHaveAttribute('aria-selected', 'true')
 
-  await page.getByTestId('typed-batch-mode').click()
+  await page.getByRole('combobox', { name: /^Type$/ }).first().click()
   await page.getByRole('option', { name: /^INT \(2w\)$/ }).click()
   await page.getByTestId('typed-batch-apply').click()
   await expect(page.getByTestId('typed-row-0')).toContainText('INT (2w)')
@@ -85,19 +85,6 @@ test('realistic server user journey e2e', async () => {
   await page.getByTestId('value-format-2').click()
   await page.getByRole('menuitem', { name: /^SHORT \(1w\)$/ }).click()
   await expect(thirdRow).toContainText('SHORT (1w)')
-
-  const plotWindowPromise = app.waitForEvent('window')
-  await page.getByRole('button', { name: /Plot Selected \(4\)/ }).click()
-  const plotPage = await plotWindowPromise
-  await plotPage.waitForLoadState('domcontentloaded')
-  await expect(plotPage.getByText(/Plot -/)).toBeVisible()
-  await expect(plotPage.locator('[role="combobox"]')).toHaveCount(0)
-  await expect(plotPage.getByRole('button', { name: /Stop|停止/ })).toBeVisible()
-  await plotPage.getByRole('button', { name: /Stop|停止/ }).click()
-  await expect(plotPage.getByRole('button', { name: /Continue|继续/ })).toBeVisible()
-  await plotPage.getByRole('checkbox', { name: /Y Auto|Y 轴自适应/ }).click()
-  await expect(plotPage.getByLabel(/Y Min|Y 最小值/)).toBeEnabled()
-  await plotPage.close()
 
   await page.getByText(JOURNEY_CONN_ALIAS, { exact: true }).click()
   await page.getByRole('button', { name: /打开连接|Open Connection/ }).click()
@@ -114,4 +101,17 @@ test('realistic server user journey e2e', async () => {
   await expect(
     commPage.getByText(/RX\s+\|\s+Unit:004\s+\|\s+00 01 00 00 00 06 04 03 00 00 00 02/)
   ).toBeVisible()
+
+  const plotWindowPromise = app.waitForEvent('window')
+  await page.getByRole('button', { name: /Plot Selected \(4\)/ }).click()
+  const plotPage = await plotWindowPromise
+  await plotPage.waitForLoadState('domcontentloaded')
+  await expect(plotPage.getByText(/Plot -/)).toBeVisible()
+  await expect(plotPage.locator('[role="combobox"]')).toHaveCount(0)
+  await expect(plotPage.getByRole('button', { name: /Stop|停止/ })).toBeVisible()
+  await plotPage.getByRole('button', { name: /Stop|停止/ }).click()
+  await expect(plotPage.getByRole('button', { name: /Continue|继续/ })).toBeVisible()
+  await plotPage.getByRole('checkbox', { name: /Y Auto|Y 轴自适应/ }).click()
+  await expect(plotPage.getByLabel(/Y Min|Y 最小值/)).toBeEnabled()
+  await plotPage.close()
 })

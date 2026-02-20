@@ -72,6 +72,16 @@ describe('register-plot.helpers', () => {
     expect(canSelectInterpretationAtAddress(selected, 11, 'double')).toBe(false)
   })
 
+  it('prevents changing type for addresses covered by an earlier multi-word interpretation', () => {
+    const selected = new Set([10, 11, 12, 13, 14])
+    const typed = { 10: 'double' as PlotInterpretation }
+
+    expect(canSelectInterpretationAtAddress(selected, 11, 'short', typed)).toBe(false)
+    expect(canSelectInterpretationAtAddress(selected, 12, 'int', typed)).toBe(false)
+    expect(canSelectInterpretationAtAddress(selected, 13, 'double', typed)).toBe(false)
+    expect(canSelectInterpretationAtAddress(selected, 14, 'short', typed)).toBe(true)
+  })
+
   it('returns assignable starts for batch apply when selection can be evenly grouped', () => {
     const selected = new Set([0, 1, 2, 3, 8, 9])
     expect(getBatchAssignableAddresses(selected, 'int')).toEqual([0, 2, 8])

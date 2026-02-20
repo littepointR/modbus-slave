@@ -86,6 +86,18 @@ src/
 e2e/              # Playwright E2E tests
 ```
 
+## Current Server UI Notes
+
+- Main register grid value cells are read-only; value writes happen in the lower edit panel.
+- Batch controls (type + display format) are placed in a fixed toolbar between the main grid and lower edit panel (outside main table scroll area).
+- `Typed Decode` tab has been removed from the lower panel; keep type editing via grid chips/context actions and batch toolbar.
+- Coil groups (`01`/`02`) are handled differently from register groups:
+  - Main grid shows read-only `ON/OFF` state.
+  - Coil value edits are only in lower panel.
+  - Coil bit values are strictly `0/1`.
+  - For coil conversion views (`Long/Float/Double`), conversions must respect `8 bits = 1 byte`.
+- User operation failures (invalid input / invalid workspace / open-close connection errors / invalid batch operations) should show via `notistack` snackbar.
+
 ## React Patterns
 
 ### Component Structure

@@ -1054,6 +1054,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@fontsource/roboto@npm:^5.2.9":
+  version: 5.2.9
+  resolution: "@fontsource/roboto@npm:5.2.9"
+  checksum: 10c0/8280ab6504ab7da105c77afc1231236be86f7cd02a708e25b6cfc2871975699a44be7a42491e59934f2a84c874a8109bb2babfbc6b1986bcad9f3ac1de3980ca
+  languageName: node
+  linkType: hard
+
 "@humanwhocodes/config-array@npm:^0.13.0":
   version: 0.13.0
   resolution: "@humanwhocodes/config-array@npm:0.13.0"
@@ -6300,6 +6307,7 @@ __metadata:
     "@emotion/react": "npm:^11.14.0"
     "@emotion/styled": "npm:^11.14.1"
     "@fontsource/inter": "npm:^5.2.8"
+    "@fontsource/roboto": "npm:^5.2.9"
     "@mui/icons-material": "npm:^6.5.0"
     "@mui/material": "npm:^6.5.0"
     "@mui/x-data-grid": "npm:^7.29.12"
