@@ -5,6 +5,7 @@ import FormControl from '@mui/material/FormControl'
 import InputLabel from '@mui/material/InputLabel'
 import MenuItem from '@mui/material/MenuItem'
 import Popover from '@mui/material/Popover'
+import IconButton from '@mui/material/IconButton'
 import Select, { SelectChangeEvent } from '@mui/material/Select'
 import Typography from '@mui/material/Typography'
 import LanguageSwitcher from '../LanguageSwitcher'
@@ -12,6 +13,7 @@ import { useTranslation } from 'react-i18next'
 import { useRef, useState } from 'react'
 import { useThemeSettings } from '@renderer/theme/theme-settings'
 import type { ThemeModePreference, ThemePrimaryPreset } from '@renderer/theme'
+import { alpha } from '@mui/material/styles'
 
 const SettingsMenu = () => {
   const { t } = useTranslation()
@@ -25,9 +27,14 @@ const SettingsMenu = () => {
     setThemeMode(event.target.value as ThemeModePreference)
   }
 
-  const handleThemeColorChange = (event: SelectChangeEvent<string>) => {
-    setThemeColor(event.target.value as ThemePrimaryPreset)
-  }
+  const handleThemeColorClick = (color: ThemePrimaryPreset) => setThemeColor(color)
+
+  const themeColorPresets: Array<{ value: ThemePrimaryPreset; label: string; color: string }> = [
+    { value: 'green', label: t('common.themeColorGreen'), color: '#2e7d32' },
+    { value: 'blue', label: t('common.themeColorBlue'), color: '#1976d2' },
+    { value: 'orange', label: t('common.themeColorOrange'), color: '#ef6c00' },
+    { value: 'rose', label: t('common.themeColorRose'), color: '#c2185b' }
+  ]
 
   return (
     <Box>
@@ -72,17 +79,40 @@ const SettingsMenu = () => {
           </FormControl>
           <FormControl size="small" fullWidth>
             <InputLabel>{t('common.themeColor')}</InputLabel>
-            <Select
-              label={t('common.themeColor')}
-              value={themeColor}
-              onChange={handleThemeColorChange}
-              SelectDisplayProps={{ 'data-testid': 'theme-color-select' }}
+            <Box
+              data-testid="theme-color-select"
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                px: 1,
+                py: 1,
+                border: 1,
+                borderColor: 'divider',
+                borderRadius: 1
+              }}
             >
-              <MenuItem value="green">{t('common.themeColorGreen')}</MenuItem>
-              <MenuItem value="blue">{t('common.themeColorBlue')}</MenuItem>
-              <MenuItem value="orange">{t('common.themeColorOrange')}</MenuItem>
-              <MenuItem value="rose">{t('common.themeColorRose')}</MenuItem>
-            </Select>
+              {themeColorPresets.map((preset) => {
+                const isActive = themeColor === preset.value
+                return (
+                  <IconButton
+                    key={preset.value}
+                    size="small"
+                    aria-label={preset.label}
+                    onClick={() => handleThemeColorClick(preset.value)}
+                    sx={{
+                      width: 26,
+                      height: 26,
+                      bgcolor: preset.color,
+                      border: '1px solid',
+                      borderColor: isActive ? 'text.primary' : alpha('#000', 0.2),
+                      boxShadow: isActive ? 2 : 0,
+                      '&:hover': { bgcolor: preset.color }
+                    }}
+                  />
+                )
+              })}
+            </Box>
           </FormControl>
         </Box>
       </Popover>

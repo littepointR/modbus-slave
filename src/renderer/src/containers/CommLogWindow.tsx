@@ -95,7 +95,7 @@ const CommLogWindow = (): JSX.Element => {
       >
         <Toolbar variant="dense">
           <Typography variant="h6" sx={{ flexGrow: 1, fontSize: '1rem' }}>
-            {t('transaction.title')}
+            {t('server.toolbar.commDetails')}
           </Typography>
           <Button
             variant={paused ? 'contained' : 'outlined'}
@@ -149,8 +149,8 @@ const CommLogWindow = (): JSX.Element => {
         sx={{
           flex: 1,
           p: 1,
-          bgcolor: 'grey.900',
-          color: 'grey.100',
+          bgcolor: (theme) => (theme.palette.mode === 'dark' ? '#11161d' : '#f7fbff'),
+          color: 'text.primary',
           fontFamily: 'monospace',
           fontSize: '0.875rem',
           overflow: 'auto',
@@ -164,7 +164,20 @@ const CommLogWindow = (): JSX.Element => {
           </Typography>
         ) : (
           logs.map((log, idx) => (
-            <Box key={idx} sx={{ mb: 0.5 }}>
+            <Box
+              key={idx}
+              sx={{
+                mb: 0.5,
+                px: 0.5,
+                borderRadius: 0.5,
+                bgcolor: (theme) =>
+                  idx % 2 === 1
+                    ? theme.palette.mode === 'dark'
+                      ? 'rgba(255,255,255,0.04)'
+                      : 'rgba(0,0,0,0.03)'
+                    : 'transparent'
+              }}
+            >
               {log}
             </Box>
           ))

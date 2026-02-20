@@ -143,7 +143,7 @@ onIpcEvent('open_comm_log_window', () => {
       contextIsolation: true,
       additionalArguments: ['is-comm-log-window']
     },
-    title: 'Communication Log',
+    title: 'Communication Details',
     backgroundColor: '#181818'
   })
 

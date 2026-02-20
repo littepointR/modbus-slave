@@ -39,7 +39,7 @@ import {
   Autocomplete,
   CircularProgress
 } from '@mui/material'
-import { alpha, type Theme } from '@mui/material/styles'
+import { alpha } from '@mui/material/styles'
 import {
   Add as AddIcon,
   CreateNewFolder as NewConnectionIcon,
@@ -175,6 +175,7 @@ interface OpenTab {
   interpretationTab: 'basic' | 'long' | 'float' | 'double' | 'typed' | 'string'
   stringEncoding: string
   typedInterpretation: Record<number, PlotInterpretation>
+  registerDisplayFormat: Record<number, RegisterDisplayFormat>
 }
 
 interface PlotWindowState extends RegisterPlotWindowInit {
@@ -190,6 +191,13 @@ interface TypedValueEditMenuState {
 
 interface TypedBatchMenuState {
   tabId: string
+  mouseX: number
+  mouseY: number
+}
+
+interface DisplayFormatEditMenuState {
+  tabId: string
+  address: number
   mouseX: number
   mouseY: number
 }
@@ -219,6 +227,31 @@ const TYPED_INTERPRETATION_OPTIONS: PlotInterpretation[] = [
   'ulong',
   'float',
   'double'
+]
+
+type RegisterDisplayFormat =
+  | 'u16'
+  | 's16'
+  | 'hex16'
+  | 'bin16'
+  | 'u32'
+  | 's32'
+  | 'f32'
+  | 'u64'
+  | 's64'
+  | 'f64'
+
+const DISPLAY_FORMAT_OPTIONS: Array<{ mode: RegisterDisplayFormat; label: string; words: number }> = [
+  { mode: 'u16', label: 'U16', words: 1 },
+  { mode: 's16', label: 'S16', words: 1 },
+  { mode: 'hex16', label: 'HEX', words: 1 },
+  { mode: 'bin16', label: 'BIN', words: 1 },
+  { mode: 'u32', label: 'U32', words: 2 },
+  { mode: 's32', label: 'S32', words: 2 },
+  { mode: 'f32', label: 'F32', words: 2 },
+  { mode: 'u64', label: 'U64', words: 4 },
+  { mode: 's64', label: 'S64', words: 4 },
+  { mode: 'f64', label: 'F64', words: 4 }
 ]
 
 interface TypedSpanHint {
@@ -482,6 +515,89 @@ const buildTypedSpanHints = (
   })
 
   return hints
+}
+
+const getDisplayWordSpan = (mode: RegisterDisplayFormat): number => {
+  const config = DISPLAY_FORMAT_OPTIONS.find((option) => option.mode === mode)
+  return config?.words || 1
+}
+
+const formatDisplayValue = (
+  rawRegisters: Record<number, number>,
+  address: number,
+  mode: RegisterDisplayFormat
+): string => {
+  const word = rawRegisters[address] ?? 0
+  switch (mode) {
+    case 'u16':
+      return String(word & 0xffff)
+    case 's16': {
+      const unsigned = word & 0xffff
+      return String(unsigned > 0x7fff ? unsigned - 0x10000 : unsigned)
+    }
+    case 'hex16':
+      return `0x${(word & 0xffff).toString(16).toUpperCase().padStart(4, '0')}`
+    case 'bin16':
+      return `0b${(word & 0xffff).toString(2).padStart(16, '0')}`
+    case 'u32': {
+      const value = decodePlotValue(rawRegisters, address, 'uint')
+      return value === null ? '—' : String(value >>> 0)
+    }
+    case 's32': {
+      const value = decodePlotValue(rawRegisters, address, 'int')
+      return value === null ? '—' : String(value)
+    }
+    case 'f32': {
+      const value = decodePlotValue(rawRegisters, address, 'float')
+      return value === null ? '—' : Number(value).toPrecision(7)
+    }
+    case 'u64': {
+      const value = decodePlotValue(rawRegisters, address, 'ulong')
+      return value === null ? '—' : String(value)
+    }
+    case 's64': {
+      const value = decodePlotValue(rawRegisters, address, 'long')
+      return value === null ? '—' : String(value)
+    }
+    case 'f64': {
+      const value = decodePlotValue(rawRegisters, address, 'double')
+      return value === null ? '—' : Number(value).toPrecision(15)
+    }
+    default:
+      return String(word & 0xffff)
+  }
+}
+
+const parseDisplayInputToRawRegister = (
+  input: string,
+  mode: RegisterDisplayFormat
+): number | null => {
+  if (mode === 'u16') {
+    const value = Number(input)
+    if (!Number.isFinite(value)) return null
+    return Math.max(0, Math.min(65535, Math.round(value)))
+  }
+
+  if (mode === 's16') {
+    const value = Number(input)
+    if (!Number.isFinite(value)) return null
+    const clamped = Math.max(-32768, Math.min(32767, Math.round(value)))
+    return clamped < 0 ? clamped + 0x10000 : clamped
+  }
+
+  if (mode === 'hex16') {
+    const normalized = input.trim().replace(/^0x/i, '')
+    if (!/^[0-9a-fA-F]{1,4}$/.test(normalized)) return null
+    return parseInt(normalized, 16) & 0xffff
+  }
+
+  if (mode === 'bin16') {
+    const normalized = input.trim().replace(/^0b/i, '')
+    if (!/^[01]{1,16}$/.test(normalized)) return null
+    return parseInt(normalized, 2) & 0xffff
+  }
+
+  return null
 }
 
 // =============================================================================
@@ -1545,6 +1661,8 @@ const Server = (): JSX.Element => {
   const [typedBatchMode, setTypedBatchMode] = useState<PlotInterpretation>('short')
   const [typedValueEditMenu, setTypedValueEditMenu] = useState<TypedValueEditMenuState | null>(null)
   const [typedBatchMenu, setTypedBatchMenu] = useState<TypedBatchMenuState | null>(null)
+  const [displayFormatEditMenu, setDisplayFormatEditMenu] =
+    useState<DisplayFormatEditMenuState | null>(null)
 
   const [tablePagination, setTablePagination] = useState<
     Record<string, { page: number; rowsPerPage: number }>
@@ -1652,9 +1770,12 @@ const Server = (): JSX.Element => {
 
   const openRegisterGroup = (connectionId: string, slaveId: string, registerGroupId: string) => {
     const tabId = `${connectionId}-${slaveId}-${registerGroupId}`
-    if (!openTabs.find((t) => `${t.connectionId}-${t.slaveId}-${t.registerGroupId}` === tabId)) {
-      setOpenTabs([
-        ...openTabs,
+    setOpenTabs((prev) => {
+      if (prev.find((t) => `${t.connectionId}-${t.slaveId}-${t.registerGroupId}` === tabId)) {
+        return prev
+      }
+      return [
+        ...prev,
         {
           connectionId,
           slaveId,
@@ -1662,10 +1783,11 @@ const Server = (): JSX.Element => {
           selectedAddresses: new Set(),
           interpretationTab: 'basic',
           stringEncoding: 'UTF-8',
-          typedInterpretation: {}
+          typedInterpretation: {},
+          registerDisplayFormat: {}
         }
-      ])
-    }
+      ]
+    })
     setActiveTabId(tabId)
   }
 
@@ -1684,8 +1806,8 @@ const Server = (): JSX.Element => {
   }
 
   const updateTab = (tabId: string, updates: Partial<OpenTab>) => {
-    setOpenTabs(
-      openTabs.map((t) =>
+    setOpenTabs((prev) =>
+      prev.map((t) =>
         `${t.connectionId}-${t.slaveId}-${t.registerGroupId}` === tabId ? { ...t, ...updates } : t
       )
     )
@@ -1775,6 +1897,7 @@ const Server = (): JSX.Element => {
     tabId: string
   ): void => {
     event.preventDefault()
+    setDisplayFormatEditMenu(null)
     setTypedValueEditMenu(null)
     setTypedBatchMenu({
       tabId,
@@ -1790,8 +1913,26 @@ const Server = (): JSX.Element => {
   ): void => {
     event.preventDefault()
     event.stopPropagation()
+    setDisplayFormatEditMenu(null)
     setTypedBatchMenu(null)
     setTypedValueEditMenu({
+      tabId,
+      address,
+      mouseX: event.clientX + 2,
+      mouseY: event.clientY - 6
+    })
+  }
+
+  const handleOpenDisplayFormatMenu = (
+    event: ReactMouseEvent<HTMLElement>,
+    tabId: string,
+    address: number
+  ): void => {
+    event.preventDefault()
+    event.stopPropagation()
+    setTypedBatchMenu(null)
+    setTypedValueEditMenu(null)
+    setDisplayFormatEditMenu({
       tabId,
       address,
       mouseX: event.clientX + 2,
@@ -1806,8 +1947,8 @@ const Server = (): JSX.Element => {
     address: number,
     updates: Partial<Register>
   ) => {
-    setConnections(
-      connections.map((conn) => {
+    setConnections((prev) =>
+      prev.map((conn) => {
         if (conn.id !== connectionId) return conn
         return {
           ...conn,
@@ -1967,13 +2108,34 @@ const Server = (): JSX.Element => {
     slave: Slave,
     group: RegisterGroup
   ): void => {
-    const selectedRegisters = group.registers
-      .filter((reg) => tab.selectedAddresses.has(reg.address))
-      .sort((a, b) => a.address - b.address)
-
+    const selectedRegisters = group.registers.filter((reg) => tab.selectedAddresses.has(reg.address))
     if (selectedRegisters.length === 0) return
 
+    const allAddresses = new Set(group.registers.map((reg) => reg.address))
+    const typedSpanHints = buildTypedSpanHints(allAddresses, tab.typedInterpretation)
     const defaultInterpretation = getDefaultTypedInterpretation(group.type)
+
+    const seriesByAddress = new Map<number, RegisterPlotWindowInit['series'][number]>()
+    selectedRegisters
+      .sort((a, b) => a.address - b.address)
+      .forEach((reg) => {
+        const explicitMode = tab.typedInterpretation[reg.address]
+        const typedSpanHint = typedSpanHints.get(reg.address)
+        const effectiveTypedSpanHint =
+          explicitMode && typedSpanHint && explicitMode !== typedSpanHint.mode ? undefined : typedSpanHint
+        const startAddress = effectiveTypedSpanHint ? effectiveTypedSpanHint.startAddress : reg.address
+        const interpretation = explicitMode || effectiveTypedSpanHint?.mode || defaultInterpretation
+
+        if (seriesByAddress.has(startAddress)) return
+
+        const sourceRegister = group.registers.find((item) => item.address === startAddress) || reg
+        seriesByAddress.set(startAddress, {
+          address: startAddress,
+          label: sourceRegister.variableName || formatAddress(startAddress),
+          color: getRegisterColor(startAddress),
+          interpretation
+        })
+      })
 
     const payload: RegisterPlotWindowInit = {
       chartId: uuidv4(),
@@ -1985,12 +2147,7 @@ const Server = (): JSX.Element => {
       registerGroupId: group.id,
       registerGroupName: group.name,
       registerType: group.type,
-      series: selectedRegisters.map((reg) => ({
-        address: reg.address,
-        label: reg.variableName || formatAddress(reg.address),
-        color: getRegisterColor(reg.address),
-        interpretation: tab.typedInterpretation[reg.address] || defaultInterpretation
-      }))
+      series: [...seriesByAddress.values()]
     }
 
     sendEvent('open_register_plot_window', payload)
@@ -2117,7 +2274,7 @@ const Server = (): JSX.Element => {
                   onClick={() => sendEvent('open_comm_log_window')}
                   startIcon={<CommDetailsIcon />}
                 >
-                  {t('transaction.title')}
+                  {t('server.toolbar.commDetails')}
                 </Button>
               </Tooltip>
               <Tooltip title={t('server.toolbar.editScript')}>
@@ -2272,6 +2429,7 @@ const Server = (): JSX.Element => {
                 const rawRegisterMap = Object.fromEntries(
                   group.registers.map((r) => [r.address, r.value])
                 )
+                const allRegisterAddresses = group.registers.map((r) => r.address)
                 const longGroups = extractConsecutiveGroups(selectedRegisters, 2)
                 const floatGroups = extractConsecutiveGroups(selectedRegisters, 2)
                 const doubleGroups = extractConsecutiveGroups(selectedRegisters, 4)
@@ -2320,30 +2478,22 @@ const Server = (): JSX.Element => {
                   currentWidths.variable +
                   currentWidths.value +
                   currentWidths.comments
-                const getColumnBaseBg = (column: TableColumnKey): ((theme: Theme) => string) => {
-                  return (theme) => {
-                    switch (column) {
-                      case 'type':
-                      case 'variable':
-                      case 'comments':
-                        return alpha(theme.palette.action.hover, 0.2)
-                      default:
-                        return 'transparent'
-                    }
-                  }
-                }
-                const getColumnHeaderBg = (column: TableColumnKey): ((theme: Theme) => string) => {
-                  return (theme) => {
-                    switch (column) {
-                      case 'type':
-                      case 'variable':
-                      case 'comments':
-                        return alpha(theme.palette.action.hover, 0.42)
-                      default:
-                        return theme.palette.action.hover
-                    }
-                  }
-                }
+                const plotAddressBackground = new Map<number, string>()
+                plotWindows
+                  .filter(
+                    (plotWindow) =>
+                      plotWindow.connectionId === tab.connectionId &&
+                      plotWindow.slaveId === tab.slaveId &&
+                      plotWindow.registerGroupId === tab.registerGroupId
+                  )
+                  .forEach((plotWindow) => {
+                    plotWindow.series.forEach((series) => {
+                      const span = getWordSpanForInterpretation(series.interpretation)
+                      for (let i = 0; i < span; i++) {
+                        plotAddressBackground.set(series.address + i, plotWindow.selectionColor)
+                      }
+                    })
+                  })
 
                 return (
                   <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -2408,7 +2558,7 @@ const Server = (): JSX.Element => {
                                         onChange={() =>
                                           selectAllAddresses(
                                             activeTabId,
-                                            group.registers.map((r) => r.address)
+                                            allRegisterAddresses
                                           )
                                         }
                                       />
@@ -2418,7 +2568,7 @@ const Server = (): JSX.Element => {
                                         fontWeight: 'bold',
                                         width: currentWidths.type,
                                         minWidth: currentWidths.type,
-                                        bgcolor: getColumnHeaderBg('type'),
+                                        bgcolor: 'action.hover',
                                         whiteSpace: 'nowrap',
                                         position: 'relative',
                                         borderRight: '1px solid',
@@ -2463,7 +2613,7 @@ const Server = (): JSX.Element => {
                                         fontWeight: 'bold',
                                         width: currentWidths.address,
                                         minWidth: currentWidths.address,
-                                        bgcolor: getColumnHeaderBg('address'),
+                                        bgcolor: 'action.hover',
                                         whiteSpace: 'nowrap',
                                         position: 'relative',
                                         borderRight: '1px solid',
@@ -2508,7 +2658,7 @@ const Server = (): JSX.Element => {
                                         fontWeight: 'bold',
                                         width: currentWidths.variable,
                                         minWidth: currentWidths.variable,
-                                        bgcolor: getColumnHeaderBg('variable'),
+                                        bgcolor: 'action.hover',
                                         whiteSpace: 'nowrap',
                                         position: 'relative',
                                         borderRight: '1px solid',
@@ -2553,7 +2703,7 @@ const Server = (): JSX.Element => {
                                         fontWeight: 'bold',
                                         width: currentWidths.value,
                                         minWidth: currentWidths.value,
-                                        bgcolor: getColumnHeaderBg('value'),
+                                        bgcolor: 'action.hover',
                                         whiteSpace: 'nowrap',
                                         position: 'relative',
                                         borderRight: '1px solid',
@@ -2596,7 +2746,7 @@ const Server = (): JSX.Element => {
                                     <TableCell
                                       sx={{
                                         fontWeight: 'bold',
-                                        bgcolor: getColumnHeaderBg('comments'),
+                                        bgcolor: 'action.hover',
                                         width: currentWidths.comments,
                                         minWidth: currentWidths.comments,
                                         whiteSpace: 'nowrap',
@@ -2641,7 +2791,7 @@ const Server = (): JSX.Element => {
                                   </TableRow>
                                 </TableHead>
                                 <TableBody>
-                                  {paginatedRegisters.map((register) => {
+                                  {paginatedRegisters.map((register, rowIndex) => {
                                     const isSelected = tab.selectedAddresses.has(register.address)
                                     const typedSpanHint = typedSpanHints.get(register.address)
                                     const explicitMode = tab.typedInterpretation[register.address]
@@ -2653,18 +2803,21 @@ const Server = (): JSX.Element => {
                                       explicitMode ||
                                       effectiveTypedSpanHint?.mode ||
                                       defaultTypedInterpretation
-                                    const linkedPlotWindow = plotWindows.find(
-                                      (plotWindow) =>
-                                        plotWindow.connectionId === tab.connectionId &&
-                                        plotWindow.slaveId === tab.slaveId &&
-                                        plotWindow.registerGroupId === tab.registerGroupId &&
-                                        plotWindow.series.some((s) => s.address === register.address)
-                                    )
                                     const interpretedBackground = effectiveTypedSpanHint
                                       ? getPlotSelectionColor(effectiveTypedSpanHint.startAddress)
                                       : undefined
                                     const valueBackground =
-                                      interpretedBackground || linkedPlotWindow?.selectionColor
+                                      interpretedBackground || plotAddressBackground.get(register.address)
+                                    const rowStriped = rowIndex % 2 === 1
+                                    const currentDisplayMode =
+                                      tab.registerDisplayFormat[register.address] || 'u16'
+                                    const displayWordSpan = getDisplayWordSpan(currentDisplayMode)
+                                    const displayText = formatDisplayValue(
+                                      rawRegisterMap,
+                                      register.address,
+                                      currentDisplayMode
+                                    )
+                                    const canEditRaw = displayWordSpan === 1
                                     return (
                                       <TableRow
                                         key={register.address}
@@ -2684,10 +2837,21 @@ const Server = (): JSX.Element => {
                                             register.address,
                                             e.ctrlKey || e.metaKey,
                                             e.shiftKey,
-                                            group.registers.map((r) => r.address)
+                                            allRegisterAddresses
                                           )
                                         }
-                                        sx={{ cursor: 'pointer' }}
+                                        sx={{
+                                          cursor: 'pointer',
+                                          bgcolor: rowStriped
+                                            ? (theme) =>
+                                                alpha(
+                                                  theme.palette.mode === 'dark'
+                                                    ? theme.palette.common.white
+                                                    : theme.palette.common.black,
+                                                  theme.palette.mode === 'dark' ? 0.03 : 0.02
+                                                )
+                                            : 'transparent'
+                                        }}
                                       >
                                         <TableCell padding="checkbox">
                                           <Checkbox checked={isSelected} />
@@ -2698,8 +2862,7 @@ const Server = (): JSX.Element => {
                                             minWidth: currentWidths.type,
                                             whiteSpace: 'nowrap',
                                             borderRight: '1px solid',
-                                            borderColor: 'divider',
-                                            bgcolor: getColumnBaseBg('type')
+                                            borderColor: 'divider'
                                           }}
                                         >
                                           {getRegisterTypeChip(group.type)}
@@ -2712,8 +2875,7 @@ const Server = (): JSX.Element => {
                                             minWidth: currentWidths.address,
                                             whiteSpace: 'nowrap',
                                             borderRight: '1px solid',
-                                            borderColor: 'divider',
-                                            bgcolor: getColumnBaseBg('address')
+                                            borderColor: 'divider'
                                           }}
                                         >
                                           {formatAddress(register.address)}
@@ -2723,8 +2885,7 @@ const Server = (): JSX.Element => {
                                             width: currentWidths.variable,
                                             minWidth: currentWidths.variable,
                                             borderRight: '1px solid',
-                                            borderColor: 'divider',
-                                            bgcolor: getColumnBaseBg('variable')
+                                            borderColor: 'divider'
                                           }}
                                         >
                                           <EditableCell
@@ -2757,7 +2918,8 @@ const Server = (): JSX.Element => {
                                                 display: 'flex',
                                                 justifyContent: 'center',
                                                 alignItems: 'center',
-                                                gap: 1
+                                                gap: 1,
+                                                flexWrap: 'wrap'
                                               }}
                                             >
                                               <Switch
@@ -2794,6 +2956,20 @@ const Server = (): JSX.Element => {
                                                   )
                                                 }}
                                               />
+                                              <Chip
+                                                size="small"
+                                                variant="filled"
+                                                color="default"
+                                                data-testid={`display-format-${register.address}`}
+                                                label={currentDisplayMode.toUpperCase()}
+                                                onClick={(event) =>
+                                                  handleOpenDisplayFormatMenu(
+                                                    event,
+                                                    activeTabId,
+                                                    register.address
+                                                  )
+                                                }
+                                              />
                                             </Box>
                                           ) : (
                                             <Box
@@ -2802,21 +2978,27 @@ const Server = (): JSX.Element => {
                                                 flexDirection: 'row',
                                                 alignItems: 'center',
                                                 justifyContent: 'space-between',
-                                                gap: 1
+                                                gap: 1,
+                                                flexWrap: 'wrap'
                                               }}
                                             >
                                               <TextField
                                                 size="small"
-                                                value={register.value}
-                                                onChange={(e) =>
+                                                value={displayText}
+                                                onChange={(e) => {
+                                                  const parsedValue = parseDisplayInputToRawRegister(
+                                                    e.target.value,
+                                                    currentDisplayMode
+                                                  )
+                                                  if (parsedValue === null) return
                                                   updateRegister(
                                                     tab.connectionId,
                                                     tab.slaveId,
                                                     tab.registerGroupId,
                                                     register.address,
-                                                    { value: Number(e.target.value) }
+                                                    { value: parsedValue }
                                                   )
-                                                }
+                                                }}
                                                 sx={{
                                                   flex: 1,
                                                   minWidth: 96,
@@ -2824,8 +3006,9 @@ const Server = (): JSX.Element => {
                                                     bgcolor: valueBackground
                                                   },
                                                   '& .MuiInputBase-input': {
-                                                    color: 'text.primary',
-                                                    fontWeight: 600
+                                                    color: (theme) =>
+                                                      theme.palette.mode === 'dark' ? '#f8fbff' : '#111827',
+                                                    fontWeight: 700
                                                   }
                                                 }}
                                                 inputProps={{
@@ -2833,7 +3016,18 @@ const Server = (): JSX.Element => {
                                                   min: 0,
                                                   max: 65535
                                                 }}
-                                                type="number"
+                                                type={
+                                                  currentDisplayMode === 'hex16' ||
+                                                  currentDisplayMode === 'bin16'
+                                                    ? 'text'
+                                                    : 'number'
+                                                }
+                                                InputProps={{ readOnly: !canEditRaw }}
+                                                helperText={
+                                                  canEditRaw
+                                                    ? ' '
+                                                    : `Requires ${displayWordSpan} registers`
+                                                }
                                                 onClick={(e) => e.stopPropagation()}
                                               />
                                               <Chip
@@ -2858,6 +3052,21 @@ const Server = (): JSX.Element => {
                                                   )
                                                 }}
                                               />
+                                              <Chip
+                                                size="small"
+                                                variant="filled"
+                                                color="default"
+                                                data-testid={`display-format-${register.address}`}
+                                                label={`${currentDisplayMode.toUpperCase()} (${displayWordSpan}w)`}
+                                                sx={{ flexShrink: 0 }}
+                                                onClick={(event) =>
+                                                  handleOpenDisplayFormatMenu(
+                                                    event,
+                                                    activeTabId,
+                                                    register.address
+                                                  )
+                                                }
+                                              />
                                             </Box>
                                           )}
                                         </TableCell>
@@ -2866,8 +3075,7 @@ const Server = (): JSX.Element => {
                                             width: currentWidths.comments,
                                             minWidth: currentWidths.comments,
                                             borderRight: '1px solid',
-                                            borderColor: 'divider',
-                                            bgcolor: getColumnBaseBg('comments')
+                                            borderColor: 'divider'
                                           }}
                                         >
                                           <EditableCell
@@ -3379,6 +3587,35 @@ const Server = (): JSX.Element => {
                           </MenuItem>
                         )
                       })}
+                    </Menu>
+                    <Menu
+                      open={!!displayFormatEditMenu && displayFormatEditMenu.tabId === activeTabId}
+                      onClose={() => setDisplayFormatEditMenu(null)}
+                      anchorReference="anchorPosition"
+                      anchorPosition={
+                        displayFormatEditMenu
+                          ? { top: displayFormatEditMenu.mouseY, left: displayFormatEditMenu.mouseX }
+                          : undefined
+                      }
+                    >
+                      {DISPLAY_FORMAT_OPTIONS.map((option) => (
+                        <MenuItem
+                          key={`ctx-display-${option.mode}`}
+                          onClick={() => {
+                            const targetAddress = displayFormatEditMenu?.address
+                            if (targetAddress === undefined || targetAddress === null) return
+                            updateTab(activeTabId, {
+                              registerDisplayFormat: {
+                                ...tab.registerDisplayFormat,
+                                [targetAddress]: option.mode
+                              }
+                            })
+                            setDisplayFormatEditMenu(null)
+                          }}
+                        >
+                          {option.label} ({option.words}w)
+                        </MenuItem>
+                      ))}
                     </Menu>
                   </Box>
                 )

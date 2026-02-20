@@ -92,11 +92,11 @@ test('realistic server user journey e2e', async () => {
   await plotPage.waitForLoadState('domcontentloaded')
   await expect(plotPage.getByText(/Plot -/)).toBeVisible()
   await expect(plotPage.locator('[role="combobox"]')).toHaveCount(0)
-  await expect(plotPage.getByRole('button', { name: 'Pause' })).toBeVisible()
-  await plotPage.getByRole('button', { name: 'Pause' }).click()
-  await expect(plotPage.getByRole('button', { name: 'Resume' })).toBeVisible()
-  await plotPage.getByRole('checkbox', { name: 'Y Auto' }).click()
-  await expect(plotPage.getByLabel('Y Min')).toBeEnabled()
+  await expect(plotPage.getByRole('button', { name: /Stop|停止/ })).toBeVisible()
+  await plotPage.getByRole('button', { name: /Stop|停止/ }).click()
+  await expect(plotPage.getByRole('button', { name: /Continue|继续/ })).toBeVisible()
+  await plotPage.getByRole('checkbox', { name: /Y Auto|Y 轴自适应/ }).click()
+  await expect(plotPage.getByLabel(/Y Min|Y 最小值/)).toBeEnabled()
   await plotPage.close()
 
   await page.getByText(JOURNEY_CONN_ALIAS, { exact: true }).click()
@@ -107,7 +107,7 @@ test('realistic server user journey e2e', async () => {
   await page.getByRole('button', { name: /通讯详情|Communication Details/ }).click()
   const commPage = await commWindowPromise
   await commPage.waitForLoadState('domcontentloaded')
-  await expect(commPage.getByText(/通讯日志|Transaction Log/)).toBeVisible()
+  await expect(commPage.getByText(/通讯详情|Communication Details/)).toBeVisible()
 
   const response = await sendReadHoldingRegisters('127.0.0.1', JOURNEY_PORT, 4, 0, 2)
   expect(response.length).toBeGreaterThan(0)

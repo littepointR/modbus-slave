@@ -12,12 +12,14 @@ import {
 import type { PlotInterpretation, RegisterPlotData, RegisterPlotWindowInit } from '@shared'
 import { onEvent } from '@renderer/events'
 import { decodePlotValue, getWordSpanForInterpretation } from './register-plot.helpers'
+import { useTranslation } from 'react-i18next'
 
 interface PlotSample extends RegisterPlotData {}
 
 const STROKE_PATTERNS = ['', '6 4', '2 3', '10 4', '4 2 1 2']
 
 const RegisterPlotWindow = (): JSX.Element => {
+  const { t } = useTranslation()
   const [config, setConfig] = useState<RegisterPlotWindowInit | null>(null)
   const [samples, setSamples] = useState<PlotSample[]>([])
   const [paused, setPaused] = useState(false)
@@ -151,13 +153,6 @@ const RegisterPlotWindow = (): JSX.Element => {
             </Typography>
           </Box>
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, justifyContent: 'flex-end' }}>
-            <Button
-              size="small"
-              variant={paused ? 'contained' : 'outlined'}
-              onClick={() => setPaused((prev) => !prev)}
-            >
-              {paused ? 'Resume' : 'Pause'}
-            </Button>
             <FormControlLabel
               sx={{ mr: 0 }}
               control={
@@ -172,7 +167,7 @@ const RegisterPlotWindow = (): JSX.Element => {
                   }}
                 />
               }
-              label="X Auto"
+              label={t('common.autoScaleX')}
             />
             <FormControlLabel
               sx={{ mr: 0 }}
@@ -183,11 +178,11 @@ const RegisterPlotWindow = (): JSX.Element => {
                   onChange={(e) => setYAutoScale(e.target.checked)}
                 />
               }
-              label="Y Auto"
+              label={t('common.autoScaleY')}
             />
             <TextField
               size="small"
-              label="Y Min"
+              label={t('common.yMin')}
               value={yMinInput}
               onChange={(e) => setYMinInput(e.target.value)}
               disabled={yAutoScale}
@@ -195,12 +190,20 @@ const RegisterPlotWindow = (): JSX.Element => {
             />
             <TextField
               size="small"
-              label="Y Max"
+              label={t('common.yMax')}
               value={yMaxInput}
               onChange={(e) => setYMaxInput(e.target.value)}
               disabled={yAutoScale}
               sx={{ width: 96 }}
             />
+            <Button
+              size="small"
+              variant={paused ? 'contained' : 'outlined'}
+              onClick={() => setPaused((prev) => !prev)}
+              sx={{ ml: 0.5 }}
+            >
+              {paused ? t('common.continue') : t('common.stop')}
+            </Button>
           </Box>
         </Box>
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>

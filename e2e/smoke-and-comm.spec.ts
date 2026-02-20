@@ -40,8 +40,7 @@ test.describe.serial('Server Smoke And Comm E2E', () => {
       page.evaluate(() => localStorage.getItem('modbux.theme.mode'))
     ).resolves.toBe('light')
 
-    await page.getByTestId('theme-color-select').click()
-    await page.getByRole('option', { name: /Blue|蓝色/ }).click()
+    await page.getByLabel(/Blue|蓝色/).click()
     await expect(
       page.evaluate(() => localStorage.getItem('modbux.theme.color'))
     ).resolves.toBe('blue')
@@ -212,14 +211,14 @@ test.describe.serial('Server Smoke And Comm E2E', () => {
     await expect(plotPage!.getByText(/0x0001/i)).toBeVisible()
     await expect(plotPage!.locator('[role="combobox"]')).toHaveCount(0)
     await expect(plotPage!.getByText(/\([124]w\)/)).toHaveCount(2)
-    await expect(plotPage!.getByRole('checkbox', { name: 'X Auto' })).toBeChecked()
-    await expect(plotPage!.getByRole('checkbox', { name: 'Y Auto' })).toBeChecked()
-    await expect(plotPage!.getByLabel('Y Min')).toBeDisabled()
-    await expect(plotPage!.getByRole('button', { name: 'Pause' })).toBeVisible()
-    await plotPage!.getByRole('button', { name: 'Pause' }).click()
-    await expect(plotPage!.getByRole('button', { name: 'Resume' })).toBeVisible()
-    await plotPage!.getByRole('checkbox', { name: 'Y Auto' }).click()
-    await expect(plotPage!.getByLabel('Y Min')).toBeEnabled()
+    await expect(plotPage!.getByRole('checkbox', { name: /X Auto|X 轴自适应/ })).toBeChecked()
+    await expect(plotPage!.getByRole('checkbox', { name: /Y Auto|Y 轴自适应/ })).toBeChecked()
+    await expect(plotPage!.getByLabel(/Y Min|Y 最小值/)).toBeDisabled()
+    await expect(plotPage!.getByRole('button', { name: /Stop|停止/ })).toBeVisible()
+    await plotPage!.getByRole('button', { name: /Stop|停止/ }).click()
+    await expect(plotPage!.getByRole('button', { name: /Continue|继续/ })).toBeVisible()
+    await plotPage!.getByRole('checkbox', { name: /Y Auto|Y 轴自适应/ }).click()
+    await expect(plotPage!.getByLabel(/Y Min|Y 最小值/)).toBeEnabled()
 
     const firstValueCell = firstRow.locator('td').nth(4)
     const secondValueCell = secondRow.locator('td').nth(4)
@@ -236,7 +235,7 @@ test.describe.serial('Server Smoke And Comm E2E', () => {
 
     expect(bg1).toBe(bg2)
     expect(bg1).not.toBe('rgba(0, 0, 0, 0)')
-    expect(bg3).toBe('rgba(0, 0, 0, 0)')
+    expect(bg3).toBe(bg1)
 
     await plotPage!.close()
     await expect.poll(async () => app.windows().length).toBe(1)
@@ -255,7 +254,7 @@ test.describe.serial('Server Smoke And Comm E2E', () => {
     const commPage = windows[windows.length - 1]
     await commPage.waitForLoadState('domcontentloaded')
 
-    await expect(commPage.getByText(/通讯日志|Transaction Log/)).toBeVisible()
+    await expect(commPage.getByText(/通讯详情|Communication Details/)).toBeVisible()
     await expect(commPage.getByText(/暂无通讯数据|No communication data/)).toBeVisible()
     await expect(commPage.getByRole('button', { name: /继续|Continue/ })).toBeVisible()
     await expect(commPage.getByRole('button', { name: /停止|Stop/ })).toBeVisible()
