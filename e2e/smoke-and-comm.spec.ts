@@ -220,9 +220,9 @@ test.describe.serial('Server Smoke And Comm E2E', () => {
     await plotPage!.getByRole('checkbox', { name: /Y Auto|Y 轴自适应/ }).click()
     await expect(plotPage!.getByLabel(/Y Min|Y 最小值/)).toBeEnabled()
 
-    const firstValueCell = firstRow.locator('td').nth(4)
-    const secondValueCell = secondRow.locator('td').nth(4)
-    const thirdValueCell = thirdRow.locator('td').nth(4)
+    const firstValueCell = firstRow.locator('td').nth(5)
+    const secondValueCell = secondRow.locator('td').nth(5)
+    const thirdValueCell = thirdRow.locator('td').nth(5)
     const firstValueInput = firstValueCell.locator('input[type="number"]').first()
 
     const bg1 = await firstValueCell.evaluate((el) => getComputedStyle(el).backgroundColor)

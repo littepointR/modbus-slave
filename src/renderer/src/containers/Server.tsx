@@ -88,6 +88,7 @@ interface Register {
   value: number
   variableName: string
   comment: string
+  displayFormat?: RegisterDisplayFormat
 }
 
 interface RegisterGroup {
@@ -261,18 +262,26 @@ interface TypedSpanHint {
   index: number
 }
 
-type TableColumnKey = 'type' | 'address' | 'variable' | 'value' | 'comments'
+type TableColumnKey =
+  | 'interpretation'
+  | 'display'
+  | 'address'
+  | 'variable'
+  | 'value'
+  | 'comments'
 
 const DEFAULT_TABLE_COLUMN_WIDTHS: Record<TableColumnKey, number> = {
-  type: 140,
+  interpretation: 150,
+  display: 130,
   address: 140,
   variable: 220,
-  value: 260,
+  value: 220,
   comments: 260
 }
 
 const MIN_TABLE_COLUMN_WIDTHS: Record<TableColumnKey, number> = {
-  type: 110,
+  interpretation: 130,
+  display: 110,
   address: 100,
   variable: 140,
   value: 180,
@@ -599,6 +608,107 @@ const parseDisplayInputToRawRegister = (
 
   return null
 }
+
+const INTERPRETATION_COLORS: Record<
+  PlotInterpretation,
+  { bg: string; fg: string; border: string }
+> = {
+  short: { bg: '#e3f2fd', fg: '#0d47a1', border: '#90caf9' },
+  ushort: { bg: '#e8f5e9', fg: '#1b5e20', border: '#a5d6a7' },
+  int: { bg: '#f3e5f5', fg: '#4a148c', border: '#ce93d8' },
+  uint: { bg: '#fff3e0', fg: '#e65100', border: '#ffcc80' },
+  long: { bg: '#ede7f6', fg: '#311b92', border: '#b39ddb' },
+  ulong: { bg: '#e0f2f1', fg: '#004d40', border: '#80cbc4' },
+  float: { bg: '#fce4ec', fg: '#880e4f', border: '#f48fb1' },
+  double: { bg: '#f1f8e9', fg: '#33691e', border: '#c5e1a5' }
+}
+
+const DISPLAY_COLORS: Record<
+  RegisterDisplayFormat,
+  { bg: string; fg: string; border: string }
+> = {
+  u16: { bg: '#e8f5e9', fg: '#1b5e20', border: '#a5d6a7' },
+  s16: { bg: '#fff3e0', fg: '#e65100', border: '#ffcc80' },
+  hex16: { bg: '#ede7f6', fg: '#311b92', border: '#b39ddb' },
+  bin16: { bg: '#e3f2fd', fg: '#0d47a1', border: '#90caf9' },
+  u32: { bg: '#e0f2f1', fg: '#004d40', border: '#80cbc4' },
+  s32: { bg: '#fce4ec', fg: '#880e4f', border: '#f48fb1' },
+  f32: { bg: '#f3e5f5', fg: '#4a148c', border: '#ce93d8' },
+  u64: { bg: '#f1f8e9', fg: '#33691e', border: '#c5e1a5' },
+  s64: { bg: '#efebe9', fg: '#3e2723', border: '#bcaaa4' },
+  f64: { bg: '#fff8e1', fg: '#ff6f00', border: '#ffe082' }
+}
+
+const NumericRegisterInput = memo(
+  ({
+    value,
+    mode,
+    editable,
+    bgColor,
+    onCommit
+  }: {
+    value: number
+    mode: RegisterDisplayFormat
+    editable: boolean
+    bgColor?: string
+    onCommit: (raw: number) => void
+  }) => {
+    const [draft, setDraft] = useState<string>(formatDisplayValue({ 0: value }, 0, mode))
+
+    useEffect(() => {
+      setDraft(formatDisplayValue({ 0: value }, 0, mode))
+    }, [value, mode])
+
+    const commitDraft = () => {
+      if (!editable) return
+      const parsed = parseDisplayInputToRawRegister(draft, mode)
+      if (parsed === null) {
+        setDraft(formatDisplayValue({ 0: value }, 0, mode))
+        return
+      }
+      onCommit(parsed)
+    }
+
+    return (
+      <TextField
+        size="small"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commitDraft}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            commitDraft()
+          }
+          if (e.key === 'Escape') {
+            setDraft(formatDisplayValue({ 0: value }, 0, mode))
+          }
+        }}
+        sx={{
+          flex: 1,
+          minWidth: 96,
+          '& .MuiInputBase-root': {
+            bgcolor: bgColor
+          },
+          '& .MuiInputBase-input': {
+            color: (theme) => (theme.palette.mode === 'dark' ? '#f8fbff' : '#111827'),
+            fontWeight: 700
+          }
+        }}
+        inputProps={{
+          style: { textAlign: 'center' },
+          min: 0,
+          max: 65535
+        }}
+        type={mode === 'hex16' || mode === 'bin16' ? 'text' : 'number'}
+        InputProps={{ readOnly: !editable }}
+        helperText={editable ? ' ' : `Requires ${getDisplayWordSpan(mode)} registers`}
+      />
+    )
+  }
+)
+
+NumericRegisterInput.displayName = 'NumericRegisterInput'
 
 // =============================================================================
 // COMPONENTS
@@ -2447,14 +2557,23 @@ const Server = (): JSX.Element => {
                 }
                 const getAutoFitWidth = (column: TableColumnKey): number => {
                   const headerText: Record<TableColumnKey, string> = {
-                    type: 'Register Type',
+                    interpretation: 'Interpretation',
+                    display: 'Display',
                     address: 'Address',
                     variable: 'Variable Name',
                     value: 'Value',
                     comments: 'Comments'
                   }
                   const values = group.registers.map((register) => {
-                    if (column === 'type') return getRegisterTypeName(group.type)
+                    if (column === 'interpretation') {
+                      return (
+                        tab.typedInterpretation[register.address] ||
+                        defaultTypedInterpretation
+                      ).toUpperCase()
+                    }
+                    if (column === 'display') {
+                      return (tab.registerDisplayFormat[register.address] || 'u16').toUpperCase()
+                    }
                     if (column === 'address') return formatAddress(register.address)
                     if (column === 'variable') return register.variableName || 'Double-click to edit'
                     if (column === 'value') return String(register.value)
@@ -2473,7 +2592,8 @@ const Server = (): JSX.Element => {
                 }
                 const tableMinWidth =
                   56 +
-                  currentWidths.type +
+                  currentWidths.interpretation +
+                  currentWidths.display +
                   currentWidths.address +
                   currentWidths.variable +
                   currentWidths.value +
@@ -2566,25 +2686,25 @@ const Server = (): JSX.Element => {
                                     <TableCell
                                       sx={{
                                         fontWeight: 'bold',
-                                        width: currentWidths.type,
-                                        minWidth: currentWidths.type,
-                                        bgcolor: 'action.hover',
+                                        width: currentWidths.interpretation,
+                                        minWidth: currentWidths.interpretation,
+                                        bgcolor: (theme) => alpha(theme.palette.action.hover, 0.42),
                                         whiteSpace: 'nowrap',
                                         position: 'relative',
                                         borderRight: '1px solid',
                                         borderColor: 'divider'
                                       }}
                                     >
-                                      Register Type
+                                      Interpretation
                                       <Box
                                         data-testid="col-resize-type"
                                         onMouseDown={(event) => {
                                           event.preventDefault()
                                           setColumnResizeState({
                                             tabId: activeTabId,
-                                            column: 'type',
+                                            column: 'interpretation',
                                             startX: event.clientX,
-                                            startWidth: currentWidths.type
+                                            startWidth: currentWidths.interpretation
                                           })
                                         }}
                                         onDoubleClick={(event) => {
@@ -2593,7 +2713,52 @@ const Server = (): JSX.Element => {
                                             ...prev,
                                             [activeTabId]: {
                                               ...prev[activeTabId],
-                                              type: getAutoFitWidth('type')
+                                              interpretation: getAutoFitWidth('interpretation')
+                                            }
+                                          }))
+                                        }}
+                                        sx={{
+                                          position: 'absolute',
+                                          top: 0,
+                                          right: -2,
+                                          width: 6,
+                                          height: '100%',
+                                          cursor: 'col-resize',
+                                          zIndex: 2
+                                        }}
+                                      />
+                                    </TableCell>
+                                    <TableCell
+                                      sx={{
+                                        fontWeight: 'bold',
+                                        width: currentWidths.display,
+                                        minWidth: currentWidths.display,
+                                        bgcolor: (theme) => alpha(theme.palette.action.hover, 0.24),
+                                        whiteSpace: 'nowrap',
+                                        position: 'relative',
+                                        borderRight: '1px solid',
+                                        borderColor: 'divider'
+                                      }}
+                                    >
+                                      Display
+                                      <Box
+                                        data-testid="col-resize-display"
+                                        onMouseDown={(event) => {
+                                          event.preventDefault()
+                                          setColumnResizeState({
+                                            tabId: activeTabId,
+                                            column: 'display',
+                                            startX: event.clientX,
+                                            startWidth: currentWidths.display
+                                          })
+                                        }}
+                                        onDoubleClick={(event) => {
+                                          event.preventDefault()
+                                          setTableColumnWidths((prev) => ({
+                                            ...prev,
+                                            [activeTabId]: {
+                                              ...prev[activeTabId],
+                                              display: getAutoFitWidth('display')
                                             }
                                           }))
                                         }}
@@ -2613,7 +2778,7 @@ const Server = (): JSX.Element => {
                                         fontWeight: 'bold',
                                         width: currentWidths.address,
                                         minWidth: currentWidths.address,
-                                        bgcolor: 'action.hover',
+                                        bgcolor: (theme) => alpha(theme.palette.action.hover, 0.42),
                                         whiteSpace: 'nowrap',
                                         position: 'relative',
                                         borderRight: '1px solid',
@@ -2658,7 +2823,7 @@ const Server = (): JSX.Element => {
                                         fontWeight: 'bold',
                                         width: currentWidths.variable,
                                         minWidth: currentWidths.variable,
-                                        bgcolor: 'action.hover',
+                                        bgcolor: (theme) => alpha(theme.palette.action.hover, 0.24),
                                         whiteSpace: 'nowrap',
                                         position: 'relative',
                                         borderRight: '1px solid',
@@ -2703,7 +2868,7 @@ const Server = (): JSX.Element => {
                                         fontWeight: 'bold',
                                         width: currentWidths.value,
                                         minWidth: currentWidths.value,
-                                        bgcolor: 'action.hover',
+                                        bgcolor: (theme) => alpha(theme.palette.action.hover, 0.42),
                                         whiteSpace: 'nowrap',
                                         position: 'relative',
                                         borderRight: '1px solid',
@@ -2746,7 +2911,7 @@ const Server = (): JSX.Element => {
                                     <TableCell
                                       sx={{
                                         fontWeight: 'bold',
-                                        bgcolor: 'action.hover',
+                                        bgcolor: (theme) => alpha(theme.palette.action.hover, 0.24),
                                         width: currentWidths.comments,
                                         minWidth: currentWidths.comments,
                                         whiteSpace: 'nowrap',
@@ -2812,11 +2977,6 @@ const Server = (): JSX.Element => {
                                     const currentDisplayMode =
                                       tab.registerDisplayFormat[register.address] || 'u16'
                                     const displayWordSpan = getDisplayWordSpan(currentDisplayMode)
-                                    const displayText = formatDisplayValue(
-                                      rawRegisterMap,
-                                      register.address,
-                                      currentDisplayMode
-                                    )
                                     const canEditRaw = displayWordSpan === 1
                                     return (
                                       <TableRow
@@ -2858,14 +3018,72 @@ const Server = (): JSX.Element => {
                                         </TableCell>
                                         <TableCell
                                           sx={{
-                                            width: currentWidths.type,
-                                            minWidth: currentWidths.type,
+                                            width: currentWidths.interpretation,
+                                            minWidth: currentWidths.interpretation,
+                                            whiteSpace: 'nowrap',
+                                            borderRight: '1px solid',
+                                            borderColor: 'divider',
+                                            bgcolor: (theme) => alpha(theme.palette.action.hover, 0.14)
+                                          }}
+                                        >
+                                          <Chip
+                                            size="small"
+                                            variant="filled"
+                                            data-testid={`value-format-${register.address}`}
+                                            label={`${currentTypedMode.toUpperCase()} (${getWordSpanForInterpretation(
+                                              currentTypedMode
+                                            )}w)`}
+                                            sx={{
+                                              fontWeight: 700,
+                                              bgcolor: INTERPRETATION_COLORS[currentTypedMode].bg,
+                                              color: INTERPRETATION_COLORS[currentTypedMode].fg,
+                                              border: '1px solid',
+                                              borderColor: INTERPRETATION_COLORS[currentTypedMode].border
+                                            }}
+                                            onClick={(event) => {
+                                              event.stopPropagation()
+                                              if (!isSelected) {
+                                                updateTab(activeTabId, {
+                                                  selectedAddresses: new Set([register.address])
+                                                })
+                                              }
+                                              handleOpenTypedValueEditMenu(
+                                                event,
+                                                activeTabId,
+                                                register.address
+                                              )
+                                            }}
+                                          />
+                                        </TableCell>
+                                        <TableCell
+                                          sx={{
+                                            width: currentWidths.display,
+                                            minWidth: currentWidths.display,
                                             whiteSpace: 'nowrap',
                                             borderRight: '1px solid',
                                             borderColor: 'divider'
                                           }}
                                         >
-                                          {getRegisterTypeChip(group.type)}
+                                          <Chip
+                                            size="small"
+                                            variant="filled"
+                                            data-testid={`display-format-${register.address}`}
+                                            label={`${currentDisplayMode.toUpperCase()} (${displayWordSpan}w)`}
+                                            sx={{
+                                              fontWeight: 700,
+                                              bgcolor: DISPLAY_COLORS[currentDisplayMode].bg,
+                                              color: DISPLAY_COLORS[currentDisplayMode].fg,
+                                              border: '1px solid',
+                                              borderColor: DISPLAY_COLORS[currentDisplayMode].border
+                                            }}
+                                            onClick={(event) =>
+                                              handleOpenDisplayFormatMenu(
+                                                event,
+                                                activeTabId,
+                                                register.address
+                                              )
+                                            }
+                                          />
                                         </TableCell>
                                         <TableCell
                                           sx={{
@@ -2875,7 +3093,8 @@ const Server = (): JSX.Element => {
                                             minWidth: currentWidths.address,
                                             whiteSpace: 'nowrap',
                                             borderRight: '1px solid',
-                                            borderColor: 'divider'
+                                            borderColor: 'divider',
+                                            bgcolor: (theme) => alpha(theme.palette.action.hover, 0.14)
                                           }}
                                         >
                                           {formatAddress(register.address)}
@@ -2916,7 +3135,7 @@ const Server = (): JSX.Element => {
                                             <Box
                                               sx={{
                                                 display: 'flex',
-                                                justifyContent: 'center',
+                                                justifyContent: 'space-between',
                                                 alignItems: 'center',
                                                 gap: 1,
                                                 flexWrap: 'wrap'
@@ -2937,39 +3156,12 @@ const Server = (): JSX.Element => {
                                                 size="small"
                                                 onClick={(e) => e.stopPropagation()}
                                               />
-                                              <Chip
-                                                size="small"
-                                                variant="outlined"
-                                                data-testid={`value-format-${register.address}`}
-                                                label={currentTypedMode.toUpperCase()}
-                                                onClick={(event) => {
-                                                  event.stopPropagation()
-                                                  if (!isSelected) {
-                                                    updateTab(activeTabId, {
-                                                      selectedAddresses: new Set([register.address])
-                                                    })
-                                                  }
-                                                  handleOpenTypedValueEditMenu(
-                                                    event,
-                                                    activeTabId,
-                                                    register.address
-                                                  )
-                                                }}
-                                              />
-                                              <Chip
-                                                size="small"
-                                                variant="filled"
-                                                color="default"
-                                                data-testid={`display-format-${register.address}`}
-                                                label={currentDisplayMode.toUpperCase()}
-                                                onClick={(event) =>
-                                                  handleOpenDisplayFormatMenu(
-                                                    event,
-                                                    activeTabId,
-                                                    register.address
-                                                  )
-                                                }
-                                              />
+                                              <Typography
+                                                variant="body2"
+                                                sx={{ fontFamily: 'monospace', fontWeight: 700 }}
+                                              >
+                                                {register.value !== 0 ? '1' : '0'}
+                                              </Typography>
                                             </Box>
                                           ) : (
                                             <Box
@@ -2982,88 +3174,18 @@ const Server = (): JSX.Element => {
                                                 flexWrap: 'wrap'
                                               }}
                                             >
-                                              <TextField
-                                                size="small"
-                                                value={displayText}
-                                                onChange={(e) => {
-                                                  const parsedValue = parseDisplayInputToRawRegister(
-                                                    e.target.value,
-                                                    currentDisplayMode
-                                                  )
-                                                  if (parsedValue === null) return
+                                              <NumericRegisterInput
+                                                value={register.value}
+                                                mode={currentDisplayMode}
+                                                editable={canEditRaw}
+                                                bgColor={valueBackground}
+                                                onCommit={(parsedValue) =>
                                                   updateRegister(
                                                     tab.connectionId,
                                                     tab.slaveId,
                                                     tab.registerGroupId,
                                                     register.address,
                                                     { value: parsedValue }
-                                                  )
-                                                }}
-                                                sx={{
-                                                  flex: 1,
-                                                  minWidth: 96,
-                                                  '& .MuiInputBase-root': {
-                                                    bgcolor: valueBackground
-                                                  },
-                                                  '& .MuiInputBase-input': {
-                                                    color: (theme) =>
-                                                      theme.palette.mode === 'dark' ? '#f8fbff' : '#111827',
-                                                    fontWeight: 700
-                                                  }
-                                                }}
-                                                inputProps={{
-                                                  style: { textAlign: 'center' },
-                                                  min: 0,
-                                                  max: 65535
-                                                }}
-                                                type={
-                                                  currentDisplayMode === 'hex16' ||
-                                                  currentDisplayMode === 'bin16'
-                                                    ? 'text'
-                                                    : 'number'
-                                                }
-                                                InputProps={{ readOnly: !canEditRaw }}
-                                                helperText={
-                                                  canEditRaw
-                                                    ? ' '
-                                                    : `Requires ${displayWordSpan} registers`
-                                                }
-                                                onClick={(e) => e.stopPropagation()}
-                                              />
-                                              <Chip
-                                                size="small"
-                                                variant="outlined"
-                                                data-testid={`value-format-${register.address}`}
-                                                label={`${currentTypedMode.toUpperCase()} (${getWordSpanForInterpretation(
-                                                  currentTypedMode
-                                                )}w)`}
-                                                sx={{ flexShrink: 0 }}
-                                                onClick={(event) => {
-                                                  event.stopPropagation()
-                                                  if (!isSelected) {
-                                                    updateTab(activeTabId, {
-                                                      selectedAddresses: new Set([register.address])
-                                                    })
-                                                  }
-                                                  handleOpenTypedValueEditMenu(
-                                                    event,
-                                                    activeTabId,
-                                                    register.address
-                                                  )
-                                                }}
-                                              />
-                                              <Chip
-                                                size="small"
-                                                variant="filled"
-                                                color="default"
-                                                data-testid={`display-format-${register.address}`}
-                                                label={`${currentDisplayMode.toUpperCase()} (${displayWordSpan}w)`}
-                                                sx={{ flexShrink: 0 }}
-                                                onClick={(event) =>
-                                                  handleOpenDisplayFormatMenu(
-                                                    event,
-                                                    activeTabId,
-                                                    register.address
                                                   )
                                                 }
                                               />
@@ -3075,7 +3197,8 @@ const Server = (): JSX.Element => {
                                             width: currentWidths.comments,
                                             minWidth: currentWidths.comments,
                                             borderRight: '1px solid',
-                                            borderColor: 'divider'
+                                            borderColor: 'divider',
+                                            bgcolor: (theme) => alpha(theme.palette.action.hover, 0.14)
                                           }}
                                         >
                                           <EditableCell
@@ -3419,76 +3542,97 @@ const Server = (): JSX.Element => {
                                     )} word(s).`}
                               </Typography>
                             </Paper>
-                            {selectedRegisters.map((reg) => {
-                              const mode =
-                                tab.typedInterpretation[reg.address] || defaultTypedInterpretation
-                              const decoded = decodePlotValue(
-                                rawRegisterMap,
-                                reg.address,
-                                mode
-                              )
-                              const neededWords = getWordSpanForInterpretation(mode)
-                              return (
-                                <Paper
-                                  key={reg.address}
-                                  variant="outlined"
-                                  data-testid={`typed-row-${reg.address}`}
-                                  sx={{ p: 1.5, display: 'flex', alignItems: 'center', gap: 1.5 }}
-                                >
-                                  <Typography sx={{ minWidth: 110, fontFamily: 'monospace' }}>
-                                    {formatAddress(reg.address)}
-                                  </Typography>
-                                  <FormControl size="small" sx={{ minWidth: 150 }}>
-                                    <InputLabel>Type</InputLabel>
-                                    <Select
-                                      label="Type"
-                                      value={mode}
-                                      SelectDisplayProps={{
-                                        'data-testid': `typed-type-${reg.address}`
+                            <Box
+                              sx={{
+                                display: 'grid',
+                                gridTemplateColumns: 'repeat(auto-fill, minmax(420px, 1fr))',
+                                gap: 1.25
+                              }}
+                            >
+                              {selectedRegisters.map((reg) => {
+                                const mode =
+                                  tab.typedInterpretation[reg.address] || defaultTypedInterpretation
+                                const decoded = decodePlotValue(
+                                  rawRegisterMap,
+                                  reg.address,
+                                  mode
+                                )
+                                const neededWords = getWordSpanForInterpretation(mode)
+                                return (
+                                  <Paper
+                                    key={reg.address}
+                                    variant="outlined"
+                                    data-testid={`typed-row-${reg.address}`}
+                                    sx={{
+                                      p: 1.25,
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: 1.25
+                                    }}
+                                  >
+                                    <Typography
+                                      sx={{
+                                        minWidth: 94,
+                                        fontFamily: 'monospace',
+                                        fontWeight: 700
                                       }}
-                                      onChange={(e) =>
-                                        updateTab(activeTabId, {
-                                          typedInterpretation: {
-                                            ...tab.typedInterpretation,
-                                            [reg.address]: e.target.value as PlotInterpretation
-                                          }
-                                        })
-                                      }
                                     >
-                                      {TYPED_INTERPRETATION_OPTIONS.map((opt) => (
-                                        <MenuItem
-                                          key={opt}
-                                          value={opt}
-                                          disabled={
-                                            !canSelectInterpretationAtAddress(
-                                              tab.selectedAddresses,
-                                              reg.address,
-                                              opt
-                                            )
-                                          }
-                                        >
-                                          {opt.toUpperCase()} ({getWordSpanForInterpretation(opt)}w)
-                                        </MenuItem>
-                                      ))}
-                                    </Select>
-                                  </FormControl>
-                                  <TextField
-                                    size="small"
-                                    fullWidth
-                                    label="Decoded Value"
-                                    value={decoded === null ? '' : String(decoded)}
-                                    InputProps={{ readOnly: true }}
-                                    helperText={
-                                      decoded === null
-                                        ? `Need ${neededWords} consecutive words starting at ${formatAddress(
-                                            reg.address
-                                          )}`
-                                        : ' '
-                                    }
-                                  />
-                                </Paper>
-                              )
-                            })}
+                                      {formatAddress(reg.address)}
+                                    </Typography>
+                                    <FormControl size="small" sx={{ width: 148 }}>
+                                      <InputLabel>Type</InputLabel>
+                                      <Select
+                                        label="Type"
+                                        value={mode}
+                                        SelectDisplayProps={{
+                                          'data-testid': `typed-type-${reg.address}`
+                                        }}
+                                        onChange={(e) =>
+                                          updateTab(activeTabId, {
+                                            typedInterpretation: {
+                                              ...tab.typedInterpretation,
+                                              [reg.address]: e.target.value as PlotInterpretation
+                                            }
+                                          })
+                                        }
+                                      >
+                                        {TYPED_INTERPRETATION_OPTIONS.map((opt) => (
+                                          <MenuItem
+                                            key={opt}
+                                            value={opt}
+                                            disabled={
+                                              !canSelectInterpretationAtAddress(
+                                                tab.selectedAddresses,
+                                                reg.address,
+                                                opt
+                                              )
+                                            }
+                                          >
+                                            {opt.toUpperCase()} ({getWordSpanForInterpretation(opt)}w)
+                                          </MenuItem>
+                                        ))}
+                                      </Select>
+                                    </FormControl>
+                                    <Box sx={{ display: 'flex', flexDirection: 'column', minWidth: 170 }}>
+                                      <Typography variant="caption" color="text.secondary">
+                                        Decoded
+                                      </Typography>
+                                      <Typography
+                                        variant="body2"
+                                        sx={{ fontFamily: 'monospace', fontWeight: 700 }}
+                                      >
+                                        {decoded === null ? '—' : String(decoded)}
+                                      </Typography>
+                                      {decoded === null ? (
+                                        <Typography variant="caption" color="warning.main">
+                                          Need {neededWords} words
+                                        </Typography>
+                                      ) : null}
+                                    </Box>
+                                  </Paper>
+                                )
+                              })}
+                            </Box>
                           </Box>
                         ) : tab.interpretationTab === 'string' ? (
                           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -3572,6 +3716,11 @@ const Server = (): JSX.Element => {
                           <MenuItem
                             key={`ctx-value-${mode}`}
                             disabled={!isEnabled}
+                            sx={{
+                              bgcolor: INTERPRETATION_COLORS[mode].bg,
+                              color: INTERPRETATION_COLORS[mode].fg,
+                              '&.Mui-disabled': { opacity: 0.45 }
+                            }}
                             onClick={() => {
                               if (targetAddress === undefined || targetAddress === null) return
                               updateTab(activeTabId, {
@@ -3601,6 +3750,10 @@ const Server = (): JSX.Element => {
                       {DISPLAY_FORMAT_OPTIONS.map((option) => (
                         <MenuItem
                           key={`ctx-display-${option.mode}`}
+                          sx={{
+                            bgcolor: DISPLAY_COLORS[option.mode].bg,
+                            color: DISPLAY_COLORS[option.mode].fg
+                          }}
                           onClick={() => {
                             const targetAddress = displayFormatEditMenu?.address
                             if (targetAddress === undefined || targetAddress === null) return
