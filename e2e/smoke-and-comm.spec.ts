@@ -31,6 +31,31 @@ test.describe.serial('Server Smoke And Comm E2E', () => {
     await expect(page.getByText('Connections', { exact: true })).toBeVisible()
   })
 
+  test('can switch theme mode and theme color from settings', async () => {
+    await page.getByTestId('settings-btn').click()
+
+    await page.getByTestId('theme-mode-select').click()
+    await page.getByRole('option', { name: /Light|亮色/ }).click()
+    await expect(
+      page.evaluate(() => localStorage.getItem('modbux.theme.mode'))
+    ).resolves.toBe('light')
+
+    await page.getByTestId('theme-color-select').click()
+    await page.getByRole('option', { name: /Blue|蓝色/ }).click()
+    await expect(
+      page.evaluate(() => localStorage.getItem('modbux.theme.color'))
+    ).resolves.toBe('blue')
+
+    await page.getByTestId('theme-mode-select').click()
+    await page.getByRole('option', { name: /Auto|自动/ }).click()
+    await expect(
+      page.evaluate(() => localStorage.getItem('modbux.theme.mode'))
+    ).resolves.toBe('system')
+
+    await page.keyboard.press('Escape')
+    await expect(page.getByTestId('settings-btn')).toBeVisible()
+  })
+
   test('can create a TCP connection', async () => {
     await page.getByRole('button', { name: /新建连接|New Connection/ }).click()
     await expect(page.getByRole('heading', { name: /新建连接|New Connection/ })).toBeVisible()
@@ -129,7 +154,7 @@ test.describe.serial('Server Smoke And Comm E2E', () => {
     await expect(firstRow).toContainText('DOUBLE (4w)')
 
     const thirdRow = page.locator('tbody tr').nth(2)
-    await page.getByTestId('value-format-2').dblclick()
+    await page.getByTestId('value-format-2').click()
     await expect(page.getByRole('menuitem', { name: /^SHORT \(1w\)$/ })).toBeVisible()
     await page.getByRole('menuitem', { name: /^SHORT \(1w\)$/ }).click()
     await expect(thirdRow).toContainText('SHORT (1w)')

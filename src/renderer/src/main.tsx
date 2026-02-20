@@ -10,13 +10,13 @@ import './i18n'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { CssBaseline, IconButton } from '@mui/material'
-import { styled, ThemeProvider } from '@mui/material/styles'
-import { theme } from './theme'
+import { styled } from '@mui/material/styles'
 import { closeSnackbar, SnackbarProvider, MaterialDesignContent } from 'notistack'
 import { Close } from '@mui/icons-material'
 import App from './App'
+import { ThemeSettingsProvider } from './theme/theme-settings'
 
-const StyledMaterialDesignContent = styled(MaterialDesignContent)(() => ({
+const StyledMaterialDesignContent = styled(MaterialDesignContent)(({ theme }) => ({
   '&.notistack-MuiContent-success': {
     backgroundColor: theme.palette.success.main,
     color: theme.palette.success.contrastText,
@@ -46,7 +46,7 @@ const StyledMaterialDesignContent = styled(MaterialDesignContent)(() => ({
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
-    <ThemeProvider theme={theme}>
+    <ThemeSettingsProvider>
       <SnackbarProvider
         maxSnack={3}
         {...{
@@ -69,6 +69,6 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
         <CssBaseline />
         <App />
       </SnackbarProvider>
-    </ThemeProvider>
+    </ThemeSettingsProvider>
   </React.StrictMode>
 )

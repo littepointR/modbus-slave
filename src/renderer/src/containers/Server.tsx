@@ -39,6 +39,7 @@ import {
   Autocomplete,
   CircularProgress
 } from '@mui/material'
+import { alpha, type Theme } from '@mui/material/styles'
 import {
   Add as AddIcon,
   CreateNewFolder as NewConnectionIcon,
@@ -461,6 +462,12 @@ const buildTypedSpanHints = (
     if (span <= 1) return
     for (let i = 0; i < span; i++) {
       if (!selectedAddresses.has(startAddress + i)) {
+        return
+      }
+    }
+    for (let i = 1; i < span; i++) {
+      const innerMode = typedInterpretation[startAddress + i]
+      if (innerMode && innerMode !== mode) {
         return
       }
     }
@@ -2269,7 +2276,7 @@ const Server = (): JSX.Element => {
                 const floatGroups = extractConsecutiveGroups(selectedRegisters, 2)
                 const doubleGroups = extractConsecutiveGroups(selectedRegisters, 4)
                 const typedSpanHints = buildTypedSpanHints(
-                  tab.selectedAddresses,
+                  new Set(group.registers.map((r) => r.address)),
                   tab.typedInterpretation
                 )
                 const batchAssignableStarts = getBatchAssignableAddresses(
@@ -2313,6 +2320,30 @@ const Server = (): JSX.Element => {
                   currentWidths.variable +
                   currentWidths.value +
                   currentWidths.comments
+                const getColumnBaseBg = (column: TableColumnKey): ((theme: Theme) => string) => {
+                  return (theme) => {
+                    switch (column) {
+                      case 'type':
+                      case 'variable':
+                      case 'comments':
+                        return alpha(theme.palette.action.hover, 0.2)
+                      default:
+                        return 'transparent'
+                    }
+                  }
+                }
+                const getColumnHeaderBg = (column: TableColumnKey): ((theme: Theme) => string) => {
+                  return (theme) => {
+                    switch (column) {
+                      case 'type':
+                      case 'variable':
+                      case 'comments':
+                        return alpha(theme.palette.action.hover, 0.42)
+                      default:
+                        return theme.palette.action.hover
+                    }
+                  }
+                }
 
                 return (
                   <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -2387,9 +2418,11 @@ const Server = (): JSX.Element => {
                                         fontWeight: 'bold',
                                         width: currentWidths.type,
                                         minWidth: currentWidths.type,
-                                        bgcolor: 'action.hover',
+                                        bgcolor: getColumnHeaderBg('type'),
                                         whiteSpace: 'nowrap',
-                                        position: 'relative'
+                                        position: 'relative',
+                                        borderRight: '1px solid',
+                                        borderColor: 'divider'
                                       }}
                                     >
                                       Register Type
@@ -2430,9 +2463,11 @@ const Server = (): JSX.Element => {
                                         fontWeight: 'bold',
                                         width: currentWidths.address,
                                         minWidth: currentWidths.address,
-                                        bgcolor: 'action.hover',
+                                        bgcolor: getColumnHeaderBg('address'),
                                         whiteSpace: 'nowrap',
-                                        position: 'relative'
+                                        position: 'relative',
+                                        borderRight: '1px solid',
+                                        borderColor: 'divider'
                                       }}
                                     >
                                       Address
@@ -2473,9 +2508,11 @@ const Server = (): JSX.Element => {
                                         fontWeight: 'bold',
                                         width: currentWidths.variable,
                                         minWidth: currentWidths.variable,
-                                        bgcolor: 'action.hover',
+                                        bgcolor: getColumnHeaderBg('variable'),
                                         whiteSpace: 'nowrap',
-                                        position: 'relative'
+                                        position: 'relative',
+                                        borderRight: '1px solid',
+                                        borderColor: 'divider'
                                       }}
                                     >
                                       Variable Name
@@ -2516,9 +2553,11 @@ const Server = (): JSX.Element => {
                                         fontWeight: 'bold',
                                         width: currentWidths.value,
                                         minWidth: currentWidths.value,
-                                        bgcolor: 'action.hover',
+                                        bgcolor: getColumnHeaderBg('value'),
                                         whiteSpace: 'nowrap',
-                                        position: 'relative'
+                                        position: 'relative',
+                                        borderRight: '1px solid',
+                                        borderColor: 'divider'
                                       }}
                                     >
                                       Value
@@ -2557,11 +2596,13 @@ const Server = (): JSX.Element => {
                                     <TableCell
                                       sx={{
                                         fontWeight: 'bold',
-                                        bgcolor: 'action.hover',
+                                        bgcolor: getColumnHeaderBg('comments'),
                                         width: currentWidths.comments,
                                         minWidth: currentWidths.comments,
                                         whiteSpace: 'nowrap',
-                                        position: 'relative'
+                                        position: 'relative',
+                                        borderRight: '1px solid',
+                                        borderColor: 'divider'
                                       }}
                                     >
                                       Comments
@@ -2602,10 +2643,16 @@ const Server = (): JSX.Element => {
                                 <TableBody>
                                   {paginatedRegisters.map((register) => {
                                     const isSelected = tab.selectedAddresses.has(register.address)
-                                    const currentTypedMode =
-                                      tab.typedInterpretation[register.address] ||
-                                      defaultTypedInterpretation
                                     const typedSpanHint = typedSpanHints.get(register.address)
+                                    const explicitMode = tab.typedInterpretation[register.address]
+                                    const effectiveTypedSpanHint =
+                                      explicitMode && typedSpanHint && explicitMode !== typedSpanHint.mode
+                                        ? undefined
+                                        : typedSpanHint
+                                    const currentTypedMode =
+                                      explicitMode ||
+                                      effectiveTypedSpanHint?.mode ||
+                                      defaultTypedInterpretation
                                     const linkedPlotWindow = plotWindows.find(
                                       (plotWindow) =>
                                         plotWindow.connectionId === tab.connectionId &&
@@ -2613,7 +2660,11 @@ const Server = (): JSX.Element => {
                                         plotWindow.registerGroupId === tab.registerGroupId &&
                                         plotWindow.series.some((s) => s.address === register.address)
                                     )
-                                    const valueBackground = linkedPlotWindow?.selectionColor
+                                    const interpretedBackground = effectiveTypedSpanHint
+                                      ? getPlotSelectionColor(effectiveTypedSpanHint.startAddress)
+                                      : undefined
+                                    const valueBackground =
+                                      interpretedBackground || linkedPlotWindow?.selectionColor
                                     return (
                                       <TableRow
                                         key={register.address}
@@ -2645,7 +2696,10 @@ const Server = (): JSX.Element => {
                                           sx={{
                                             width: currentWidths.type,
                                             minWidth: currentWidths.type,
-                                            whiteSpace: 'nowrap'
+                                            whiteSpace: 'nowrap',
+                                            borderRight: '1px solid',
+                                            borderColor: 'divider',
+                                            bgcolor: getColumnBaseBg('type')
                                           }}
                                         >
                                           {getRegisterTypeChip(group.type)}
@@ -2656,49 +2710,23 @@ const Server = (): JSX.Element => {
                                             fontWeight: 'bold',
                                             width: currentWidths.address,
                                             minWidth: currentWidths.address,
-                                            whiteSpace: 'nowrap'
+                                            whiteSpace: 'nowrap',
+                                            borderRight: '1px solid',
+                                            borderColor: 'divider',
+                                            bgcolor: getColumnBaseBg('address')
                                           }}
                                         >
-                                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                            {typedSpanHint ? (
-                                              <Box
-                                                sx={{
-                                                  width: 4,
-                                                  height: 18,
-                                                  borderRadius: 1,
-                                                  bgcolor: getRegisterColor(typedSpanHint.startAddress)
-                                                }}
-                                              />
-                                            ) : null}
-                                            <Box
-                                              sx={{
-                                                width: 10,
-                                                height: 10,
-                                                borderRadius: '50%',
-                                                bgcolor: linkedPlotWindow
-                                                  ? getRegisterColor(register.address)
-                                                  : 'transparent',
-                                                border: linkedPlotWindow
-                                                  ? '1px solid rgba(0,0,0,0.25)'
-                                                  : '1px dashed rgba(0,0,0,0.2)'
-                                              }}
-                                            />
-                                            {formatAddress(register.address)}
-                                            {typedSpanHint ? (
-                                              <Chip
-                                                size="small"
-                                                variant="outlined"
-                                                color="info"
-                                                label={
-                                                  typedSpanHint.index === 0
-                                                    ? `${typedSpanHint.mode.toUpperCase()} x${typedSpanHint.span}`
-                                                    : `↳ ${formatAddress(typedSpanHint.startAddress)}`
-                                                }
-                                              />
-                                            ) : null}
-                                          </Box>
+                                          {formatAddress(register.address)}
                                         </TableCell>
-                                        <TableCell sx={{ width: currentWidths.variable, minWidth: currentWidths.variable }}>
+                                        <TableCell
+                                          sx={{
+                                            width: currentWidths.variable,
+                                            minWidth: currentWidths.variable,
+                                            borderRight: '1px solid',
+                                            borderColor: 'divider',
+                                            bgcolor: getColumnBaseBg('variable')
+                                          }}
+                                        >
                                           <EditableCell
                                             value={register.variableName}
                                             onChange={(value) =>
@@ -2718,7 +2746,9 @@ const Server = (): JSX.Element => {
                                             bgcolor: valueBackground,
                                             color: 'text.primary',
                                             width: currentWidths.value,
-                                            minWidth: currentWidths.value
+                                            minWidth: currentWidths.value,
+                                            borderRight: '1px solid',
+                                            borderColor: 'divider'
                                           }}
                                         >
                                           {group.type === '01' || group.type === '02' ? (
@@ -2750,7 +2780,8 @@ const Server = (): JSX.Element => {
                                                 variant="outlined"
                                                 data-testid={`value-format-${register.address}`}
                                                 label={currentTypedMode.toUpperCase()}
-                                                onDoubleClick={(event) => {
+                                                onClick={(event) => {
+                                                  event.stopPropagation()
                                                   if (!isSelected) {
                                                     updateTab(activeTabId, {
                                                       selectedAddresses: new Set([register.address])
@@ -2762,7 +2793,6 @@ const Server = (): JSX.Element => {
                                                     register.address
                                                   )
                                                 }}
-                                                onClick={(e) => e.stopPropagation()}
                                               />
                                             </Box>
                                           ) : (
@@ -2814,7 +2844,8 @@ const Server = (): JSX.Element => {
                                                   currentTypedMode
                                                 )}w)`}
                                                 sx={{ flexShrink: 0 }}
-                                                onDoubleClick={(event) => {
+                                                onClick={(event) => {
+                                                  event.stopPropagation()
                                                   if (!isSelected) {
                                                     updateTab(activeTabId, {
                                                       selectedAddresses: new Set([register.address])
@@ -2826,12 +2857,19 @@ const Server = (): JSX.Element => {
                                                     register.address
                                                   )
                                                 }}
-                                                onClick={(e) => e.stopPropagation()}
                                               />
                                             </Box>
                                           )}
                                         </TableCell>
-                                        <TableCell sx={{ width: currentWidths.comments, minWidth: currentWidths.comments }}>
+                                        <TableCell
+                                          sx={{
+                                            width: currentWidths.comments,
+                                            minWidth: currentWidths.comments,
+                                            borderRight: '1px solid',
+                                            borderColor: 'divider',
+                                            bgcolor: getColumnBaseBg('comments')
+                                          }}
+                                        >
                                           <EditableCell
                                             value={register.comment}
                                             onChange={(value) =>

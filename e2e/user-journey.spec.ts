@@ -82,7 +82,7 @@ test('realistic server user journey e2e', async () => {
   await page.getByRole('menuitem', { name: /^DOUBLE \(4w\)$/ }).click()
   await expect(firstRow).toContainText('DOUBLE (4w)')
 
-  await page.getByTestId('value-format-2').dblclick()
+  await page.getByTestId('value-format-2').click()
   await page.getByRole('menuitem', { name: /^SHORT \(1w\)$/ }).click()
   await expect(thirdRow).toContainText('SHORT (1w)')
 
