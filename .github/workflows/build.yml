@@ -2,7 +2,7 @@ name: Build and Release
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'feature/**']
     tags: ['v*']
   pull_request:
     branches: [main]
@@ -21,7 +21,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'yarn'
+
+      - name: Enable Corepack (Yarn 4)
+        run: |
+          corepack enable
+          corepack prepare yarn@4.10.3 --activate
+          yarn --version
 
       - name: Install dependencies
         run: yarn install --frozen-lockfile
@@ -51,7 +56,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'yarn'
+
+      - name: Enable Corepack (Yarn 4)
+        run: |
+          corepack enable
+          corepack prepare yarn@4.10.3 --activate
+          yarn --version
 
       - name: Install dependencies
         run: yarn install --frozen-lockfile
@@ -80,7 +90,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'yarn'
+
+      - name: Enable Corepack (Yarn 4)
+        run: |
+          corepack enable
+          corepack prepare yarn@4.10.3 --activate
+          yarn --version
 
       - name: Install dependencies
         run: yarn install --frozen-lockfile
