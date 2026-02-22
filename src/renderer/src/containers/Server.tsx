@@ -41,7 +41,6 @@ import {
   TableRow,
   Checkbox,
   TablePagination,
-  LinearProgress,
   Switch,
   Autocomplete,
   CircularProgress
@@ -1821,7 +1820,7 @@ const Server = (): JSX.Element => {
       }
     | null
   >(null)
-  const [isTablePending, startTableTransition] = useTransition()
+  const [, startTableTransition] = useTransition()
   const [plotWindows, setPlotWindows] = useState<PlotWindowState[]>([])
 
   const getTabId = (connectionId: string, slaveId: string, registerGroupId: string): string =>
@@ -2895,7 +2894,17 @@ const Server = (): JSX.Element => {
                   currentWidths.comments
                 return (
                   <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
-                    <Box sx={{ flex: 1, minHeight: MIN_TOP_PANEL_HEIGHT, overflow: 'auto', p: 1.5 }}>
+                    <Box
+                      sx={{
+                        flex: 1,
+                        minHeight: MIN_TOP_PANEL_HEIGHT,
+                        minWidth: 0,
+                        overflow: 'hidden',
+                        p: 1.5,
+                        display: 'flex',
+                        flexDirection: 'column'
+                      }}
+                    >
                       <Box
                         sx={{
                           display: 'flex',
@@ -2903,7 +2912,8 @@ const Server = (): JSX.Element => {
                           justifyContent: 'space-between',
                           gap: 1.25,
                           mb: 1,
-                          flexWrap: 'wrap'
+                          flexWrap: 'wrap',
+                          flexShrink: 0
                         }}
                       >
                         <Box
@@ -2961,11 +2971,20 @@ const Server = (): JSX.Element => {
                         const paginatedRegisters = group.registers.slice(startIndex, endIndex)
 
                         return (
-                          <>
+                          <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
                             <TableContainer
                               component={Paper}
                               variant="outlined"
-                              sx={{ flex: 1, overflowX: 'auto' }}
+                              sx={{
+                                flex: 1,
+                                minHeight: 0,
+                                overflow: 'auto',
+                                '& .MuiTableCell-stickyHeader': {
+                                  top: 0,
+                                  zIndex: 2,
+                                  bgcolor: 'background.paper'
+                                }
+                              }}
                             >
                               <Table
                                 size="small"
@@ -3002,7 +3021,9 @@ const Server = (): JSX.Element => {
                                         minWidth: currentWidths.address,
                                         bgcolor: 'action.hover',
                                         whiteSpace: 'nowrap',
-                                        position: 'relative',
+                                        position: 'sticky',
+                                        top: 0,
+                                        zIndex: 3,
                                         borderRight: '1px solid',
                                         borderColor: 'divider'
                                       }}
@@ -3047,7 +3068,9 @@ const Server = (): JSX.Element => {
                                         minWidth: currentWidths.variable,
                                         bgcolor: 'action.hover',
                                         whiteSpace: 'nowrap',
-                                        position: 'relative',
+                                        position: 'sticky',
+                                        top: 0,
+                                        zIndex: 3,
                                         borderRight: '1px solid',
                                         borderColor: 'divider'
                                       }}
@@ -3092,7 +3115,9 @@ const Server = (): JSX.Element => {
                                         minWidth: currentWidths.value,
                                         bgcolor: 'action.hover',
                                         whiteSpace: 'nowrap',
-                                        position: 'relative',
+                                        position: 'sticky',
+                                        top: 0,
+                                        zIndex: 3,
                                         borderRight: '1px solid',
                                         borderColor: 'divider'
                                       }}
@@ -3137,7 +3162,9 @@ const Server = (): JSX.Element => {
                                         minWidth: currentWidths.interpretation,
                                         bgcolor: 'action.hover',
                                         whiteSpace: 'nowrap',
-                                        position: 'relative',
+                                        position: 'sticky',
+                                        top: 0,
+                                        zIndex: 3,
                                         borderRight: '1px solid',
                                         borderColor: 'divider'
                                       }}
@@ -3182,7 +3209,9 @@ const Server = (): JSX.Element => {
                                         minWidth: currentWidths.display,
                                         bgcolor: 'action.hover',
                                         whiteSpace: 'nowrap',
-                                        position: 'relative',
+                                        position: 'sticky',
+                                        top: 0,
+                                        zIndex: 3,
                                         borderRight: '1px solid',
                                         borderColor: 'divider'
                                       }}
@@ -3227,7 +3256,9 @@ const Server = (): JSX.Element => {
                                         width: currentWidths.comments,
                                         minWidth: currentWidths.comments,
                                         whiteSpace: 'nowrap',
-                                        position: 'relative',
+                                        position: 'sticky',
+                                        top: 0,
+                                        zIndex: 3,
                                         borderRight: '1px solid',
                                         borderColor: 'divider'
                                       }}
@@ -3281,7 +3312,7 @@ const Server = (): JSX.Element => {
                                       explicitMode ||
                                       effectiveTypedSpanHint?.mode ||
                                       defaultTypedInterpretation
-                                    const valueBackground = INTERPRETATION_COLORS[currentTypedMode].bg
+                                    const interpretationColor = INTERPRETATION_COLORS[currentTypedMode]
                                     const currentDisplayMode =
                                       tab.registerDisplayFormat[register.address] || 'dec'
                                     const displayWordSpan = getDisplayWordSpan(currentDisplayMode)
@@ -3359,25 +3390,32 @@ const Server = (): JSX.Element => {
                                         </TableCell>
                                         <TableCell
                                           data-testid={`value-cell-${register.address}`}
-                                          sx={{
-                                            bgcolor: valueBackground,
+                                          sx={(theme) => ({
+                                            bgcolor:
+                                              theme.palette.mode === 'dark'
+                                                ? alpha(interpretationColor.border, 0.26)
+                                                : interpretationColor.bg,
+                                            color:
+                                              theme.palette.mode === 'dark'
+                                                ? 'text.primary'
+                                                : interpretationColor.fg,
                                             width: currentWidths.value,
                                             minWidth: currentWidths.value,
                                             borderRight: '1px solid',
                                             borderColor: 'divider'
-                                          }}
+                                          })}
                                         >
                                           {isCoilGroup ? (
                                             <Typography
                                               variant="body2"
-                                              sx={{ fontFamily: 'monospace', fontWeight: 700 }}
+                                              sx={{ fontFamily: 'monospace', fontWeight: 700, color: 'inherit' }}
                                             >
                                               {register.value !== 0 ? 'ON' : 'OFF'}
                                             </Typography>
                                           ) : (
                                             <Typography
                                               variant="body2"
-                                              sx={{ fontFamily: 'monospace', fontWeight: 700 }}
+                                              sx={{ fontFamily: 'monospace', fontWeight: 700, color: 'inherit' }}
                                             >
                                               {formatDisplayValue(
                                                 rawRegisterMap,
@@ -3553,7 +3591,7 @@ const Server = (): JSX.Element => {
                               }
                               rowsPerPageOptions={[25, 50, 100, 200, 500]}
                             />
-                          </>
+                          </Box>
                         )
                       })()}
                     </Box>
@@ -3683,8 +3721,6 @@ const Server = (): JSX.Element => {
                         <Tab label="Double" value="double" />
                         <Tab label="String" value="string" />
                       </Tabs>
-                      {isTablePending ? <LinearProgress sx={{ height: 2 }} /> : null}
-
                       <Box
                         sx={{
                           flex: 1,
