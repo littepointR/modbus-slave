@@ -2,6 +2,7 @@ import {
   useState,
   useRef,
   useEffect,
+  useMemo,
   useTransition,
   type MouseEvent as ReactMouseEvent
 } from 'react'
@@ -1866,6 +1867,7 @@ const Server = (): JSX.Element => {
   const [workspaceFileHandle, setWorkspaceFileHandle] = useState<WorkspaceFileHandle | null>(null)
   const [workspaceFilename, setWorkspaceFilename] = useState<string | null>(null)
   const [workspaceFilePath, setWorkspaceFilePath] = useState<string | null>(null)
+  const [workspaceSavedFingerprint, setWorkspaceSavedFingerprint] = useState<string | null>(null)
   const [recentWorkspaces, setRecentWorkspaces] = useState<RecentWorkspaceEntry[]>([])
   const [workspaceMenuAnchorEl, setWorkspaceMenuAnchorEl] = useState<null | HTMLElement>(null)
   const [connectionMenuAnchorEl, setConnectionMenuAnchorEl] = useState<null | HTMLElement>(null)
@@ -1878,6 +1880,7 @@ const Server = (): JSX.Element => {
   const scriptTimerMapRef = useRef<
     Record<string, { timer: ReturnType<typeof setInterval>; intervalMs: number }>
   >({})
+  const pendingMarkWorkspaceSavedRef = useRef(false)
   const connectionsRef = useRef<Connection[]>([])
 
   const [newConnectionOpen, setNewConnectionOpen] = useState(false)
@@ -2956,6 +2959,22 @@ const Server = (): JSX.Element => {
       activeTabId
     }
   }
+  const serializeWorkspaceSnapshot = (workspace: PersistedWorkspaceSnapshot): string =>
+    JSON.stringify(workspace)
+  const workspaceCurrentFingerprint = useMemo(
+    () => serializeWorkspaceSnapshot(getWorkspaceSnapshot()),
+    [connections, workspaceTabSettings, scriptsByConnection, openTabs, activeTabId]
+  )
+  const isWorkspaceDirty =
+    workspaceFilename !== null &&
+    workspaceSavedFingerprint !== null &&
+    workspaceCurrentFingerprint !== workspaceSavedFingerprint
+
+  useEffect(() => {
+    if (!pendingMarkWorkspaceSavedRef.current) return
+    pendingMarkWorkspaceSavedRef.current = false
+    setWorkspaceSavedFingerprint(workspaceCurrentFingerprint)
+  }, [workspaceCurrentFingerprint])
 
   const getDefaultWorkspaceFilename = () =>
     `${DEFAULT_WORKSPACE_FILENAME_PREFIX}_${new Date().toISOString().slice(0, 10)}.json`
@@ -3103,6 +3122,7 @@ const Server = (): JSX.Element => {
       const fileName = path.split(/[\\/]/).pop() || options?.fallbackName
       const applied = applyWorkspaceSnapshot(workspace, { fileName, filePath: path })
       if (!applied) return false
+      pendingMarkWorkspaceSavedRef.current = true
 
       void window.api.appendSystemLog({
         level: 'info',
@@ -3157,6 +3177,7 @@ const Server = (): JSX.Element => {
           workspaceFilename || workspaceFilePath.split(/[\\/]/).pop() || 'Workspace',
           { setAsLast: true }
         )
+        setWorkspaceSavedFingerprint(serializeWorkspaceSnapshot(workspace))
         return true
       } catch (error) {
         console.error('Failed to write workspace via path:', error)
@@ -3204,6 +3225,7 @@ const Server = (): JSX.Element => {
           { setAsLast: true }
         )
       }
+      setWorkspaceSavedFingerprint(serializeWorkspaceSnapshot(workspace))
       return true
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') {
@@ -3219,6 +3241,7 @@ const Server = (): JSX.Element => {
     const saved = await saveWorkspaceWithHandle(workspace, false)
     if (!saved) {
       downloadWorkspaceSnapshot(workspace)
+      setWorkspaceSavedFingerprint(serializeWorkspaceSnapshot(workspace))
     }
   }
 
@@ -3227,6 +3250,7 @@ const Server = (): JSX.Element => {
     const saved = await saveWorkspaceWithHandle(workspace, true)
     if (!saved) {
       downloadWorkspaceSnapshot(workspace)
+      setWorkspaceSavedFingerprint(serializeWorkspaceSnapshot(workspace))
     }
   }
 
@@ -3239,6 +3263,7 @@ const Server = (): JSX.Element => {
       const fileName = filePath.split(/[\\/]/).pop() || 'Workspace'
       const applied = applyWorkspaceSnapshot(workspace, { fileName, filePath })
       if (applied) {
+        pendingMarkWorkspaceSavedRef.current = true
         upsertRecentWorkspaceByPath(filePath, fileName, { setAsLast: true })
       }
     } catch (error) {
@@ -3336,6 +3361,8 @@ const Server = (): JSX.Element => {
     setWorkspaceFileHandle(null)
     setWorkspaceFilename(null)
     setWorkspaceFilePath(null)
+    setWorkspaceSavedFingerprint(null)
+    pendingMarkWorkspaceSavedRef.current = false
     closeTitleMenus()
     markLastWorkspaceId(null)
   }
@@ -3412,6 +3439,11 @@ const Server = (): JSX.Element => {
         case 'm':
           event.preventDefault()
           sendEvent('open_comm_log_window')
+          closeTitleMenus()
+          break
+        case 'g':
+          event.preventDefault()
+          sendEvent('open_system_log_window')
           closeTitleMenus()
           break
         default:
@@ -3539,6 +3571,7 @@ const Server = (): JSX.Element => {
                 {workspaceFilename ? (
                   <Typography variant="caption" color="text.secondary" sx={{ maxWidth: 240 }} noWrap>
                     {workspaceFilename}
+                    {isWorkspaceDirty ? '*' : ''}
                   </Typography>
                 ) : null}
                 <SettingsMenu />
@@ -3717,6 +3750,19 @@ const Server = (): JSX.Element => {
                     <Typography variant="body2">{t('server.toolbar.commDetails')} (M)</Typography>
                     <Typography variant="caption" color="text.secondary">
                       Alt+M
+                    </Typography>
+                  </Box>
+                </MenuItem>
+                <MenuItem
+                  onClick={() => {
+                    sendEvent('open_system_log_window')
+                    closeTitleMenus()
+                  }}
+                >
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', minWidth: 250 }}>
+                    <Typography variant="body2">{t('server.toolbar.systemLogs')} (G)</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Alt+G
                     </Typography>
                   </Box>
                 </MenuItem>
