@@ -7,7 +7,15 @@ import { AppState } from './state'
 import os from 'os'
 import { ModbusServer } from './modules/mobusServer'
 import { Windows } from '@shared'
-import type { RegisterPlotData, RegisterPlotWindowInit } from '@shared'
+import type {
+  RegisterPlotData,
+  RegisterPlotWindowInit,
+  ScriptEditorApplyPayload,
+  ScriptEditorRunPayload,
+  ScriptEditorWindowInit
+} from '@shared'
+import { startCliApiServerWithOptions, stopCliApiServer } from './cliApi'
+import { CliWorkspaceRuntime } from './modules/cliWorkspace'
 
 if (is.dev && os.platform() === 'darwin') {
   app.disableHardwareAcceleration()
@@ -21,6 +29,7 @@ const appState = new AppState()
 
 // Initialize the modbus server
 const server = new ModbusServer({ windows })
+const cliWorkspaceRuntime = new CliWorkspaceRuntime(server)
 
 // IPC
 initIpc(app, appState, server)
@@ -73,6 +82,7 @@ function createWindow(): BrowserWindow {
 
   windows.main.on('close', () => {
     windows.server?.close()
+    scriptEditorWindow?.close()
     registerPlotWindows.forEach((plotWindow) => plotWindow.close())
   })
 
@@ -161,6 +171,8 @@ onIpcEvent('open_comm_log_window', () => {
 })
 
 const registerPlotWindows = new Map<string, BrowserWindow>()
+let scriptEditorWindow: BrowserWindow | null = null
+let scriptEditorConnectionId: string | null = null
 
 onIpcEvent('open_register_plot_window', (_event, payload: RegisterPlotWindowInit) => {
   const win = new BrowserWindow({
@@ -208,6 +220,78 @@ onIpcEvent('register_plot_data', (_event, payload: RegisterPlotData) => {
   plotWin.webContents.send('register_plot_data', payload)
 })
 
+onIpcEvent('close_register_plot_windows', () => {
+  registerPlotWindows.forEach((plotWin) => {
+    if (!plotWin.isDestroyed()) plotWin.close()
+  })
+})
+
+onIpcEvent('open_script_editor_window', (_event, payload: ScriptEditorWindowInit) => {
+  if (!windows.main) return
+
+  const reopenRequired =
+    !scriptEditorWindow ||
+    scriptEditorWindow.isDestroyed() ||
+    scriptEditorConnectionId !== payload.connectionId
+
+  if (reopenRequired) {
+    if (scriptEditorWindow && !scriptEditorWindow.isDestroyed()) {
+      scriptEditorWindow.close()
+    }
+
+    scriptEditorWindow = new BrowserWindow({
+      width: 1120,
+      height: 760,
+      minWidth: 900,
+      minHeight: 560,
+      autoHideMenuBar: true,
+      webPreferences: {
+        preload: join(__dirname, '../preload/index.js'),
+        sandbox: false,
+        nodeIntegration: false,
+        contextIsolation: true,
+        additionalArguments: ['is-script-editor-window']
+      },
+      title: `Script Editor - ${payload.connectionAlias}`,
+      backgroundColor: '#181818'
+    })
+
+    scriptEditorConnectionId = payload.connectionId
+
+    if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+      scriptEditorWindow.loadURL(`${process.env['ELECTRON_RENDERER_URL']}`)
+    } else {
+      scriptEditorWindow.loadFile(join(__dirname, '../renderer/index.html'))
+    }
+
+    scriptEditorWindow.on('closed', () => {
+      windows.send('script_editor_window_closed', payload.connectionId)
+      scriptEditorWindow = null
+      scriptEditorConnectionId = null
+    })
+  }
+
+  const editorWindow = scriptEditorWindow
+  if (!editorWindow) return
+
+  editorWindow.focus()
+  editorWindow.webContents.once('did-finish-load', () => {
+    if (!editorWindow.isDestroyed()) {
+      editorWindow.webContents.send('script_editor_init', payload)
+    }
+  })
+})
+
+onIpcEvent('script_editor_apply', (_event, payload: ScriptEditorApplyPayload) => {
+  if (!windows.main || windows.main.isDestroyed()) return
+  windows.main.webContents.send('script_editor_apply', payload)
+})
+
+onIpcEvent('script_editor_run_once', (_event, payload: ScriptEditorRunPayload) => {
+  if (!windows.main || windows.main.isDestroyed()) return
+  windows.main.webContents.send('script_editor_run_once', payload)
+})
+
 let splash: BrowserWindow | null = null
 
 // This method will be called when Electron has finished
@@ -249,6 +333,12 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
+  void startCliApiServerWithOptions(app, {
+    dispatchUiAction: (action, payload) => cliWorkspaceRuntime.dispatch(action, payload)
+  }).catch((error) => {
+    console.error('[CLI API] failed to start:', error)
+  })
+
   const mainWindow = createWindow()
 
   mainWindow.once('ready-to-show', () => {
@@ -271,6 +361,10 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit()
   }
+})
+
+app.on('before-quit', () => {
+  void stopCliApiServer()
 })
 
 // In this file you can include the rest of your app"s specific main process

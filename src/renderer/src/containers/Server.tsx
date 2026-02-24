@@ -68,10 +68,19 @@ import {
   Storage as HoldingRegisterIcon,
   Input as InputRegisterIcon,
   Refresh as RefreshIcon,
-  ShowChart as ShowChartIcon
+  ShowChart as ShowChartIcon,
+  History as HistoryIcon
 } from '@mui/icons-material'
 import { v4 as uuidv4 } from 'uuid'
 import SettingsMenu from '@renderer/components/shared/SettingsMenu'
+import {
+  GLOBAL_PREFERENCE_CHANGE_EVENT,
+  GLOBAL_STRING_ENCODING_KEY,
+  GLOBAL_STRING_ENCODING_OPTIONS,
+  type GlobalPreferenceChangeDetail,
+  getGlobalStringEncodingPreference,
+  setGlobalStringEncodingPreference
+} from '@renderer/settings/global-preferences'
 import type {
   CreateServerParams,
   PlotInterpretation,
@@ -235,6 +244,34 @@ interface WorkspaceTabSettings {
   registerDisplayFormat: Record<number, RegisterDisplayFormat>
 }
 
+interface WorkspaceFileHandle {
+  name?: string
+  createWritable: () => Promise<{
+    write: (data: string) => Promise<void>
+    close: () => Promise<void>
+  }>
+}
+
+interface PersistedWorkspaceSnapshot {
+  version: number
+  connections: Connection[]
+  tabSettings?: Record<string, WorkspaceTabSettings>
+  scriptsByConnection?: Record<string, ScriptDefinition[]>
+  openTabs?: Array<{
+    connectionId: string
+    slaveId: string
+    registerGroupId: string
+  }>
+  activeTabId?: string | null
+}
+
+interface RecentWorkspaceEntry {
+  id: string
+  name: string
+  path: string
+  updatedAt: number
+}
+
 interface TypedValueEditMenuState {
   tabId: string
   address: number
@@ -258,18 +295,6 @@ interface DisplayFormatEditMenuState {
 // =============================================================================
 // CONSTANTS
 // =============================================================================
-
-const ENCODING_OPTIONS = [
-  'ASCII',
-  'UTF-8',
-  'UTF-16',
-  'UTF-16BE',
-  'UTF-16LE',
-  'GB2312',
-  'GBK',
-  'GB18030',
-  'ISO-8859-1'
-]
 
 const TYPED_INTERPRETATION_OPTIONS: PlotInterpretation[] = [
   'short',
@@ -329,34 +354,20 @@ const MIN_TABLE_COLUMN_WIDTHS: Record<TableColumnKey, number> = {
 }
 
 const SERVER_LAYOUT_STORAGE_KEY = 'modbux.server.layout.v1'
-const MONO_FONT_FAMILY = '"Iosevka", "Cascadia Mono", "Consolas", monospace'
-const DEFAULT_SCRIPT_TEMPLATE = `// event.type: 'interval' | 'manual'
-// api.getValue(unitId, registerType, address)
-// api.setValue(unitId, registerType, address, value)
-// registerType: '01' | '02' | '03' | '04'
-
-// Example: mirror 40001 to 40002 (holding registers)
-const value = api.getValue(1, '03', 0)
-if (typeof value === 'number') {
-  api.setValue(1, '03', 1, value)
-}
-`
+const MONO_FONT_FAMILY = 'var(--modbux-mono-font, "Iosevka", "Cascadia Mono", "Consolas", monospace)'
+const MONO_FONT_SIZE = 'var(--modbux-mono-font-size, 13px)'
 const DEFAULT_LEFT_PANEL_WIDTH = 320
 const DEFAULT_BOTTOM_PANEL_HEIGHT = 300
 const MIN_LEFT_PANEL_WIDTH = 240
 const MIN_RIGHT_PANEL_WIDTH = 560
 const MIN_BOTTOM_PANEL_HEIGHT = 180
 const MIN_TOP_PANEL_HEIGHT = 220
+const DEFAULT_WORKSPACE_FILENAME_PREFIX = 'modbux_workspace'
+const RECENT_WORKSPACES_STORAGE_KEY = 'modbux.server.recentWorkspaces.v1'
+const LAST_WORKSPACE_ID_STORAGE_KEY = 'modbux.server.lastWorkspaceId.v1'
+const MAX_RECENT_WORKSPACES = 8
 
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value))
-
-const createDefaultScript = (index: number): ScriptDefinition => ({
-  id: uuidv4(),
-  name: `Script ${index}`,
-  enabled: false,
-  intervalMs: 1000,
-  code: DEFAULT_SCRIPT_TEMPLATE
-})
 
 const toUnitIdString = (slaveId: number): UnitIdString => String(slaveId) as UnitIdString
 
@@ -672,6 +683,20 @@ const parseDisplayInputToRawRegister = (
   }
 
   return null
+}
+
+const parseAutoRadixRegisterInput = (input: string): number | null => {
+  const normalized = input.trim()
+  if (!normalized) return null
+
+  if (/^0x/i.test(normalized)) return parseDisplayInputToRawRegister(normalized, 'hex')
+  if (/^0b/i.test(normalized)) return parseDisplayInputToRawRegister(normalized, 'bin')
+  if (/^0o/i.test(normalized)) return parseDisplayInputToRawRegister(normalized, 'oct')
+
+  if (!/^[+-]?\d+$/.test(normalized)) return null
+  const value = Number.parseInt(normalized, 10)
+  if (!Number.isFinite(value) || value < 0 || value > 65535) return null
+  return value
 }
 
 const INTERPRETATION_COLORS: Record<
@@ -1705,212 +1730,6 @@ const NewSlaveDialog = ({ open, onClose, onConfirm, initialSlave }: NewSlaveDial
   )
 }
 
-interface ScriptEditorDialogProps {
-  open: boolean
-  connectionAlias: string
-  scripts: ScriptDefinition[]
-  onClose: () => void
-  onChange: (scripts: ScriptDefinition[]) => void
-  onRunScript: (scriptId: string) => void
-}
-
-const ScriptEditorDialog = ({
-  open,
-  connectionAlias,
-  scripts,
-  onClose,
-  onChange,
-  onRunScript
-}: ScriptEditorDialogProps): JSX.Element => {
-  const [selectedId, setSelectedId] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (!open) return
-    if (scripts.length === 0) {
-      setSelectedId(null)
-      return
-    }
-    if (!selectedId || !scripts.find((script) => script.id === selectedId)) {
-      setSelectedId(scripts[0].id)
-    }
-  }, [open, scripts, selectedId])
-
-  const selectedScript = scripts.find((script) => script.id === selectedId) ?? null
-
-  const updateScript = (scriptId: string, updates: Partial<ScriptDefinition>): void => {
-    onChange(
-      scripts.map((script) =>
-        script.id === scriptId
-          ? {
-              ...script,
-              ...updates
-            }
-          : script
-      )
-    )
-  }
-
-  const addScript = (): void => {
-    const script = createDefaultScript(scripts.length + 1)
-    onChange([...scripts, script])
-    setSelectedId(script.id)
-  }
-
-  const removeScript = (scriptId: string): void => {
-    const next = scripts.filter((script) => script.id !== scriptId)
-    onChange(next)
-    if (selectedId === scriptId) {
-      setSelectedId(next[0]?.id ?? null)
-    }
-  }
-
-  return (
-    <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth>
-      <DialogTitle>{`Edit Scripts - ${connectionAlias}`}</DialogTitle>
-      <DialogContent>
-        <Box
-          sx={{
-            mt: 1,
-            display: 'grid',
-            gridTemplateColumns: '320px 1fr',
-            gap: 2,
-            minHeight: 440
-          }}
-        >
-          <Paper variant="outlined" sx={{ p: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
-            <Button onClick={addScript} startIcon={<AddIcon />} size="small">
-              Add Script
-            </Button>
-            <Divider />
-            <Box sx={{ overflow: 'auto', maxHeight: 360, display: 'flex', flexDirection: 'column', gap: 1 }}>
-              {scripts.map((script) => (
-                <Paper
-                  key={script.id}
-                  variant={selectedId === script.id ? 'elevation' : 'outlined'}
-                  elevation={selectedId === script.id ? 2 : 0}
-                  sx={{ p: 1, cursor: 'pointer' }}
-                  onClick={() => setSelectedId(script.id)}
-                >
-                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
-                    <TextField
-                      size="small"
-                      label="Name"
-                      value={script.name}
-                      onClick={(event) => event.stopPropagation()}
-                      onChange={(event) => updateScript(script.id, { name: event.target.value })}
-                      sx={{ flex: 1 }}
-                    />
-                    <IconButton
-                      size="small"
-                      color="error"
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        removeScript(script.id)
-                      }}
-                      title="Delete script"
-                    >
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
-                  </Box>
-                  <Box
-                    sx={{
-                      mt: 1,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: 1
-                    }}
-                  >
-                    <FormControlLabel
-                      control={
-                        <Switch
-                          size="small"
-                          checked={script.enabled}
-                          onClick={(event) => event.stopPropagation()}
-                          onChange={(event) =>
-                            updateScript(script.id, {
-                              enabled: event.target.checked,
-                              lastError: event.target.checked ? undefined : script.lastError
-                            })
-                          }
-                        />
-                      }
-                      label={script.enabled ? 'Enabled' : 'Disabled'}
-                    />
-                    <TextField
-                      size="small"
-                      type="number"
-                      label="Interval ms"
-                      value={script.intervalMs}
-                      onClick={(event) => event.stopPropagation()}
-                      onChange={(event) =>
-                        updateScript(script.id, {
-                          intervalMs: Math.max(100, Number(event.target.value) || 1000)
-                        })
-                      }
-                      sx={{ width: 120 }}
-                      inputProps={{ min: 100, step: 100 }}
-                    />
-                  </Box>
-                  {script.lastError ? (
-                    <Typography variant="caption" color="error.main" sx={{ display: 'block', mt: 0.75 }}>
-                      {script.lastError}
-                    </Typography>
-                  ) : null}
-                  {script.lastRunAt ? (
-                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
-                      {`Last run: ${new Date(script.lastRunAt).toLocaleTimeString()}`}
-                    </Typography>
-                  ) : null}
-                </Paper>
-              ))}
-              {scripts.length === 0 ? (
-                <Typography variant="body2" color="text.secondary">
-                  No scripts yet.
-                </Typography>
-              ) : null}
-            </Box>
-          </Paper>
-
-          <Paper variant="outlined" sx={{ p: 1.5, display: 'flex', flexDirection: 'column', gap: 1 }}>
-            {selectedScript ? (
-              <>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Typography variant="subtitle2">{selectedScript.name}</Typography>
-                  <Button variant="outlined" size="small" onClick={() => onRunScript(selectedScript.id)}>
-                    Run Once
-                  </Button>
-                </Box>
-                <TextField
-                  label="Script Code"
-                  multiline
-                  minRows={18}
-                  maxRows={22}
-                  value={selectedScript.code}
-                  onChange={(event) => updateScript(selectedScript.id, { code: event.target.value })}
-                  inputProps={{ style: { fontFamily: MONO_FONT_FAMILY, fontSize: 12.5 } }}
-                  fullWidth
-                />
-                <Typography variant="caption" color="text.secondary">
-                  API: `getValue(unitId, registerType, address)`, `setValue(unitId, registerType, address, value)`,
-                  `setValues(unitId, registerType, valueMap)`, `log(...args)`. Register types: `01/02/03/04`.
-                </Typography>
-              </>
-            ) : (
-              <Typography variant="body2" color="text.secondary">
-                Select a script from the left list.
-              </Typography>
-            )}
-          </Paper>
-        </Box>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>Close</Button>
-      </DialogActions>
-    </Dialog>
-  )
-}
-
 interface TreeNodeProps {
   label: string
   icon?: React.ReactNode
@@ -2052,11 +1871,15 @@ const Server = (): JSX.Element => {
   const [workspaceTabSettings, setWorkspaceTabSettings] = useState<
     Record<string, WorkspaceTabSettings>
   >({})
+  const [workspaceFileHandle, setWorkspaceFileHandle] = useState<WorkspaceFileHandle | null>(null)
+  const [workspaceFilename, setWorkspaceFilename] = useState<string | null>(null)
+  const [workspaceFilePath, setWorkspaceFilePath] = useState<string | null>(null)
+  const [recentWorkspaces, setRecentWorkspaces] = useState<RecentWorkspaceEntry[]>([])
+  const [recentWorkspaceAnchorEl, setRecentWorkspaceAnchorEl] = useState<null | HTMLElement>(null)
+  const [globalEncoding, setGlobalEncoding] = useState<string>(getGlobalStringEncodingPreference)
   const [scriptsByConnection, setScriptsByConnection] = useState<Record<string, ScriptDefinition[]>>(
     {}
   )
-  const [scriptEditorOpen, setScriptEditorOpen] = useState(false)
-  const [scriptEditorConnectionId, setScriptEditorConnectionId] = useState<string | null>(null)
   const scriptStateMapRef = useRef<Record<string, Record<string, unknown>>>({})
   const scriptTimerMapRef = useRef<Record<string, ReturnType<typeof setInterval>>>({})
   const connectionsRef = useRef<Connection[]>([])
@@ -2075,6 +1898,12 @@ const Server = (): JSX.Element => {
   const [basicEditCell, setBasicEditCell] = useState<{
     address: number
     format: BasicValueFormat
+    draft: string
+    hasError: boolean
+  } | null>(null)
+  const [inlineValueEditCell, setInlineValueEditCell] = useState<{
+    tabId: string
+    address: number
     draft: string
     hasError: boolean
   } | null>(null)
@@ -2159,6 +1988,40 @@ const Server = (): JSX.Element => {
   useEffect(() => {
     connectionsRef.current = connections
   }, [connections])
+
+  useEffect(() => {
+    const recents = loadRecentWorkspacesFromStorage()
+    setRecentWorkspaces(recents)
+
+    const lastId = localStorage.getItem(LAST_WORKSPACE_ID_STORAGE_KEY)
+    if (!lastId) return
+    const lastWorkspace = recents.find((entry) => entry.id === lastId)
+    if (!lastWorkspace) return
+    void openWorkspaceByPath(lastWorkspace.path, {
+      fallbackName: lastWorkspace.name,
+      removeOnError: true,
+      setAsLast: false
+    })
+  }, [])
+
+  useEffect(() => {
+    const persistLastSession = () => {
+      if (connectionsRef.current.length === 0 || !workspaceFilePath) {
+        markLastWorkspaceId(null)
+        return
+      }
+      upsertRecentWorkspaceByPath(
+        workspaceFilePath,
+        workspaceFilename || workspaceFilePath.split(/[\\/]/).pop() || 'Workspace',
+        { setAsLast: true }
+      )
+    }
+
+    window.addEventListener('beforeunload', persistLastSession)
+    return () => {
+      window.removeEventListener('beforeunload', persistLastSession)
+    }
+  }, [workspaceFilename, workspaceFilePath, recentWorkspaces, connections])
 
   const syncSlaveToBackend = async (connectionId: string, slave: Slave): Promise<void> => {
     const unitId = toUnitIdString(slave.slaveId)
@@ -2400,13 +2263,24 @@ const Server = (): JSX.Element => {
           registerGroupId,
           selectedAddresses: new Set(),
           interpretationTab: savedSettings?.interpretationTab || 'basic',
-          stringEncoding: savedSettings?.stringEncoding || 'UTF-8',
+          stringEncoding: savedSettings?.stringEncoding || globalEncoding,
           typedInterpretation: savedSettings?.typedInterpretation || {},
           registerDisplayFormat: savedSettings?.registerDisplayFormat || {}
         }
       ]
     })
     setActiveTabId(tabId)
+  }
+
+  const selectRegisterGroup = (connectionId: string, slaveId: string, registerGroupId: string) => {
+    setSelectedNodeId(`${connectionId}/${slaveId}/${registerGroupId}`)
+    const tabId = getTabId(connectionId, slaveId, registerGroupId)
+    const isOpened = openTabs.some(
+      (tab) => getTabId(tab.connectionId, tab.slaveId, tab.registerGroupId) === tabId
+    )
+    if (isOpened) {
+      setActiveTabId(tabId)
+    }
   }
 
   const closeTab = (tabId: string) => {
@@ -2857,6 +2731,23 @@ const Server = (): JSX.Element => {
   }
 
   useEffect(() => {
+    const offApply = onEvent('script_editor_apply', ({ connectionId, scripts }) => {
+      setScriptsByConnection((prev) => ({
+        ...prev,
+        [connectionId]: scripts
+      }))
+    })
+    const offRun = onEvent('script_editor_run_once', ({ connectionId, scriptId }) => {
+      void executeScript(connectionId, scriptId, 'manual')
+    })
+
+    return () => {
+      offApply()
+      offRun()
+    }
+  }, [executeScript])
+
+  useEffect(() => {
     const openConnectionIds = new Set(connections.filter((conn) => conn.isOpen).map((conn) => conn.id))
     const activeTimerKeys = new Set<string>()
 
@@ -2887,6 +2778,52 @@ const Server = (): JSX.Element => {
       scriptTimerMapRef.current = {}
     }
   }, [])
+
+  useEffect(() => {
+    setOpenTabs((prev) =>
+      prev.map((tab) => (tab.stringEncoding === globalEncoding ? tab : { ...tab, stringEncoding: globalEncoding }))
+    )
+    setWorkspaceTabSettings((prev) => {
+      const next = { ...prev }
+      Object.keys(next).forEach((key) => {
+        const item = next[key]
+        if (item.stringEncoding !== globalEncoding) {
+          next[key] = { ...item, stringEncoding: globalEncoding }
+        }
+      })
+      return next
+    })
+  }, [globalEncoding])
+
+  useEffect(() => {
+    const syncFromStorage = (): void => {
+      setGlobalEncoding(getGlobalStringEncodingPreference())
+    }
+
+    const onStorage = (event: StorageEvent): void => {
+      if (event.key === GLOBAL_STRING_ENCODING_KEY) {
+        syncFromStorage()
+      }
+    }
+
+    const onPreferenceChange = (event: Event): void => {
+      const customEvent = event as CustomEvent<GlobalPreferenceChangeDetail>
+      if (customEvent.detail?.key === GLOBAL_STRING_ENCODING_KEY) {
+        syncFromStorage()
+      }
+    }
+
+    window.addEventListener('storage', onStorage)
+    window.addEventListener(GLOBAL_PREFERENCE_CHANGE_EVENT, onPreferenceChange as EventListener)
+    return () => {
+      window.removeEventListener('storage', onStorage)
+      window.removeEventListener(GLOBAL_PREFERENCE_CHANGE_EVENT, onPreferenceChange as EventListener)
+    }
+  }, [])
+
+  useEffect(() => {
+    setInlineValueEditCell(null)
+  }, [activeTabId])
 
   const handleNewConnection = (connection: Connection) => {
     setConnections([...connections, connection])
@@ -2969,63 +2906,313 @@ const Server = (): JSX.Element => {
     }
   }
 
-  const handleSaveWorkspace = () => {
-    const workspace = {
-      version: 3,
+  const getWorkspaceSnapshot = (): PersistedWorkspaceSnapshot => {
+    return {
+      version: 4,
       connections: connections.map((c) => ({
         ...c,
         isOpen: false
       })),
       tabSettings: workspaceTabSettings,
-      scriptsByConnection
+      scriptsByConnection,
+      openTabs: openTabs.map((tab) => ({
+        connectionId: tab.connectionId,
+        slaveId: tab.slaveId,
+        registerGroupId: tab.registerGroupId
+      })),
+      activeTabId
     }
+  }
+
+  const getDefaultWorkspaceFilename = () =>
+    `${DEFAULT_WORKSPACE_FILENAME_PREFIX}_${new Date().toISOString().slice(0, 10)}.json`
+
+  const loadRecentWorkspacesFromStorage = (): RecentWorkspaceEntry[] => {
+    try {
+      const raw = localStorage.getItem(RECENT_WORKSPACES_STORAGE_KEY)
+      if (!raw) return []
+      const parsed = JSON.parse(raw)
+      if (!Array.isArray(parsed)) return []
+      return parsed.filter((item) => item && typeof item === 'object') as RecentWorkspaceEntry[]
+    } catch {
+      return []
+    }
+  }
+
+  const persistRecentWorkspaces = (entries: RecentWorkspaceEntry[]): void => {
+    setRecentWorkspaces(entries)
+    localStorage.setItem(RECENT_WORKSPACES_STORAGE_KEY, JSON.stringify(entries))
+  }
+
+  const markLastWorkspaceId = (id: string | null): void => {
+    if (!id) {
+      localStorage.removeItem(LAST_WORKSPACE_ID_STORAGE_KEY)
+      return
+    }
+    localStorage.setItem(LAST_WORKSPACE_ID_STORAGE_KEY, id)
+  }
+
+  const upsertRecentWorkspaceByPath = (
+    path: string,
+    name: string,
+    options?: { setAsLast?: boolean }
+  ): void => {
+    const existing = recentWorkspaces.find((entry) => entry.path === path)
+    const nextEntry: RecentWorkspaceEntry = existing
+      ? { ...existing, name, updatedAt: Date.now() }
+      : { id: uuidv4(), name, path, updatedAt: Date.now() }
+
+    const merged = [nextEntry, ...recentWorkspaces.filter((entry) => entry.path !== path)].slice(
+      0,
+      MAX_RECENT_WORKSPACES
+    )
+    persistRecentWorkspaces(merged)
+    if (options?.setAsLast !== false) {
+      markLastWorkspaceId(nextEntry.id)
+    }
+  }
+
+  const removeRecentWorkspace = (entryId: string): void => {
+    const next = recentWorkspaces.filter((entry) => entry.id !== entryId)
+    persistRecentWorkspaces(next)
+    const lastId = localStorage.getItem(LAST_WORKSPACE_ID_STORAGE_KEY)
+    if (lastId === entryId) {
+      markLastWorkspaceId(null)
+    }
+  }
+
+  const applyWorkspaceSnapshot = (
+    workspace: PersistedWorkspaceSnapshot,
+    options?: { fileName?: string; filePath?: string | null }
+  ): boolean => {
+    const workspaceVersion = workspace.version
+    if (
+      (workspaceVersion === 1 || workspaceVersion === 2 || workspaceVersion === 3 || workspaceVersion === 4) &&
+      Array.isArray(workspace.connections)
+    ) {
+      const restoredTabSettings =
+        (workspaceVersion === 2 || workspaceVersion === 3 || workspaceVersion === 4) &&
+        workspace.tabSettings &&
+        typeof workspace.tabSettings === 'object'
+          ? workspace.tabSettings
+          : {}
+
+      const restoredOpenTabs =
+        workspaceVersion === 4 && Array.isArray(workspace.openTabs)
+          ? workspace.openTabs
+              .map((savedTab) => {
+                const connection = workspace.connections.find((conn) => conn.id === savedTab.connectionId)
+                const slave = connection?.slaves.find((item) => item.id === savedTab.slaveId)
+                const group = slave?.registerGroups.find((item) => item.id === savedTab.registerGroupId)
+                if (!connection || !slave || !group) return null
+                const tabId = getTabId(savedTab.connectionId, savedTab.slaveId, savedTab.registerGroupId)
+                const savedSettings = restoredTabSettings[tabId]
+                return {
+                  connectionId: savedTab.connectionId,
+                  slaveId: savedTab.slaveId,
+                  registerGroupId: savedTab.registerGroupId,
+                  selectedAddresses: new Set<number>(),
+                  interpretationTab: savedSettings?.interpretationTab || 'basic',
+                  stringEncoding: savedSettings?.stringEncoding || globalEncoding,
+                  typedInterpretation: savedSettings?.typedInterpretation || {},
+                  registerDisplayFormat: savedSettings?.registerDisplayFormat || {}
+                } as OpenTab
+              })
+              .filter((tab): tab is OpenTab => tab !== null)
+          : []
+
+      setConnections(workspace.connections)
+      setWorkspaceTabSettings(restoredTabSettings)
+      setScriptsByConnection(
+        (workspaceVersion === 3 || workspaceVersion === 4) &&
+          workspace.scriptsByConnection &&
+          typeof workspace.scriptsByConnection === 'object'
+          ? workspace.scriptsByConnection
+          : {}
+      )
+      setOpenTabs(restoredOpenTabs)
+      const preferredActiveTabId =
+        workspaceVersion === 4 && typeof workspace.activeTabId === 'string' ? workspace.activeTabId : null
+      const hasPreferredTab =
+        preferredActiveTabId &&
+        restoredOpenTabs.some(
+          (tab) => getTabId(tab.connectionId, tab.slaveId, tab.registerGroupId) === preferredActiveTabId
+        )
+      setActiveTabId(
+        hasPreferredTab
+          ? preferredActiveTabId
+          : restoredOpenTabs[0]
+            ? getTabId(
+                restoredOpenTabs[0].connectionId,
+                restoredOpenTabs[0].slaveId,
+                restoredOpenTabs[0].registerGroupId
+              )
+            : null
+      )
+      setExpandedConnections(new Set(restoredOpenTabs.map((tab) => tab.connectionId)))
+      setExpandedSlaves(new Set(restoredOpenTabs.map((tab) => tab.slaveId)))
+      setWorkspaceFileHandle(null)
+      setWorkspaceFilename(options?.fileName || null)
+      setWorkspaceFilePath(options?.filePath || null)
+      return true
+    }
+    showUserError('Invalid workspace file format.')
+    return false
+  }
+
+  const openWorkspaceByPath = async (
+    path: string,
+    options?: { fallbackName?: string; removeOnError?: boolean; setAsLast?: boolean }
+  ): Promise<boolean> => {
+    try {
+      const text = await window.api.readTextFile(path)
+      const workspace = JSON.parse(text) as PersistedWorkspaceSnapshot
+      const fileName = path.split(/[\\/]/).pop() || options?.fallbackName
+      const applied = applyWorkspaceSnapshot(workspace, { fileName, filePath: path })
+      if (!applied) return false
+
+      upsertRecentWorkspaceByPath(path, fileName || options?.fallbackName || path, {
+        setAsLast: options?.setAsLast
+      })
+      return true
+    } catch (error) {
+      console.warn('Failed to load workspace from path:', path, error)
+      if (options?.removeOnError) {
+        const failedEntry = recentWorkspaces.find((entry) => entry.path === path)
+        if (failedEntry) removeRecentWorkspace(failedEntry.id)
+      }
+      return false
+    }
+  }
+
+  const downloadWorkspaceSnapshot = (workspace: PersistedWorkspaceSnapshot) => {
     const json = JSON.stringify(workspace, null, 2)
     const blob = new Blob([json], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = `modbux_workspace_${new Date().toISOString().slice(0, 10)}.json`
+    link.download = workspaceFilename || getDefaultWorkspaceFilename()
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
     URL.revokeObjectURL(url)
   }
 
-  const handleOpenWorkspace = async (file: File | null) => {
-    if (!file) return
+  const saveWorkspaceWithHandle = async (
+    workspace: PersistedWorkspaceSnapshot,
+    forceChooseNewFile: boolean
+  ): Promise<boolean> => {
+    if (workspaceFilePath && !forceChooseNewFile) {
+      try {
+        await window.api.writeTextFile(workspaceFilePath, JSON.stringify(workspace, null, 2))
+        upsertRecentWorkspaceByPath(
+          workspaceFilePath,
+          workspaceFilename || workspaceFilePath.split(/[\\/]/).pop() || 'Workspace',
+          { setAsLast: true }
+        )
+        return true
+      } catch (error) {
+        console.error('Failed to write workspace via path:', error)
+      }
+    }
+
+    const fsWindow = window as Window & {
+      showSaveFilePicker?: (options?: {
+        suggestedName?: string
+        types?: Array<{ description: string; accept: Record<string, string[]> }>
+      }) => Promise<WorkspaceFileHandle>
+    }
+
+    if (typeof fsWindow.showSaveFilePicker !== 'function') return false
+
     try {
-      const text = await file.text()
-      const workspace = JSON.parse(text)
-      if (
-        (workspace.version === 1 || workspace.version === 2 || workspace.version === 3) &&
-        Array.isArray(workspace.connections)
-      ) {
-        setConnections(workspace.connections)
-        setWorkspaceTabSettings(
-          (workspace.version === 2 || workspace.version === 3) &&
-            workspace.tabSettings &&
-            typeof workspace.tabSettings === 'object'
-            ? workspace.tabSettings
-            : {}
+      let handle = workspaceFileHandle
+      if (!handle || forceChooseNewFile) {
+        handle = await fsWindow.showSaveFilePicker({
+          suggestedName: workspaceFilename || getDefaultWorkspaceFilename(),
+          types: [
+            {
+              description: 'Modbux Workspace',
+              accept: { 'application/json': ['.json'] }
+            }
+          ]
+        })
+      }
+
+      const writable = await handle.createWritable()
+      await writable.write(JSON.stringify(workspace, null, 2))
+      await writable.close()
+      setWorkspaceFileHandle(handle)
+      if (handle.name) setWorkspaceFilename(handle.name)
+      if (workspaceFilePath) {
+        upsertRecentWorkspaceByPath(
+          workspaceFilePath,
+          workspaceFilename || workspaceFilePath.split(/[\\/]/).pop() || 'Workspace',
+          { setAsLast: true }
         )
-        setScriptsByConnection(
-          workspace.version === 3 &&
-            workspace.scriptsByConnection &&
-            typeof workspace.scriptsByConnection === 'object'
-            ? workspace.scriptsByConnection
-            : {}
-        )
-        setOpenTabs([])
-        setActiveTabId(null)
-        setExpandedConnections(new Set())
-        setExpandedSlaves(new Set())
-      } else {
-        showUserError('Invalid workspace file format.')
+      }
+      return true
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        return true
+      }
+      console.error('Failed to write workspace via file handle:', error)
+      return false
+    }
+  }
+
+  const handleSaveWorkspace = async () => {
+    const workspace = getWorkspaceSnapshot()
+    const saved = await saveWorkspaceWithHandle(workspace, false)
+    if (!saved) {
+      downloadWorkspaceSnapshot(workspace)
+    }
+  }
+
+  const handleSaveWorkspaceAs = async () => {
+    const workspace = getWorkspaceSnapshot()
+    const saved = await saveWorkspaceWithHandle(workspace, true)
+    if (!saved) {
+      downloadWorkspaceSnapshot(workspace)
+    }
+  }
+
+  const handleOpenWorkspace = async () => {
+    try {
+      const filePath = await window.api.pickWorkspaceFile()
+      if (!filePath) return
+      const text = await window.api.readTextFile(filePath)
+      const workspace = JSON.parse(text) as PersistedWorkspaceSnapshot
+      const fileName = filePath.split(/[\\/]/).pop() || 'Workspace'
+      const applied = applyWorkspaceSnapshot(workspace, { fileName, filePath })
+      if (applied) {
+        upsertRecentWorkspaceByPath(filePath, fileName, { setAsLast: true })
       }
     } catch (error) {
       console.error('Failed to open workspace:', error)
       showUserError('Failed to open workspace file.')
     }
+  }
+
+  const handleOpenRecentWorkspaceMenu = (event: ReactMouseEvent<HTMLButtonElement>): void => {
+    setRecentWorkspaceAnchorEl(event.currentTarget)
+  }
+
+  const handleCloseRecentWorkspaceMenu = (): void => {
+    setRecentWorkspaceAnchorEl(null)
+  }
+
+  const handleSelectRecentWorkspace = (entry: RecentWorkspaceEntry): void => {
+    void openWorkspaceByPath(entry.path, {
+      fallbackName: entry.name,
+      removeOnError: true,
+      setAsLast: true
+    }).then((ok) => {
+      if (!ok) {
+        showUserError('Workspace file is invalid or no longer exists.')
+      }
+      handleCloseRecentWorkspaceMenu()
+    })
   }
 
   const getSelectedConnection = () => {
@@ -3064,6 +3251,42 @@ const Server = (): JSX.Element => {
       }
       showUserError('Failed to open connection.')
     }
+  }
+
+  const handleCloseWorkspace = async (): Promise<void> => {
+    const activeConnections = connectionsRef.current
+    const openConnections = activeConnections.filter((conn) => conn.isOpen)
+
+    if (openConnections.length > 0) {
+      const results = await Promise.allSettled(
+        openConnections.map((conn) => window.api.deleteServer(conn.id))
+      )
+      const hasCloseError = results.some((result) => result.status === 'rejected')
+      if (hasCloseError) {
+        showUserError('Some connections failed to close while closing workspace.')
+      }
+    }
+
+    Object.values(scriptTimerMapRef.current).forEach((timer) => clearInterval(timer))
+    scriptTimerMapRef.current = {}
+    scriptStateMapRef.current = {}
+
+    sendEvent('close_register_plot_windows')
+
+    setConnections([])
+    setWorkspaceTabSettings({})
+    setScriptsByConnection({})
+    setOpenTabs([])
+    setActiveTabId(null)
+    setSelectedNodeId(null)
+    setExpandedConnections(new Set())
+    setExpandedSlaves(new Set())
+    setPlotWindows([])
+    setWorkspaceFileHandle(null)
+    setWorkspaceFilename(null)
+    setWorkspaceFilePath(null)
+    setRecentWorkspaceAnchorEl(null)
+    markLastWorkspaceId(null)
   }
 
   const handleCloseConnection = async () => {
@@ -3152,32 +3375,61 @@ const Server = (): JSX.Element => {
             elevation={0}
             sx={{ bgcolor: 'background.paper', borderBottom: 1, borderColor: 'divider' }}
           >
-            <Toolbar variant="dense" sx={{ gap: 0.5, minHeight: 42 }}>
-              <Tooltip title={t('server.toolbar.saveWorkspace')}>
+            <Toolbar variant="dense" sx={{ gap: 1, minHeight: 42, flexWrap: 'wrap' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                 <Button
                   size="small"
                   variant="text"
-                  startIcon={<SaveIcon />}
-                  onClick={handleSaveWorkspace}
+                  startIcon={<OpenIcon />}
+                  onClick={() => void handleOpenWorkspace()}
                 >
-                  {t('server.toolbar.saveWorkspace')}
+                  {t('server.toolbar.openWorkspace')}
                 </Button>
-              </Tooltip>
-              <div>
-                <input
-                  type="file"
-                  accept=".json"
-                  style={{ display: 'none' }}
-                  id="workspace-file-input"
-                  onChange={(e) => handleOpenWorkspace(e.target.files?.[0] || null)}
-                />
-                <label htmlFor="workspace-file-input">
-                  <Button size="small" variant="text" startIcon={<OpenIcon />} component="span">
-                    {t('server.toolbar.openWorkspace')}
+                <Tooltip title={t('server.toolbar.saveWorkspace')}>
+                  <Button
+                    size="small"
+                    variant="text"
+                    startIcon={<SaveIcon />}
+                    onClick={() => void handleSaveWorkspace()}
+                  >
+                    {t('server.toolbar.saveWorkspace')}
                   </Button>
-                </label>
-              </div>
-              <Box sx={{ width: 8 }} />
+                </Tooltip>
+                <Tooltip title={t('server.toolbar.saveWorkspaceAs')}>
+                  <Button
+                    size="small"
+                    variant="text"
+                    startIcon={<SaveIcon />}
+                    onClick={() => void handleSaveWorkspaceAs()}
+                  >
+                    {t('server.toolbar.saveWorkspaceAs')}
+                  </Button>
+                </Tooltip>
+                <Tooltip title={t('server.toolbar.recentWorkspaces')}>
+                  <Button
+                    size="small"
+                    variant="text"
+                    startIcon={<HistoryIcon />}
+                    onClick={handleOpenRecentWorkspaceMenu}
+                    disabled={recentWorkspaces.length === 0}
+                  >
+                    {t('server.toolbar.recentWorkspaces')}
+                  </Button>
+                </Tooltip>
+                <Tooltip title={t('server.toolbar.closeWorkspace')}>
+                  <Button
+                    size="small"
+                    variant="text"
+                    startIcon={<CloseIcon />}
+                    onClick={() => void handleCloseWorkspace()}
+                    disabled={connections.length === 0}
+                  >
+                    {t('server.toolbar.closeWorkspace')}
+                  </Button>
+                </Tooltip>
+              </Box>
+              <Divider orientation="vertical" flexItem />
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
               <Tooltip title={t('server.toolbar.newConnection')}>
                 <Button
                   size="small"
@@ -3226,7 +3478,9 @@ const Server = (): JSX.Element => {
                   {t('common.disconnect')}
                 </Button>
               </Tooltip>
-              <Box sx={{ width: 8 }} />
+              </Box>
+              <Divider orientation="vertical" flexItem />
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
               <Tooltip title={t('server.toolbar.editConnection')}>
                 <Button
                   size="small"
@@ -3268,15 +3522,44 @@ const Server = (): JSX.Element => {
                   disabled={!scriptTargetConnectionId}
                   onClick={() => {
                     if (!scriptTargetConnectionId) return
-                    setScriptEditorConnectionId(scriptTargetConnectionId)
-                    setScriptEditorOpen(true)
+                    const targetConn = connections.find((conn) => conn.id === scriptTargetConnectionId)
+                    sendEvent('open_script_editor_window', {
+                      connectionId: scriptTargetConnectionId,
+                      connectionAlias: targetConn?.alias || 'Connection',
+                      scripts: scriptsByConnection[scriptTargetConnectionId] ?? []
+                    })
                   }}
                 >
                   {t('server.toolbar.editScript')}
                 </Button>
               </Tooltip>
-              <Box sx={{ width: 8 }} />
+              </Box>
+              <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1 }}>
+                {workspaceFilename ? (
+                  <Typography variant="caption" color="text.secondary" sx={{ maxWidth: 240 }} noWrap>
+                    {workspaceFilename}
+                  </Typography>
+                ) : null}
               <SettingsMenu />
+              </Box>
+              <Menu
+                anchorEl={recentWorkspaceAnchorEl}
+                open={Boolean(recentWorkspaceAnchorEl)}
+                onClose={handleCloseRecentWorkspaceMenu}
+              >
+                {recentWorkspaces.map((entry) => (
+                  <MenuItem key={entry.id} onClick={() => handleSelectRecentWorkspace(entry)}>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', minWidth: 220 }}>
+                      <Typography variant="body2" noWrap>
+                        {entry.name}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {new Date(entry.updatedAt).toLocaleString()}
+                      </Typography>
+                    </Box>
+                  </MenuItem>
+                ))}
+              </Menu>
             </Toolbar>
           </AppBar>
         )
@@ -3315,6 +3598,7 @@ const Server = (): JSX.Element => {
                   }
                   isExpanded={expandedConnections.has(conn.id)}
                   onToggle={() => toggleConnection(conn.id)}
+                  onDoubleClick={() => toggleConnection(conn.id)}
                   onSelect={() => setSelectedNodeId(conn.id)}
                   isSelected={selectedNodeId === conn.id}
                   hasChildren={conn.slaves.length > 0}
@@ -3326,6 +3610,7 @@ const Server = (): JSX.Element => {
                         icon={<DeviceIcon sx={{ fontSize: 16 }} />}
                         isExpanded={expandedSlaves.has(slave.id)}
                         onToggle={() => toggleSlave(slave.id)}
+                        onDoubleClick={() => toggleSlave(slave.id)}
                         onSelect={() => setSelectedNodeId(`${conn.id}/${slave.id}`)}
                         isSelected={selectedNodeId === `${conn.id}/${slave.id}`}
                         hasChildren={slave.registerGroups.length > 0}
@@ -3336,7 +3621,7 @@ const Server = (): JSX.Element => {
                             key={group.id}
                             label={`${group.name}`}
                             icon={getRegisterTypeIcon(group.type)}
-                            onSelect={() => setSelectedNodeId(`${conn.id}/${slave.id}/${group.id}`)}
+                            onSelect={() => selectRegisterGroup(conn.id, slave.id, group.id)}
                             onDoubleClick={() => openRegisterGroup(conn.id, slave.id, group.id)}
                             isSelected={selectedNodeId === `${conn.id}/${slave.id}/${group.id}`}
                             level={2}
@@ -4083,21 +4368,147 @@ const Server = (): JSX.Element => {
                                           {isCoilGroup ? (
                                             <Typography
                                               variant="body2"
-                                              sx={{ fontFamily: MONO_FONT_FAMILY, fontWeight: 700, color: 'inherit' }}
+                                              sx={{
+                                                fontFamily: MONO_FONT_FAMILY,
+                                                fontSize: MONO_FONT_SIZE,
+                                                fontWeight: 700,
+                                                color: 'inherit'
+                                              }}
                                             >
                                               {register.value !== 0 ? 'ON' : 'OFF'}
                                             </Typography>
                                           ) : (
-                                            <Typography
-                                              variant="body2"
-                                              sx={{ fontFamily: MONO_FONT_FAMILY, fontWeight: 700, color: 'inherit' }}
-                                            >
-                                              {formatDisplayValue(
-                                                rawRegisterMap,
-                                                register.address,
-                                                currentDisplayMode
-                                              )}
-                                            </Typography>
+                                            (() => {
+                                              const isEditing =
+                                                inlineValueEditCell?.tabId === activeTabId &&
+                                                inlineValueEditCell?.address === register.address
+                                              if (isEditing && inlineValueEditCell) {
+                                                return (
+                                                  <TextField
+                                                    autoFocus
+                                                    size="small"
+                                                    variant="standard"
+                                                    value={inlineValueEditCell.draft}
+                                                    error={inlineValueEditCell.hasError}
+                                                    onClick={(event) => event.stopPropagation()}
+                                                    onChange={(event) =>
+                                                      setInlineValueEditCell((prev) =>
+                                                        prev &&
+                                                        prev.tabId === activeTabId &&
+                                                        prev.address === register.address
+                                                          ? {
+                                                              ...prev,
+                                                              draft: event.target.value,
+                                                              hasError: false
+                                                            }
+                                                          : prev
+                                                      )
+                                                    }
+                                                    onBlur={() => {
+                                                      const parsed = parseAutoRadixRegisterInput(
+                                                        inlineValueEditCell.draft
+                                                      )
+                                                      if (parsed === null) {
+                                                        setInlineValueEditCell((prev) =>
+                                                          prev &&
+                                                          prev.tabId === activeTabId &&
+                                                          prev.address === register.address
+                                                            ? { ...prev, hasError: true }
+                                                            : prev
+                                                        )
+                                                        showUserError('Invalid register value.')
+                                                        return
+                                                      }
+                                                      updateRegister(
+                                                        tab.connectionId,
+                                                        tab.slaveId,
+                                                        tab.registerGroupId,
+                                                        register.address,
+                                                        { value: parsed }
+                                                      )
+                                                      setInlineValueEditCell(null)
+                                                    }}
+                                                    onKeyDown={(event) => {
+                                                      if (event.key === 'Escape') {
+                                                        setInlineValueEditCell(null)
+                                                        return
+                                                      }
+                                                      if (event.key !== 'Enter') return
+                                                      event.preventDefault()
+                                                      const parsed = parseAutoRadixRegisterInput(
+                                                        inlineValueEditCell.draft
+                                                      )
+                                                      if (parsed === null) {
+                                                        setInlineValueEditCell((prev) =>
+                                                          prev &&
+                                                          prev.tabId === activeTabId &&
+                                                          prev.address === register.address
+                                                            ? { ...prev, hasError: true }
+                                                            : prev
+                                                        )
+                                                        showUserError('Invalid register value.')
+                                                        return
+                                                      }
+                                                      updateRegister(
+                                                        tab.connectionId,
+                                                        tab.slaveId,
+                                                        tab.registerGroupId,
+                                                        register.address,
+                                                        { value: parsed }
+                                                      )
+                                                      setInlineValueEditCell(null)
+                                                    }}
+                                                    inputProps={{
+                                                      style: {
+                                                        fontFamily: MONO_FONT_FAMILY,
+                                                        fontWeight: 700,
+                                                        fontSize: MONO_FONT_SIZE
+                                                      }
+                                                    }}
+                                                    sx={{
+                                                      width: '100%',
+                                                      mt: -0.25,
+                                                      '& .MuiInputBase-root': {
+                                                        fontSize: MONO_FONT_SIZE,
+                                                        lineHeight: 1.43
+                                                      }
+                                                    }}
+                                                  />
+                                                )
+                                              }
+
+                                              return (
+                                                <Typography
+                                                  variant="body2"
+                                                  onDoubleClick={(event) => {
+                                                    event.stopPropagation()
+                                                    setInlineValueEditCell({
+                                                      tabId: activeTabId,
+                                                      address: register.address,
+                                                      draft: formatDisplayValue(
+                                                        rawRegisterMap,
+                                                        register.address,
+                                                        currentDisplayMode
+                                                      ),
+                                                      hasError: false
+                                                    })
+                                                  }}
+                                                  sx={{
+                                                    fontFamily: MONO_FONT_FAMILY,
+                                                    fontSize: MONO_FONT_SIZE,
+                                                    fontWeight: 700,
+                                                    color: 'inherit',
+                                                    cursor: 'text'
+                                                  }}
+                                                >
+                                                  {formatDisplayValue(
+                                                    rawRegisterMap,
+                                                    register.address,
+                                                    currentDisplayMode
+                                                  )}
+                                                </Typography>
+                                              )
+                                            })()
                                           )}
                                         </TableCell>
                                         <TableCell
@@ -4424,18 +4835,14 @@ const Server = (): JSX.Element => {
                           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25, flex: 1, minHeight: 0 }}>
                             {effectiveInterpretationTab === 'string' ? (
                               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                                <Typography variant="subtitle2">String Encoding:</Typography>
+                                <Typography variant="subtitle2">Global String Encoding:</Typography>
                                 <Select
-                                  value={tab.stringEncoding}
-                                  onChange={(e) =>
-                                    updateTab(activeTabId, {
-                                      stringEncoding: e.target.value as string
-                                    })
-                                  }
+                                  value={globalEncoding}
+                                  onChange={(e) => setGlobalStringEncodingPreference(e.target.value as string)}
                                   size="small"
                                   sx={{ minWidth: 150 }}
                                 >
-                                  {ENCODING_OPTIONS.map((enc) => (
+                                  {GLOBAL_STRING_ENCODING_OPTIONS.map((enc) => (
                                     <MenuItem key={enc} value={enc}>
                                       {enc}
                                     </MenuItem>
@@ -5675,26 +6082,6 @@ const Server = (): JSX.Element => {
         </Box>
       </Box>
 
-      <ScriptEditorDialog
-        open={scriptEditorOpen}
-        onClose={() => setScriptEditorOpen(false)}
-        connectionAlias={
-          connections.find((connection) => connection.id === scriptEditorConnectionId)?.alias ||
-          'Connection'
-        }
-        scripts={scriptEditorConnectionId ? scriptsByConnection[scriptEditorConnectionId] ?? [] : []}
-        onChange={(scripts) => {
-          if (!scriptEditorConnectionId) return
-          setScriptsByConnection((prev) => ({
-            ...prev,
-            [scriptEditorConnectionId]: scripts
-          }))
-        }}
-        onRunScript={(scriptId) => {
-          if (!scriptEditorConnectionId) return
-          void executeScript(scriptEditorConnectionId, scriptId, 'manual')
-        }}
-      />
       <NewConnectionDialog
         open={newConnectionOpen}
         onClose={() => setNewConnectionOpen(false)}

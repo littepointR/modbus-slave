@@ -13,6 +13,14 @@ import {
   type ThemeModePreference,
   type ThemePrimaryPreset
 } from './index'
+import {
+  GLOBAL_MONO_FONT_KEY,
+  GLOBAL_MONO_FONT_SIZE_KEY,
+  applyGlobalMonoFontPreference,
+  applyGlobalMonoFontSizePreference,
+  getGlobalMonoFontPreference,
+  getGlobalMonoFontSizePreference
+} from '@renderer/settings/global-preferences'
 
 const THEME_MODE_KEY = 'modbux.theme.mode'
 const THEME_COLOR_KEY = 'modbux.theme.color'
@@ -82,6 +90,50 @@ export const ThemeSettingsProvider = ({ children }: PropsWithChildren): JSX.Elem
     media.addEventListener('change', onChange)
     return () => media.removeEventListener('change', onChange)
   }, [themeMode])
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', resolvedMode)
+  }, [resolvedMode])
+
+  useEffect(() => {
+    applyGlobalMonoFontPreference(getGlobalMonoFontPreference())
+    applyGlobalMonoFontSizePreference(getGlobalMonoFontSizePreference())
+  }, [])
+
+  useEffect(() => {
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === THEME_MODE_KEY) {
+        const next = event.newValue
+        if (next === 'light' || next === 'dark' || next === 'system') {
+          setThemeModeState(next)
+        }
+      }
+      if (event.key === THEME_COLOR_KEY) {
+        const next = event.newValue
+        if (
+          next === 'green' ||
+          next === 'blue' ||
+          next === 'orange' ||
+          next === 'rose' ||
+          next === 'teal' ||
+          next === 'indigo' ||
+          next === 'red' ||
+          next === 'amber'
+        ) {
+          setThemeColorState(next)
+        }
+      }
+      if (event.key === GLOBAL_MONO_FONT_KEY) {
+        applyGlobalMonoFontPreference(getGlobalMonoFontPreference())
+      }
+      if (event.key === GLOBAL_MONO_FONT_SIZE_KEY) {
+        applyGlobalMonoFontSizePreference(getGlobalMonoFontSizePreference())
+      }
+    }
+
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
+  }, [])
 
   const muiTheme = useMemo(() => createAppTheme(resolvedMode, themeColor), [resolvedMode, themeColor])
 

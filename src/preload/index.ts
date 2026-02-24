@@ -6,6 +6,7 @@ const passedArgs = process.argv.slice(2)
 const isServerWindow = passedArgs.includes('is-server-window')
 const isCommLogWindow = passedArgs.includes('is-comm-log-window')
 const isRegisterPlotWindow = passedArgs.includes('is-register-plot-window')
+const isScriptEditorWindow = passedArgs.includes('is-script-editor-window')
 
 export const ipcInvoke = <C extends keyof IpcHandlerMap>(
   channel: C,
@@ -69,6 +70,7 @@ export type Api = {
   isServerWindow: boolean
   isCommLogWindow: boolean
   isRegisterPlotWindow: boolean
+  isScriptEditorWindow: boolean
 } & Handlers
 
 /**
@@ -80,6 +82,7 @@ const api = {
   isServerWindow,
   isCommLogWindow,
   isRegisterPlotWindow,
+  isScriptEditorWindow,
   ...handlers
 } as Api
 
