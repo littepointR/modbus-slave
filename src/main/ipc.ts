@@ -1,7 +1,9 @@
 import { AppState } from './state'
 import { IpcHandlerMap, IpcEvent, IpcEventPayloadMap } from '@shared'
 import { ModbusServer } from './modules/mobusServer'
-import { IpcMainEvent, IpcMainInvokeEvent, ipcMain } from 'electron'
+import { IpcMainEvent, IpcMainInvokeEvent, dialog, ipcMain } from 'electron'
+
+const ipcHandlerRegistry = new Map<keyof IpcHandlerMap, (...args: unknown[]) => unknown>()
 
 export const ipcHandle = <C extends keyof IpcHandlerMap>(
   channel: C,
@@ -10,7 +12,37 @@ export const ipcHandle = <C extends keyof IpcHandlerMap>(
     ...args: IpcHandlerMap[C]['args']
   ) => Promise<IpcHandlerMap[C]['return']> | IpcHandlerMap[C]['return']
 ): void => {
+  ipcHandlerRegistry.set(channel, (...args: unknown[]) => {
+    return listener({} as IpcMainInvokeEvent, ...(args as IpcHandlerMap[C]['args']))
+  })
+  ipcMain.removeHandler(channel)
   ipcMain.handle(channel, listener)
+}
+
+export const invokeIpcHandler = async <C extends keyof IpcHandlerMap>(
+  channel: C,
+  ...args: IpcHandlerMap[C]['args']
+): Promise<IpcHandlerMap[C]['return']> => {
+  const handler = ipcHandlerRegistry.get(channel)
+  if (!handler) {
+    throw new Error(`IPC handler not registered for channel: ${channel}`)
+  }
+  return (await handler(...args)) as IpcHandlerMap[C]['return']
+}
+
+export const invokeIpcHandlerUnsafe = async (
+  channel: keyof IpcHandlerMap,
+  args: unknown[]
+): Promise<unknown> => {
+  const handler = ipcHandlerRegistry.get(channel)
+  if (!handler) {
+    throw new Error(`IPC handler not registered for channel: ${channel}`)
+  }
+  return await handler(...args)
+}
+
+export const listRegisteredIpcHandlers = (): (keyof IpcHandlerMap)[] => {
+  return [...ipcHandlerRegistry.keys()]
 }
 
 type InitIpcFn = (app: Electron.App, state: AppState, server: ModbusServer) => void
@@ -36,6 +68,23 @@ export const initIpc: InitIpcFn = (app, _state, server) => {
     server.getTrafficMonitor().exportToFile(filepath)
   )
   ipcHandle('get_comm_stats', () => server.getTrafficMonitor().getStats())
+  ipcHandle('read_text_file', async (_, absolutePath: string) => {
+    const fs = await import('fs/promises')
+    return await fs.readFile(absolutePath, 'utf8')
+  })
+  ipcHandle('write_text_file', async (_, absolutePath: string, content: string) => {
+    const fs = await import('fs/promises')
+    await fs.writeFile(absolutePath, content, 'utf8')
+  })
+  ipcHandle('pick_workspace_file', async () => {
+    const result = await dialog.showOpenDialog({
+      title: 'Open Workspace',
+      properties: ['openFile'],
+      filters: [{ name: 'Modbux Workspace', extensions: ['json'] }]
+    })
+    if (result.canceled || result.filePaths.length === 0) return null
+    return result.filePaths[0]
+  })
 
   ipcHandle('get_app_version', () => app.getVersion())
 

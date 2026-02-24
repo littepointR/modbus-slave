@@ -76,6 +76,9 @@ export const IPC_CHANNELS = [
   'clear_comm_monitor',
   'export_comm_log',
   'get_comm_stats',
+  'read_text_file',
+  'write_text_file',
+  'pick_workspace_file',
   'export_server_data',
   'import_server_data',
   'create_excel_template'
@@ -297,6 +300,24 @@ export interface IpcHandlerSpec {
     return: PacketStats
   }
 
+  /** Read UTF-8 text file from absolute path */
+  ['read_text_file']: {
+    args: [string]
+    return: string
+  }
+
+  /** Write UTF-8 text file to absolute path */
+  ['write_text_file']: {
+    args: [string, string]
+    return: void
+  }
+
+  /** Pick a workspace file path from native open dialog */
+  ['pick_workspace_file']: {
+    args: []
+    return: string | null
+  }
+
   /** Export server register data to Excel */
   ['export_server_data']: {
     args: [ExportServerDataParams]
@@ -391,6 +412,32 @@ export interface RegisterPlotData {
   rawRegisters: Record<number, number>
 }
 
+export interface ScriptDefinitionPayload {
+  id: string
+  name: string
+  enabled: boolean
+  intervalMs: number
+  code: string
+  lastError?: string
+  lastRunAt?: number
+}
+
+export interface ScriptEditorWindowInit {
+  connectionId: string
+  connectionAlias: string
+  scripts: ScriptDefinitionPayload[]
+}
+
+export interface ScriptEditorApplyPayload {
+  connectionId: string
+  scripts: ScriptDefinitionPayload[]
+}
+
+export interface ScriptEditorRunPayload {
+  connectionId: string
+  scriptId: string
+}
+
 export type IpcHandlerMap = {
   [K in IpcChannel]: IpcHandlerSpec[K]
 }
@@ -416,7 +463,13 @@ export const IPC_EVENTS = [
   'comm_monitor_clear',
   'register_plot_init',
   'register_plot_data',
-  'register_plot_window_closed'
+  'register_plot_window_closed',
+  'close_register_plot_windows',
+  'open_script_editor_window',
+  'script_editor_init',
+  'script_editor_apply',
+  'script_editor_run_once',
+  'script_editor_window_closed'
 ] as const
 
 export type IpcEvent = (typeof IPC_EVENTS)[number]
@@ -440,6 +493,12 @@ export interface IpcEventPayloadMap {
   ['register_plot_init']: [RegisterPlotWindowInit]
   ['register_plot_data']: [RegisterPlotData]
   ['register_plot_window_closed']: [string]
+  ['close_register_plot_windows']: []
+  ['open_script_editor_window']: [ScriptEditorWindowInit]
+  ['script_editor_init']: [ScriptEditorWindowInit]
+  ['script_editor_apply']: [ScriptEditorApplyPayload]
+  ['script_editor_run_once']: [ScriptEditorRunPayload]
+  ['script_editor_window_closed']: [string]
 }
 
 export interface BackendMessage {
