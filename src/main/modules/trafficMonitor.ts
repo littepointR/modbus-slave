@@ -5,9 +5,11 @@ export type PacketHandler = (packet: ServerCommPacket) => void
 
 export class TrafficMonitor {
   private _packets: ServerCommPacket[] = []
+  private _packetSizes: number[] = []
   private _handlers: Set<PacketHandler> = new Set()
   private _windows: Windows
-  private _maxPackets = 10000
+  private _bufferBytes = 0
+  private _maxBufferBytes = 100 * 1024 * 1024
   private _isRunning = false
   private _packetId = 0
 
@@ -29,6 +31,8 @@ export class TrafficMonitor {
 
   clear(): void {
     this._packets = []
+    this._packetSizes = []
+    this._bufferBytes = 0
     this._packetId = 0
     this._notifyClear()
   }
@@ -47,10 +51,15 @@ export class TrafficMonitor {
       timestamp: Date.now()
     }
 
+    const packetSize = this._estimatePacketBytes(fullPacket)
     this._packets.push(fullPacket)
+    this._packetSizes.push(packetSize)
+    this._bufferBytes += packetSize
 
-    if (this._packets.length > this._maxPackets) {
+    while (this._bufferBytes > this._maxBufferBytes && this._packets.length > 0) {
       this._packets.shift()
+      const shiftedSize = this._packetSizes.shift() ?? 0
+      this._bufferBytes = Math.max(0, this._bufferBytes - shiftedSize)
     }
 
     this._notifyHandlers(fullPacket)
@@ -89,7 +98,9 @@ export class TrafficMonitor {
       rxCount,
       txCount,
       exceptionCount,
-      bytesTransferred
+      bytesTransferred,
+      bufferBytes: this._bufferBytes,
+      bufferLimitBytes: this._maxBufferBytes
     }
   }
 
@@ -131,6 +142,13 @@ export class TrafficMonitor {
 
   private _emitToRenderer(packet: ServerCommPacket): void {
     this._windows.send('comm_packet', packet)
+  }
+
+  private _estimatePacketBytes(packet: ServerCommPacket): number {
+    const baseOverhead = 128
+    const clientBytes = packet.clientAddr.length * 2
+    const parsedBytes = packet.parsed.values ? packet.parsed.values.length * 8 : 16
+    return baseOverhead + clientBytes + packet.data.byteLength + parsedBytes
   }
 }
 

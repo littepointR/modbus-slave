@@ -289,13 +289,16 @@ export function analyzePacketStats(packets: ServerCommPacket[]): PacketStats {
     rxCount: 0,
     txCount: 0,
     exceptionCount: 0,
-    bytesTransferred: 0
+    bytesTransferred: 0,
+    bufferBytes: 0,
+    bufferLimitBytes: 0
   }
 
   const functionCodeCounts: Record<number, number> = {}
 
   for (const packet of packets) {
     stats.bytesTransferred += packet.data.length
+    stats.bufferBytes += packet.data.length
 
     if (packet.direction === 'RX') {
       stats.rxCount++
@@ -312,6 +315,8 @@ export function analyzePacketStats(packets: ServerCommPacket[]): PacketStats {
       functionCodeCounts[parsed.functionCode] = (functionCodeCounts[parsed.functionCode] || 0) + 1
     }
   }
+
+  stats.bufferLimitBytes = stats.bufferBytes
 
   return stats
 }

@@ -30,6 +30,19 @@
   background: rgba(0, 0, 0, 0.75);
 }
 
+/* Dark theme: raise scrollbar contrast */
+[data-theme='dark'] ::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+[data-theme='dark'] ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.38);
+}
+
+[data-theme='dark'] ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.62);
+}
+
 /* Hide up and down arrows in number inputs, they are ugly */
 /* Chrome, Safari, Edge, Opera */
 input::-webkit-outer-spin-button,

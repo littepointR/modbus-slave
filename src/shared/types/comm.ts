@@ -42,4 +42,6 @@ export interface PacketStats {
   txCount: number
   exceptionCount: number
   bytesTransferred: number
+  bufferBytes: number
+  bufferLimitBytes: number
 }

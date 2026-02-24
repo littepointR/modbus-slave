@@ -85,7 +85,9 @@ describe('trafficMonitor', () => {
       rxCount: 1,
       txCount: 1,
       exceptionCount: 1,
-      bytesTransferred: 5
+      bytesTransferred: 5,
+      bufferBytes: expect.any(Number),
+      bufferLimitBytes: 100 * 1024 * 1024
     })
   })
 
