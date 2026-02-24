@@ -116,6 +116,29 @@ const serial = {
   parity: 'none' as const
 }
 
+const calculateCRC16 = (data: Buffer): number => {
+  let crc = 0xffff
+  for (let i = 0; i < data.length; i++) {
+    crc ^= data[i]
+    for (let j = 0; j < 8; j++) {
+      if (crc & 0x0001) {
+        crc = (crc >> 1) ^ 0xa001
+      } else {
+        crc = crc >> 1
+      }
+    }
+  }
+  return crc
+}
+
+const withRtuCrc = (frame: number[]): Buffer => {
+  const data = Buffer.from(frame)
+  const crc = calculateCRC16(data)
+  const crcBuffer = Buffer.alloc(2)
+  crcBuffer.writeUInt16LE(crc, 0)
+  return Buffer.concat([data, crcBuffer])
+}
+
 describe('serverAdapter', () => {
   beforeEach(() => {
     tcpInstances.length = 0
@@ -304,5 +327,62 @@ describe('serverAdapter', () => {
     expect(getHoldingRegister).toHaveBeenCalledTimes(2)
     expect(getHoldingRegister).toHaveBeenNthCalledWith(1, 0x0020, 9, expect.any(Function))
     expect(getHoldingRegister).toHaveBeenNthCalledWith(2, 0x0021, 9, expect.any(Function))
+  })
+
+  it('returns exception frame when RTU read encounters illegal address', async () => {
+    const getHoldingRegister = vi.fn(
+      (_address: number, _unitId: number, cb: (err: Error | null, value: number) => void) => {
+        const err = new Error('illegal address')
+        ;(err as Error & { modbusErrorCode?: number }).modbusErrorCode = 2
+        cb(err, 0)
+      }
+    )
+
+    const adapter = new RtuServerAdapter(
+      {
+        ...vector,
+        getHoldingRegister
+      } as IServiceVector,
+      serial
+    )
+
+    const write = vi.fn()
+    ;(adapter as unknown as { _port: { write: ReturnType<typeof vi.fn> } })._port = { write }
+
+    const request = Buffer.from([0x00, 0x10, 0x00, 0x01]) // start=0x0010, qty=1
+    await (adapter as any)._processRequest(7, 0x03, request, true)
+
+    expect(write).toHaveBeenCalledTimes(1)
+    const sentFrame = write.mock.calls[0][0] as Buffer
+    expect(sentFrame[0]).toBe(7)
+    expect(sentFrame[1]).toBe(0x83)
+    expect(sentFrame[2]).toBe(0x02)
+  })
+
+  it('processes concatenated RTU frames from a single receive buffer', async () => {
+    const getHoldingRegister = vi.fn((address: number, _unitId: number, cb: (err: null, value: number) => void) => {
+      cb(null, address + 0x1000)
+    })
+
+    const adapter = new RtuServerAdapter(
+      {
+        ...vector,
+        getHoldingRegister
+      } as IServiceVector,
+      serial
+    )
+
+    const write = vi.fn()
+    ;(adapter as unknown as { _port: { write: ReturnType<typeof vi.fn> } })._port = { write }
+
+    const frameA = withRtuCrc([0x01, 0x03, 0x00, 0x10, 0x00, 0x01])
+    const frameB = withRtuCrc([0x01, 0x03, 0x00, 0x11, 0x00, 0x01])
+    ;(adapter as unknown as { _receiveBuffer: Buffer })._receiveBuffer = Buffer.concat([frameA, frameB])
+
+    ;(adapter as unknown as { _processRTUFrame: () => void })._processRTUFrame()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(getHoldingRegister).toHaveBeenCalledTimes(2)
+    expect(write).toHaveBeenCalledTimes(2)
   })
 })

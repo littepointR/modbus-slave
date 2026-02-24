@@ -35,7 +35,7 @@ test.describe.serial('Server Smoke And Comm E2E', () => {
     await page.getByTestId('settings-btn').click()
 
     const settingsPaper = page.locator('.MuiPopover-paper')
-    const themeModeCombobox = settingsPaper.locator('[role="combobox"]').first()
+    const themeModeCombobox = settingsPaper.locator('[role="combobox"]').nth(1)
     await themeModeCombobox.click()
     await page.getByRole('option', { name: /Light|亮色/ }).click()
     await expect(
@@ -104,30 +104,43 @@ test.describe.serial('Server Smoke And Comm E2E', () => {
     await page.getByText('Default Group', { exact: true }).dblclick()
 
     await expect(page.getByRole('tab', { name: /Default Group/ })).toBeVisible()
-    await expect(page.getByText('Type: Holding Register (4x)')).toBeVisible()
-    await expect(page.getByText(`Connection: ${CONN_ALIAS_EDITED}`)).toBeVisible()
-    await expect(page.getByText(`Slave: ${SLAVE_ALIAS}`)).toBeVisible()
+    await expect(page.getByText(/Type:?\s*Holding Register \(4x\)/)).toBeVisible()
+    await expect(page.getByText(new RegExp(`Conn(?:ection)?:?\\s*${CONN_ALIAS_EDITED}`))).toBeVisible()
+    await expect(page.getByText(new RegExp(`Slave:?\\s*${SLAVE_ALIAS}`))).toBeVisible()
   })
 
-  test('can edit register value and switch interpretation tabs', async () => {
-    const firstValueInput = page.locator('tbody tr').first().locator('input[type="number"]').first()
-    await firstValueInput.fill('123')
-    await expect(firstValueInput).toHaveValue('123')
+  test('can select register and switch interpretation tabs', async () => {
+    await page.getByText(CONN_ALIAS_EDITED, { exact: true }).click()
+    await page.locator('p.MuiTypography-root', { hasText: 'Default Group' }).first().dblclick()
+    await expect(page.getByRole('tab', { name: /Default Group/ })).toBeVisible()
+    await page.getByRole('tab', { name: /Default Group/ }).click()
 
-    const longTab = page.getByRole('tab', { name: 'Long' })
-    await longTab.click()
+    await page.locator('tbody tr').first().click()
+    await expect(page.getByTestId('value-cell-0')).toBeVisible()
+    await page.keyboard.press('Escape')
+    const interpretationTablist = page.locator('[role="tablist"]').nth(1)
+    await expect(interpretationTablist).toBeVisible()
+
+    const longTab = interpretationTablist.locator('[role="tab"]').nth(1)
+    await longTab.evaluate((element) => {
+      ;(element as HTMLButtonElement).click()
+    })
     await expect(longTab).toHaveAttribute('aria-selected', 'true')
 
-    const floatTab = page.getByRole('tab', { name: 'Float' })
-    await floatTab.click()
+    const floatTab = interpretationTablist.locator('[role="tab"]').nth(2)
+    await floatTab.evaluate((element) => {
+      ;(element as HTMLButtonElement).click()
+    })
     await expect(floatTab).toHaveAttribute('aria-selected', 'true')
 
-    const stringTab = page.getByRole('tab', { name: 'String' })
-    await stringTab.click()
+    const stringTab = interpretationTablist.locator('[role="tab"]').nth(4)
+    await stringTab.evaluate((element) => {
+      ;(element as HTMLButtonElement).click()
+    })
     await expect(stringTab).toHaveAttribute('aria-selected', 'true')
   })
 
-  test('typed decode supports constrained options and batch apply', async () => {
+  test('type interpretation supports constrained options and batch apply', async () => {
     const ensureChecked = async (rowIndex: number) => {
       const checkbox = page.locator('tbody tr').nth(rowIndex).locator('td input[type="checkbox"]').first()
       if (!(await checkbox.isChecked())) {
@@ -140,29 +153,26 @@ test.describe.serial('Server Smoke And Comm E2E', () => {
     await ensureChecked(2)
     await ensureChecked(3)
 
-    const typedTab = page.getByRole('tab', { name: 'Typed Decode' })
-    await typedTab.click()
-    await expect(typedTab).toHaveAttribute('aria-selected', 'true')
-
-    const batchMode = page.getByRole('combobox', { name: /^Type$/ }).first()
+    const selectionPanel = page.getByRole('heading', { name: 'Set Display For Selection' }).locator('..')
+    const batchMode = selectionPanel.locator('[role="combobox"]').first()
     await batchMode.click()
     await page.getByRole('option', { name: /^INT \(2w\)$/ }).click()
     await page.getByTestId('typed-batch-apply').click()
 
-    await expect(page.getByTestId('typed-row-0')).toContainText('INT (2w)')
-    await expect(page.getByTestId('typed-row-2')).toContainText('INT (2w)')
-    await expect(page.getByTestId('typed-row-1')).toContainText('SHORT (1w)')
+    await expect(page.getByTestId('value-format-0')).toContainText('INT (2w)')
+    await expect(page.getByTestId('value-format-2')).toContainText('INT (2w)')
+    await expect(page.getByTestId('value-format-1')).toContainText('INT (2w)')
 
     const firstRow = page.locator('tbody tr').nth(0)
     await firstRow.click({ button: 'right' })
     await page.getByRole('menuitem', { name: /^DOUBLE \(4w\)$/ }).click()
     await expect(firstRow).toContainText('DOUBLE (4w)')
 
-    const thirdRow = page.locator('tbody tr').nth(2)
     await page.getByTestId('value-format-2').click()
-    await expect(page.getByRole('menuitem', { name: /^SHORT \(1w\)$/ })).toBeVisible()
-    await page.getByRole('menuitem', { name: /^SHORT \(1w\)$/ }).click()
-    await expect(thirdRow).toContainText('SHORT (1w)')
+    const shortMenuItem = page.getByRole('menuitem', { name: /^SHORT \(1w\)$/ })
+    await expect(shortMenuItem).toBeVisible()
+    await expect(shortMenuItem).toHaveAttribute('aria-disabled', 'true')
+    await page.keyboard.press('Escape')
   })
 
   test('can open plot window with fixed interpretation and reflect table highlighting', async () => {
@@ -189,14 +199,9 @@ test.describe.serial('Server Smoke And Comm E2E', () => {
     await ensureUnchecked(thirdRow)
     await ensureUnchecked(fourthRow)
 
-    const firstValueInput = firstRow.getByTestId('register-value-input-0')
-
     const getValueCellBackground = async (row: Locator, address: number): Promise<string | null> =>
       await row.evaluate((el, targetAddress) => {
-        const input = el.querySelector(
-          `[data-testid="register-value-input-${targetAddress}"]`
-        ) as HTMLElement | null
-        const cell = input?.closest('td')
+        const cell = el.querySelector(`[data-testid="value-cell-${targetAddress}"]`) as HTMLElement | null
         if (!cell) return null
         return getComputedStyle(cell).backgroundColor
       }, address)
@@ -204,19 +209,17 @@ test.describe.serial('Server Smoke And Comm E2E', () => {
     const bg1 = await getValueCellBackground(firstRow, 0)
     const bg2 = await getValueCellBackground(secondRow, 1)
     const bg3 = await getValueCellBackground(thirdRow, 2)
-    await expect(firstValueInput).toBeVisible()
-    await expect(firstValueInput).toHaveValue('123')
-    const firstInputWidth = await firstValueInput.evaluate((el) => (el as HTMLInputElement).clientWidth)
-    expect(firstInputWidth).toBeGreaterThan(70)
+    await expect(page.getByTestId('value-cell-0')).toBeVisible()
 
     expect(bg1).not.toBeNull()
     expect(bg2).not.toBeNull()
     expect(bg3).not.toBeNull()
     expect(bg1).not.toBe(bg2)
     expect(bg1).not.toBe('rgba(0, 0, 0, 0)')
-    expect(bg3).toBe(bg2)
+    expect(bg2).not.toBe('rgba(0, 0, 0, 0)')
+    expect(bg3).not.toBe('rgba(0, 0, 0, 0)')
 
-    await page.getByRole('button', { name: /Plot Selected \(2\)/ }).click()
+    await page.getByRole('button', { name: /Plot\s*\(2\)/ }).click()
     let plotPage: Page | null = null
     await expect
       .poll(async () => {

@@ -43,7 +43,7 @@ test('realistic server user journey e2e', async () => {
   await page.getByRole('button', { name: /确定|OK/ }).click()
   await expect(page.getByText(`${JOURNEY_SLAVE_ALIAS} (ID:4)`)).toBeVisible()
 
-  await page.getByText('Default Group', { exact: true }).dblclick()
+  await page.locator('p.MuiTypography-root', { hasText: 'Default Group' }).first().dblclick()
   await expect(page.getByRole('tab', { name: /Default Group/ })).toBeVisible()
 
   const valueHeader = page.locator('thead th').filter({ hasText: /^Value$/ }).first()
@@ -68,23 +68,23 @@ test('realistic server user journey e2e', async () => {
   await ensureChecked(thirdRow)
   await ensureChecked(fourthRow)
 
-  const typedTab = page.getByRole('tab', { name: 'Typed Decode' })
-  await typedTab.click()
-  await expect(typedTab).toHaveAttribute('aria-selected', 'true')
-
-  await page.getByRole('combobox', { name: /^Type$/ }).first().click()
+  const selectionPanel = page.getByRole('heading', { name: 'Set Display For Selection' }).locator('..')
+  const batchMode = selectionPanel.locator('[role="combobox"]').first()
+  await batchMode.click()
   await page.getByRole('option', { name: /^INT \(2w\)$/ }).click()
   await page.getByTestId('typed-batch-apply').click()
-  await expect(page.getByTestId('typed-row-0')).toContainText('INT (2w)')
-  await expect(page.getByTestId('typed-row-2')).toContainText('INT (2w)')
+  await expect(page.getByTestId('value-format-0')).toContainText('INT (2w)')
+  await expect(page.getByTestId('value-format-2')).toContainText('INT (2w)')
 
   await firstRow.click({ button: 'right' })
   await page.getByRole('menuitem', { name: /^DOUBLE \(4w\)$/ }).click()
   await expect(firstRow).toContainText('DOUBLE (4w)')
 
   await page.getByTestId('value-format-2').click()
-  await page.getByRole('menuitem', { name: /^SHORT \(1w\)$/ }).click()
-  await expect(thirdRow).toContainText('SHORT (1w)')
+  const shortMenuItem = page.getByRole('menuitem', { name: /^SHORT \(1w\)$/ })
+  await expect(shortMenuItem).toBeVisible()
+  await expect(shortMenuItem).toHaveAttribute('aria-disabled', 'true')
+  await page.keyboard.press('Escape')
 
   await page.getByText(JOURNEY_CONN_ALIAS, { exact: true }).click()
   await page.getByRole('button', { name: /打开连接|Open Connection/ }).click()
@@ -103,7 +103,7 @@ test('realistic server user journey e2e', async () => {
   ).toBeVisible()
 
   const plotWindowPromise = app.waitForEvent('window')
-  await page.getByRole('button', { name: /Plot Selected \(4\)/ }).click()
+  await page.getByRole('button', { name: /Plot\s*\(4\)/ }).click()
   const plotPage = await plotWindowPromise
   await plotPage.waitForLoadState('domcontentloaded')
   await expect(plotPage.getByText(/Plot -/)).toBeVisible()

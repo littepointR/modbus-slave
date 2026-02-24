@@ -27,7 +27,8 @@ export const ServerConnectionConfigSchema = z.object({
   protocol: ServerProtocolSchema,
   host: z.string().optional(),
   port: z.number().optional(),
-  serial: SerialConfigSchema.optional()
+  serial: SerialConfigSchema.optional(),
+  invalidRequestBehavior: z.enum(['silent', 'exception']).optional()
 })
 export type ServerConnectionConfig = z.infer<typeof ServerConnectionConfigSchema>
 

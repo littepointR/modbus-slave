@@ -1069,7 +1069,12 @@ describe('ModbusServer', () => {
     beforeEach(async () => {
       await server.createServer({
         uuid,
-        config: { protocol: 'ModbusTcp', host: '0.0.0.0', port: 5020 }
+        config: {
+          protocol: 'ModbusTcp',
+          host: '0.0.0.0',
+          port: 5020,
+          invalidRequestBehavior: 'exception'
+        }
       })
       vector = server.getVectorForTest(uuid)
     })
@@ -1080,6 +1085,16 @@ describe('ModbusServer', () => {
         const cb = vi.fn()
         await vector.getCoil!(5, 1, cb)
         expect(cb).toHaveBeenCalledWith(null, true)
+      })
+
+      it('returns error for unconfigured coil address in existing unit', async () => {
+        server.setBool({ uuid, unitId, registerType: 'coils', address: 0, state: false })
+        const cb = vi.fn()
+        await vector.getCoil!(1, 1, cb)
+        expect(cb).toHaveBeenCalledWith(
+          expect.objectContaining({ modbusErrorCode: ILLEGAL_DATA_ADDRESS }),
+          false
+        )
       })
 
       it('returns false for unset coil address', async () => {
@@ -1105,6 +1120,21 @@ describe('ModbusServer', () => {
           expect.objectContaining({ modbusErrorCode: ILLEGAL_DATA_ADDRESS }),
           false
         )
+      })
+    })
+
+    describe('silent invalid request behavior', () => {
+      it('does not callback for unknown address when behavior is silent (default)', async () => {
+        const silentServer = new ModbusServer({ windows: createMockWindows() })
+        await silentServer.createServer({
+          uuid: 'silent-server',
+          config: { protocol: 'ModbusTcp', host: '0.0.0.0', port: 15020 }
+        })
+        const silentVector = silentServer.getVectorForTest('silent-server')
+
+        const cb = vi.fn()
+        await silentVector.getHoldingRegister!(0, 1, cb)
+        expect(cb).not.toHaveBeenCalled()
       })
     })
 
@@ -1198,6 +1228,30 @@ describe('ModbusServer', () => {
         const cb = vi.fn()
         await vector.getHoldingRegister!(0, 1, cb)
         expect(cb).toHaveBeenCalledWith(null, 999)
+      })
+
+      it('returns error for unconfigured holding register address in existing unit', async () => {
+        server.addRegister({
+          uuid,
+          unitId,
+          littleEndian: false,
+          params: {
+            address: 0,
+            registerType: 'holding_registers',
+            dataType: 'uint16',
+            comment: '',
+            value: 999,
+            min: undefined,
+            max: undefined,
+            interval: undefined
+          }
+        })
+        const cb = vi.fn()
+        await vector.getHoldingRegister!(1, 1, cb)
+        expect(cb).toHaveBeenCalledWith(
+          expect.objectContaining({ modbusErrorCode: ILLEGAL_DATA_ADDRESS }),
+          0
+        )
       })
 
       it('returns error for invalid unitId', async () => {

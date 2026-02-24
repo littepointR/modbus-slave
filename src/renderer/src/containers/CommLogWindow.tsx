@@ -13,6 +13,8 @@ import {
 import { Close as CloseIcon } from '@mui/icons-material'
 import type { ServerCommPacket } from '@shared'
 
+const MONO_FONT_FAMILY = '"Iosevka", "Cascadia Mono", "Consolas", monospace'
+
 const CommLogWindow = (): JSX.Element => {
   const { t } = useTranslation()
   const [logs, setLogs] = useState<string[]>([])
@@ -151,7 +153,7 @@ const CommLogWindow = (): JSX.Element => {
           p: 1,
           bgcolor: (theme) => (theme.palette.mode === 'dark' ? '#11161d' : '#f7fbff'),
           color: 'text.primary',
-          fontFamily: 'monospace',
+          fontFamily: MONO_FONT_FAMILY,
           fontSize: '0.875rem',
           overflow: 'auto',
           whiteSpace: 'pre-wrap',

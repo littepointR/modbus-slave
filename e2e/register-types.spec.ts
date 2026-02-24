@@ -57,17 +57,17 @@ test.describe.serial('Server Register Type Matrix E2E', () => {
     await expect(page.getByText(`${MATRIX_SLAVE_ALIAS} (ID:3)`)).toBeVisible()
 
     const groups: Array<{ name: string; typeHint: RegExp }> = [
-      { name: 'Coil Group', typeHint: /Type:\s*Coil\s*\(0x\)/ },
-      { name: 'Discrete Group', typeHint: /Type:\s*Discrete Input\s*\(1x\)/ },
-      { name: 'Holding Group', typeHint: /Type:\s*Holding Register\s*\(4x\)/ },
-      { name: 'Input Group', typeHint: /Type:\s*Input Register\s*\(3x\)/ }
+      { name: 'Coil Group', typeHint: /Type:?\s*Coil\s*\(0x\)/ },
+      { name: 'Discrete Group', typeHint: /Type:?\s*Discrete Input\s*\(1x\)/ },
+      { name: 'Holding Group', typeHint: /Type:?\s*Holding Register\s*\(4x\)/ },
+      { name: 'Input Group', typeHint: /Type:?\s*Input Register\s*\(3x\)/ }
     ]
 
     for (const group of groups) {
       await page.getByText(group.name, { exact: true }).dblclick()
       await expect(page.getByRole('tab', { name: group.name })).toBeVisible()
       await expect(page.getByText(group.typeHint)).toBeVisible()
-      await expect(page.getByText(`Slave: ${MATRIX_SLAVE_ALIAS}`)).toBeVisible()
+      await expect(page.getByText(new RegExp(`Slave:?\\s*${MATRIX_SLAVE_ALIAS}`))).toBeVisible()
     }
   })
 })

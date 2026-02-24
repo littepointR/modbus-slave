@@ -34,10 +34,11 @@ const getDefaultServerData = (): {
   input_registers: number[]
   holding_registers: number[]
 } => ({
-  coils: new Array(65535).fill(false),
-  discrete_inputs: new Array(65535).fill(false),
-  input_registers: new Array(65535).fill(0),
-  holding_registers: new Array(65535).fill(0)
+  // Sparse arrays: only configured addresses are defined.
+  coils: new Array<boolean>(65535),
+  discrete_inputs: new Array<boolean>(65535),
+  input_registers: new Array<number>(65535),
+  holding_registers: new Array<number>(65535)
 })
 
 export const ILLEGAL_FUNCTION = 1
@@ -168,6 +169,11 @@ export class ModbusServer {
     error?: Error
   }): void {
     this._windows.send('backend_message', { message, variant, error })
+  }
+
+  private _isInvalidRequestSilent(uuid: string): boolean {
+    const behavior = this._configs.get(uuid)?.invalidRequestBehavior ?? 'silent'
+    return behavior === 'silent'
   }
 
   /**
@@ -337,7 +343,7 @@ export class ModbusServer {
     const perUnitMap = this._ensureInnerMap<ServerDataUnitMap>(this._serverData, uuid)
     const serverData = perUnitMap.get(unitId) ?? getDefaultServerData()
     if (!perUnitMap.has(unitId)) perUnitMap.set(unitId, serverData)
-    serverData[registerType][address] = 0
+    delete serverData[registerType][address]
 
     const perUnitGeneratorMap = this._ensureInnerMap<ValueGeneratorsUnitMap>(
       this._generatorMap,
@@ -397,7 +403,7 @@ export class ModbusServer {
     const perUnitMap = this._ensureInnerMap<ServerDataUnitMap>(this._serverData, uuid)
     const serverData = perUnitMap.get(unitId) ?? getDefaultServerData()
     if (!perUnitMap.has(unitId)) perUnitMap.set(unitId, serverData)
-    serverData[registerType] = new Array(65535).fill(0)
+    serverData[registerType] = new Array<number>(65535)
     this._setServerData(uuid, unitId, serverData)
   }
 
@@ -421,7 +427,7 @@ export class ModbusServer {
     const perUnitMap = this._ensureInnerMap<ServerDataUnitMap>(this._serverData, uuid)
     const serverData = perUnitMap.get(unitId) ?? getDefaultServerData()
     if (!perUnitMap.has(unitId)) perUnitMap.set(unitId, serverData)
-    serverData[registerType] = new Array(65535).fill(false)
+    serverData[registerType] = new Array<boolean>(65535)
     this._setServerData(uuid, unitId, serverData)
   }
 
@@ -433,10 +439,14 @@ export class ModbusServer {
     const perUnitMap = this._ensureInnerMap<ServerDataUnitMap>(this._serverData, uuid)
     const serverData = perUnitMap.get(unitId) ?? getDefaultServerData()
     if (!perUnitMap.has(unitId)) perUnitMap.set(unitId, serverData)
-    params['coils'].forEach((value, index) => (serverData['coils'][index] = value))
+    const coils = new Array<boolean>(65535)
+    const discreteInputs = new Array<boolean>(65535)
+    params['coils'].forEach((value, index) => (coils[index] = value))
     params['discrete_inputs'].forEach((value, index) => {
-      serverData['discrete_inputs'][index] = value
+      discreteInputs[index] = value
     })
+    serverData['coils'] = coils
+    serverData['discrete_inputs'] = discreteInputs
     this._setServerData(uuid, unitId, serverData)
   }
 
@@ -475,10 +485,10 @@ export class ModbusServer {
   private _getCoil: (uuid: string) => IServiceVector['getCoil'] =
     (uuid) => async (address, unitIdNumber, cb) => {
       const unitId = UnitIdStringSchema.safeParse(String(unitIdNumber))
-      if (!unitId.success) return this._mbError(SERVER_DEVICE_FAILURE, cb, false)
+      if (!unitId.success) return this._mbError(uuid, SERVER_DEVICE_FAILURE, cb, false)
 
       const value = this._serverData.get(uuid)?.get(unitId.data)?.coils[address]
-      if (value === undefined) return this._mbError(ILLEGAL_DATA_ADDRESS, cb, false)
+      if (value === undefined) return this._mbError(uuid, ILLEGAL_DATA_ADDRESS, cb, false)
 
       cb(null, value)
     }
@@ -490,10 +500,10 @@ export class ModbusServer {
   private _getDiscreteInput: (uuid: string) => IServiceVector['getDiscreteInput'] =
     (uuid) => async (address, unitIdNumber, cb) => {
       const unitId = UnitIdStringSchema.safeParse(String(unitIdNumber))
-      if (!unitId.success) return this._mbError(SERVER_DEVICE_FAILURE, cb, false)
+      if (!unitId.success) return this._mbError(uuid, SERVER_DEVICE_FAILURE, cb, false)
 
       const value = this._serverData.get(uuid)?.get(unitId.data)?.discrete_inputs[address]
-      if (value === undefined) return this._mbError(ILLEGAL_DATA_ADDRESS, cb, false)
+      if (value === undefined) return this._mbError(uuid, ILLEGAL_DATA_ADDRESS, cb, false)
 
       cb(null, value)
     }
@@ -505,10 +515,10 @@ export class ModbusServer {
   private _getInputRegister: (uuid: string) => IServiceVector['getInputRegister'] =
     (uuid) => async (address, unitId, cb) => {
       const unitIdSafe = UnitIdStringSchema.safeParse(String(unitId))
-      if (!unitIdSafe.success) return this._mbError(SERVER_DEVICE_FAILURE, cb, 0)
+      if (!unitIdSafe.success) return this._mbError(uuid, SERVER_DEVICE_FAILURE, cb, 0)
 
       const value = this._serverData.get(uuid)?.get(unitIdSafe.data)?.input_registers[address]
-      if (value === undefined) return this._mbError(ILLEGAL_DATA_ADDRESS, cb, 0)
+      if (value === undefined) return this._mbError(uuid, ILLEGAL_DATA_ADDRESS, cb, 0)
 
       cb(null, value)
     }
@@ -520,10 +530,10 @@ export class ModbusServer {
   private _getHoldingRegister: (uuid: string) => IServiceVector['getHoldingRegister'] =
     (uuid) => async (address, unitId, cb) => {
       const unitIdSafe = UnitIdStringSchema.safeParse(String(unitId))
-      if (!unitIdSafe.success) return this._mbError(SERVER_DEVICE_FAILURE, cb, 0)
+      if (!unitIdSafe.success) return this._mbError(uuid, SERVER_DEVICE_FAILURE, cb, 0)
 
       const value = this._serverData.get(uuid)?.get(unitIdSafe.data)?.holding_registers[address]
-      if (value === undefined) return this._mbError(ILLEGAL_DATA_ADDRESS, cb, 0)
+      if (value === undefined) return this._mbError(uuid, ILLEGAL_DATA_ADDRESS, cb, 0)
 
       cb(null, value)
     }
@@ -535,7 +545,7 @@ export class ModbusServer {
   private _setCoil: (uuid: string) => IServiceVector['setCoil'] =
     (uuid) => async (address, value, unitIdNumber, cb) => {
       const unitIdSafe = UnitIdStringSchema.safeParse(String(unitIdNumber))
-      if (!unitIdSafe.success) return this._mbError(SERVER_DEVICE_FAILURE, cb, 0)
+      if (!unitIdSafe.success) return this._mbError(uuid, SERVER_DEVICE_FAILURE, cb, 0)
       const unitId = unitIdSafe.data
 
       const currentServerData = this._serverData.get(uuid)?.get(unitId) ?? getDefaultServerData()
@@ -557,7 +567,7 @@ export class ModbusServer {
   private _setHoldingRegister: (uuid: string) => IServiceVector['setRegister'] =
     (uuid) => async (address, raw, unitIdNumber, cb) => {
       const unitIdSafe = UnitIdStringSchema.safeParse(String(unitIdNumber))
-      if (!unitIdSafe.success) return this._mbError(SERVER_DEVICE_FAILURE, cb, 0)
+      if (!unitIdSafe.success) return this._mbError(uuid, SERVER_DEVICE_FAILURE, cb, 0)
       const unitId = unitIdSafe.data
 
       const currentServerData = this._serverData.get(uuid)?.get(unitId) ?? getDefaultServerData()
@@ -575,7 +585,13 @@ export class ModbusServer {
   /**
    * Helper for returning a Modbus error via callback and emitting a backend message.
    */
-  private _mbError<T>(code: number, cb: FCallbackVal<T>, value: T): void {
+  private _mbError<T>(uuid: string, code: number, cb: FCallbackVal<T>, value: T): void {
+    if (
+      this._isInvalidRequestSilent(uuid) &&
+      (code === ILLEGAL_DATA_ADDRESS || code === SERVER_DEVICE_FAILURE)
+    ) {
+      return
+    }
     const err = new Error()
     err['modbusErrorCode'] = code
     cb(err, value)

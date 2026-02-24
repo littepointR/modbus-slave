@@ -66,7 +66,12 @@ describe('Multi-Slave Server', () => {
     // Create server with TCP protocol
     await server.createServer({
       uuid,
-      config: { protocol: 'ModbusTcp', host: '0.0.0.0', port: 5020 }
+      config: {
+        protocol: 'ModbusTcp',
+        host: '0.0.0.0',
+        port: 5020,
+        invalidRequestBehavior: 'exception'
+      }
     })
 
     vector = capturedVector as unknown as IServiceVector

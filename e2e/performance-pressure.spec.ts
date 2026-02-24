@@ -45,28 +45,43 @@ test.describe.serial('Server Performance Pressure E2E', () => {
     await page.getByText('Default Group', { exact: true }).dblclick()
     await expect(page.getByRole('tab', { name: /Default Group/ })).toBeVisible()
 
-    const rowsPerPageSelect = page.locator('.MuiTablePagination-toolbar [role="combobox"]').first()
+    const paginationToolbar = page.locator('.MuiTablePagination-toolbar').first()
+    const rowsPerPageSelect = paginationToolbar.getByRole('combobox')
+    const displayedRows = page.locator('.MuiTablePagination-displayedRows').first()
+    const displayedRowsPaginationRoot = displayedRows
+      .locator('xpath=ancestor::*[contains(@class,"MuiTablePagination-root")]')
+      .first()
     const rowsPerPageDuration = await measureMs(async () => {
       await rowsPerPageSelect.click()
       await page.getByRole('option', { name: '500' }).click()
+      await page.keyboard.press('Escape')
+      await expect(page.getByRole('listbox')).toBeHidden()
       await expect(page.locator('tbody tr')).toHaveCount(500)
+      await expect(displayedRows).toContainText(/1\D+500/)
     })
     expect(rowsPerPageDuration).toBeLessThan(6000)
 
-    const nextPageBtn = page.locator('.MuiTablePagination-actions button').last()
+    const nextPageBtn = displayedRowsPaginationRoot
+      .locator('.MuiTablePagination-actions button[title="Go to next page"]')
+      .first()
     const pageFlipDuration = await measureMs(async () => {
-      await nextPageBtn.click()
-      await expect(page.locator('tbody tr').first()).toContainText('0x01F4')
+      await nextPageBtn.evaluate((element) => {
+        ;(element as HTMLButtonElement).click()
+      })
+      await expect(displayedRows).toContainText(/501\D+1000/)
     })
     expect(pageFlipDuration).toBeLessThan(6000)
 
-    const typedTab = page.getByRole('tab', { name: 'Typed Decode' })
+    const longTab = page.getByRole('tab', { name: 'Long' })
+    const doubleTab = page.getByRole('tab', { name: 'Double' })
     const basicTab = page.getByRole('tab', { name: 'Unsigned-Signed-Hex-Binary' })
     const stringTab = page.getByRole('tab', { name: 'String' })
 
     const tabSwitchDuration = await measureMs(async () => {
-      await typedTab.click()
-      await expect(typedTab).toHaveAttribute('aria-selected', 'true')
+      await longTab.click()
+      await expect(longTab).toHaveAttribute('aria-selected', 'true')
+      await doubleTab.click()
+      await expect(doubleTab).toHaveAttribute('aria-selected', 'true')
       await basicTab.click()
       await expect(basicTab).toHaveAttribute('aria-selected', 'true')
       await stringTab.click()

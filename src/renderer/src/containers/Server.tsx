@@ -75,8 +75,10 @@ import SettingsMenu from '@renderer/components/shared/SettingsMenu'
 import type {
   CreateServerParams,
   PlotInterpretation,
+  RegisterParams,
   RegisterPlotWindowInit,
-  ServerConnectionConfig
+  ServerConnectionConfig,
+  UnitIdString
 } from '@shared'
 import {
   canSelectInterpretationAtAddress,
@@ -119,6 +121,7 @@ interface Connection {
   id: string
   alias: string
   mode: 'rtu' | 'tcp' | 'udp' | 'rtuovertcp' | 'rtuoverudp'
+  invalidRequestBehavior?: 'silent' | 'exception'
   serialPort?: string
   baudRate?: number
   dataBits?: number
@@ -132,36 +135,73 @@ interface Connection {
   slaves: Slave[]
 }
 
+interface ScriptDefinition {
+  id: string
+  name: string
+  enabled: boolean
+  intervalMs: number
+  code: string
+  lastError?: string
+  lastRunAt?: number
+}
+
+interface ScriptRuntimeApi {
+  getValue: (unitId: number, registerType: RegisterGroup['type'], address: number) => number | undefined
+  setValue: (
+    unitId: number,
+    registerType: RegisterGroup['type'],
+    address: number,
+    value: number
+  ) => boolean
+  setValues: (
+    unitId: number,
+    registerType: RegisterGroup['type'],
+    values: Record<number, number>
+  ) => number
+  log: (...args: unknown[]) => void
+}
+
+interface ScriptRuntimeEvent {
+  type: 'manual' | 'interval'
+  timestamp: number
+}
+
 const toServerConfig = (connection: Connection): ServerConnectionConfig => {
+  const invalidRequestBehavior = connection.invalidRequestBehavior ?? 'silent'
   switch (connection.mode) {
     case 'tcp':
       return {
         protocol: 'ModbusTcp',
         host: connection.ipAddress || '127.0.0.1',
-        port: connection.port || 502
+        port: connection.port || 502,
+        invalidRequestBehavior
       }
     case 'udp':
       return {
         protocol: 'ModbusUdp',
         host: connection.ipAddress || '127.0.0.1',
-        port: connection.port || 502
+        port: connection.port || 502,
+        invalidRequestBehavior
       }
     case 'rtuovertcp':
       return {
         protocol: 'ModbusRtuOverTcp',
         host: connection.ipAddress || '127.0.0.1',
-        port: connection.port || 502
+        port: connection.port || 502,
+        invalidRequestBehavior
       }
     case 'rtuoverudp':
       return {
         protocol: 'ModbusRtuOverUdp',
         host: connection.ipAddress || '127.0.0.1',
-        port: connection.port || 502
+        port: connection.port || 502,
+        invalidRequestBehavior
       }
     case 'rtu':
     default:
       return {
         protocol: connection.frameFormat === 'ascii' ? 'ModbusAscii' : 'ModbusRtu',
+        invalidRequestBehavior,
         serial: {
           port: connection.serialPort || '',
           baudRate: connection.baudRate || 9600,
@@ -289,6 +329,18 @@ const MIN_TABLE_COLUMN_WIDTHS: Record<TableColumnKey, number> = {
 }
 
 const SERVER_LAYOUT_STORAGE_KEY = 'modbux.server.layout.v1'
+const MONO_FONT_FAMILY = '"Iosevka", "Cascadia Mono", "Consolas", monospace'
+const DEFAULT_SCRIPT_TEMPLATE = `// event.type: 'interval' | 'manual'
+// api.getValue(unitId, registerType, address)
+// api.setValue(unitId, registerType, address, value)
+// registerType: '01' | '02' | '03' | '04'
+
+// Example: mirror 40001 to 40002 (holding registers)
+const value = api.getValue(1, '03', 0)
+if (typeof value === 'number') {
+  api.setValue(1, '03', 1, value)
+}
+`
 const DEFAULT_LEFT_PANEL_WIDTH = 320
 const DEFAULT_BOTTOM_PANEL_HEIGHT = 300
 const MIN_LEFT_PANEL_WIDTH = 240
@@ -297,6 +349,46 @@ const MIN_BOTTOM_PANEL_HEIGHT = 180
 const MIN_TOP_PANEL_HEIGHT = 220
 
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value))
+
+const createDefaultScript = (index: number): ScriptDefinition => ({
+  id: uuidv4(),
+  name: `Script ${index}`,
+  enabled: false,
+  intervalMs: 1000,
+  code: DEFAULT_SCRIPT_TEMPLATE
+})
+
+const toUnitIdString = (slaveId: number): UnitIdString => String(slaveId) as UnitIdString
+
+const getBackendBoolRegisterType = (
+  type: RegisterGroup['type']
+): 'coils' | 'discrete_inputs' | undefined => {
+  if (type === '01') return 'coils'
+  if (type === '02') return 'discrete_inputs'
+  return undefined
+}
+
+const getBackendNumberRegisterType = (
+  type: RegisterGroup['type']
+): 'holding_registers' | 'input_registers' | undefined => {
+  if (type === '03') return 'holding_registers'
+  if (type === '04') return 'input_registers'
+  return undefined
+}
+
+const toStaticRegisterParams = (
+  register: Register,
+  registerType: 'holding_registers' | 'input_registers'
+): RegisterParams => ({
+  address: register.address,
+  registerType,
+  dataType: 'uint16',
+  comment: register.comment || '',
+  value: clamp(Math.round(register.value), 0, 65535),
+  min: undefined,
+  max: undefined,
+  interval: undefined
+})
 
 // =============================================================================
 // HELPERS
@@ -821,6 +913,9 @@ const NewConnectionDialog = ({
   const [frameFormat, setFrameFormat] = useState<'rtu' | 'ascii'>(
     initialConnection?.frameFormat || 'rtu'
   )
+  const [invalidRequestBehavior, setInvalidRequestBehavior] = useState<'silent' | 'exception'>(
+    initialConnection?.invalidRequestBehavior || 'silent'
+  )
   const [ipAddress, setIpAddress] = useState(initialConnection?.ipAddress || '127.0.0.1')
   const [port, setPort] = useState(initialConnection?.port || 502)
 
@@ -846,6 +941,7 @@ const NewConnectionDialog = ({
       setStopBits(initialConnection?.stopBits || 1)
       setFlowControl(initialConnection?.flowControl || 'none')
       setFrameFormat(initialConnection?.frameFormat || 'rtu')
+      setInvalidRequestBehavior(initialConnection?.invalidRequestBehavior || 'silent')
       setIpAddress(newIpAddress)
       setPort(newPort)
 
@@ -938,6 +1034,7 @@ const NewConnectionDialog = ({
       id: isEditMode ? initialConnection!.id : uuidv4(),
       alias: alias.trim() || (isEditMode ? initialConnection!.alias : 'New Connection'),
       mode,
+      invalidRequestBehavior,
       isOpen: isEditMode ? initialConnection!.isOpen : false,
       slaves: isEditMode ? initialConnection!.slaves : [createDefaultSlave()],
       ...(mode === 'rtu'
@@ -1031,6 +1128,21 @@ const NewConnectionDialog = ({
               <MenuItem value="udp">Modbus UDP/IP</MenuItem>
               <MenuItem value="rtuovertcp">Modbus RTU Over TCP/IP</MenuItem>
               <MenuItem value="rtuoverudp">Modbus RTU Over UDP/IP</MenuItem>
+            </Select>
+          </FormControl>
+          <Divider />
+          <FormControl fullWidth variant="outlined">
+            <InputLabel size="small">Invalid Request Handling</InputLabel>
+            <Select
+              value={invalidRequestBehavior}
+              onChange={(e) =>
+                setInvalidRequestBehavior(e.target.value as 'silent' | 'exception')
+              }
+              label="Invalid Request Handling"
+              size="small"
+            >
+              <MenuItem value="silent">Silent (no response)</MenuItem>
+              <MenuItem value="exception">Modbus Exception</MenuItem>
             </Select>
           </FormControl>
           <Divider />
@@ -1479,7 +1591,7 @@ const NewSlaveDialog = ({ open, onClose, onConfirm, initialSlave }: NewSlaveDial
                   mb: 2,
                   display: 'flex',
                   gap: 2,
-                  alignItems: 'center',
+                  alignItems: 'flex-start',
                   flexWrap: 'wrap'
                 }}
               >
@@ -1588,6 +1700,212 @@ const NewSlaveDialog = ({ open, onClose, onConfirm, initialSlave }: NewSlaveDial
         <Button onClick={handleConfirm} variant="contained">
           {isEditMode ? 'Save' : 'OK'}
         </Button>
+      </DialogActions>
+    </Dialog>
+  )
+}
+
+interface ScriptEditorDialogProps {
+  open: boolean
+  connectionAlias: string
+  scripts: ScriptDefinition[]
+  onClose: () => void
+  onChange: (scripts: ScriptDefinition[]) => void
+  onRunScript: (scriptId: string) => void
+}
+
+const ScriptEditorDialog = ({
+  open,
+  connectionAlias,
+  scripts,
+  onClose,
+  onChange,
+  onRunScript
+}: ScriptEditorDialogProps): JSX.Element => {
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!open) return
+    if (scripts.length === 0) {
+      setSelectedId(null)
+      return
+    }
+    if (!selectedId || !scripts.find((script) => script.id === selectedId)) {
+      setSelectedId(scripts[0].id)
+    }
+  }, [open, scripts, selectedId])
+
+  const selectedScript = scripts.find((script) => script.id === selectedId) ?? null
+
+  const updateScript = (scriptId: string, updates: Partial<ScriptDefinition>): void => {
+    onChange(
+      scripts.map((script) =>
+        script.id === scriptId
+          ? {
+              ...script,
+              ...updates
+            }
+          : script
+      )
+    )
+  }
+
+  const addScript = (): void => {
+    const script = createDefaultScript(scripts.length + 1)
+    onChange([...scripts, script])
+    setSelectedId(script.id)
+  }
+
+  const removeScript = (scriptId: string): void => {
+    const next = scripts.filter((script) => script.id !== scriptId)
+    onChange(next)
+    if (selectedId === scriptId) {
+      setSelectedId(next[0]?.id ?? null)
+    }
+  }
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth>
+      <DialogTitle>{`Edit Scripts - ${connectionAlias}`}</DialogTitle>
+      <DialogContent>
+        <Box
+          sx={{
+            mt: 1,
+            display: 'grid',
+            gridTemplateColumns: '320px 1fr',
+            gap: 2,
+            minHeight: 440
+          }}
+        >
+          <Paper variant="outlined" sx={{ p: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
+            <Button onClick={addScript} startIcon={<AddIcon />} size="small">
+              Add Script
+            </Button>
+            <Divider />
+            <Box sx={{ overflow: 'auto', maxHeight: 360, display: 'flex', flexDirection: 'column', gap: 1 }}>
+              {scripts.map((script) => (
+                <Paper
+                  key={script.id}
+                  variant={selectedId === script.id ? 'elevation' : 'outlined'}
+                  elevation={selectedId === script.id ? 2 : 0}
+                  sx={{ p: 1, cursor: 'pointer' }}
+                  onClick={() => setSelectedId(script.id)}
+                >
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+                    <TextField
+                      size="small"
+                      label="Name"
+                      value={script.name}
+                      onClick={(event) => event.stopPropagation()}
+                      onChange={(event) => updateScript(script.id, { name: event.target.value })}
+                      sx={{ flex: 1 }}
+                    />
+                    <IconButton
+                      size="small"
+                      color="error"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        removeScript(script.id)
+                      }}
+                      title="Delete script"
+                    >
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </Box>
+                  <Box
+                    sx={{
+                      mt: 1,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 1
+                    }}
+                  >
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          size="small"
+                          checked={script.enabled}
+                          onClick={(event) => event.stopPropagation()}
+                          onChange={(event) =>
+                            updateScript(script.id, {
+                              enabled: event.target.checked,
+                              lastError: event.target.checked ? undefined : script.lastError
+                            })
+                          }
+                        />
+                      }
+                      label={script.enabled ? 'Enabled' : 'Disabled'}
+                    />
+                    <TextField
+                      size="small"
+                      type="number"
+                      label="Interval ms"
+                      value={script.intervalMs}
+                      onClick={(event) => event.stopPropagation()}
+                      onChange={(event) =>
+                        updateScript(script.id, {
+                          intervalMs: Math.max(100, Number(event.target.value) || 1000)
+                        })
+                      }
+                      sx={{ width: 120 }}
+                      inputProps={{ min: 100, step: 100 }}
+                    />
+                  </Box>
+                  {script.lastError ? (
+                    <Typography variant="caption" color="error.main" sx={{ display: 'block', mt: 0.75 }}>
+                      {script.lastError}
+                    </Typography>
+                  ) : null}
+                  {script.lastRunAt ? (
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
+                      {`Last run: ${new Date(script.lastRunAt).toLocaleTimeString()}`}
+                    </Typography>
+                  ) : null}
+                </Paper>
+              ))}
+              {scripts.length === 0 ? (
+                <Typography variant="body2" color="text.secondary">
+                  No scripts yet.
+                </Typography>
+              ) : null}
+            </Box>
+          </Paper>
+
+          <Paper variant="outlined" sx={{ p: 1.5, display: 'flex', flexDirection: 'column', gap: 1 }}>
+            {selectedScript ? (
+              <>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Typography variant="subtitle2">{selectedScript.name}</Typography>
+                  <Button variant="outlined" size="small" onClick={() => onRunScript(selectedScript.id)}>
+                    Run Once
+                  </Button>
+                </Box>
+                <TextField
+                  label="Script Code"
+                  multiline
+                  minRows={18}
+                  maxRows={22}
+                  value={selectedScript.code}
+                  onChange={(event) => updateScript(selectedScript.id, { code: event.target.value })}
+                  inputProps={{ style: { fontFamily: MONO_FONT_FAMILY, fontSize: 12.5 } }}
+                  fullWidth
+                />
+                <Typography variant="caption" color="text.secondary">
+                  API: `getValue(unitId, registerType, address)`, `setValue(unitId, registerType, address, value)`,
+                  `setValues(unitId, registerType, valueMap)`, `log(...args)`. Register types: `01/02/03/04`.
+                </Typography>
+              </>
+            ) : (
+              <Typography variant="body2" color="text.secondary">
+                Select a script from the left list.
+              </Typography>
+            )}
+          </Paper>
+        </Box>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Close</Button>
       </DialogActions>
     </Dialog>
   )
@@ -1734,6 +2052,14 @@ const Server = (): JSX.Element => {
   const [workspaceTabSettings, setWorkspaceTabSettings] = useState<
     Record<string, WorkspaceTabSettings>
   >({})
+  const [scriptsByConnection, setScriptsByConnection] = useState<Record<string, ScriptDefinition[]>>(
+    {}
+  )
+  const [scriptEditorOpen, setScriptEditorOpen] = useState(false)
+  const [scriptEditorConnectionId, setScriptEditorConnectionId] = useState<string | null>(null)
+  const scriptStateMapRef = useRef<Record<string, Record<string, unknown>>>({})
+  const scriptTimerMapRef = useRef<Record<string, ReturnType<typeof setInterval>>>({})
+  const connectionsRef = useRef<Connection[]>([])
 
   const [newConnectionOpen, setNewConnectionOpen] = useState(false)
   const [newSlaveOpen, setNewSlaveOpen] = useState(false)
@@ -1828,6 +2154,56 @@ const Server = (): JSX.Element => {
 
   const showUserError = (message: string): void => {
     enqueueSnackbar({ variant: 'error', message })
+  }
+
+  useEffect(() => {
+    connectionsRef.current = connections
+  }, [connections])
+
+  const syncSlaveToBackend = async (connectionId: string, slave: Slave): Promise<void> => {
+    const unitId = toUnitIdString(slave.slaveId)
+    const coils = new Array<boolean>(65535)
+    const discreteInputs = new Array<boolean>(65535)
+    const registerValues: RegisterParams[] = []
+
+    slave.registerGroups.forEach((group) => {
+      const boolType = getBackendBoolRegisterType(group.type)
+      if (boolType) {
+        group.registers.forEach((register) => {
+          if (register.address < 0 || register.address >= 65535) return
+          if (boolType === 'coils') coils[register.address] = register.value !== 0
+          else discreteInputs[register.address] = register.value !== 0
+        })
+        return
+      }
+
+      const numberType = getBackendNumberRegisterType(group.type)
+      if (!numberType) return
+      group.registers.forEach((register) => {
+        if (register.address < 0 || register.address >= 65535) return
+        registerValues.push(toStaticRegisterParams(register, numberType))
+      })
+    })
+
+    await window.api.syncBools({
+      uuid: connectionId,
+      unitId,
+      coils,
+      discrete_inputs: discreteInputs
+    })
+
+    await window.api.syncServerRegister({
+      uuid: connectionId,
+      unitId,
+      registerValues,
+      littleEndian: false
+    })
+  }
+
+  const syncConnectionToBackend = async (connection: Connection): Promise<void> => {
+    for (const slave of connection.slaves) {
+      await syncSlaveToBackend(connection.id, slave)
+    }
   }
 
   useEffect(() => {
@@ -2235,6 +2611,47 @@ const Server = (): JSX.Element => {
         }
       })
     )
+
+    if (typeof normalizedUpdates.value !== 'number') return
+
+    const connection = connectionsRef.current.find((conn) => conn.id === connectionId)
+    if (!connection?.isOpen) return
+    const slave = connection.slaves.find((item) => item.id === slaveId)
+    if (!slave) return
+    const group = slave.registerGroups.find((item) => item.id === groupId)
+    if (!group) return
+
+    const unitId = toUnitIdString(slave.slaveId)
+    const value = clamp(Math.round(normalizedUpdates.value), 0, 65535)
+    const baseRegister = group.registers.find((item) => item.address === address)
+    const nextRegister = {
+      address,
+      value,
+      variableName: normalizedUpdates.variableName ?? baseRegister?.variableName ?? '',
+      comment: normalizedUpdates.comment ?? baseRegister?.comment ?? ''
+    }
+
+    const boolType = getBackendBoolRegisterType(group.type)
+    if (boolType) {
+      void window.api.setBool({
+        uuid: connectionId,
+        unitId,
+        registerType: boolType,
+        address,
+        state: value !== 0
+      })
+      return
+    }
+
+    const numberType = getBackendNumberRegisterType(group.type)
+    if (!numberType) return
+
+    void window.api.addReplaceServerRegister({
+      uuid: connectionId,
+      unitId,
+      littleEndian: false,
+      params: toStaticRegisterParams(nextRegister, numberType)
+    })
   }
 
   const updateRegistersBatch = (
@@ -2268,21 +2685,234 @@ const Server = (): JSX.Element => {
         }
       })
     )
+
+    const connection = connectionsRef.current.find((conn) => conn.id === connectionId)
+    if (!connection?.isOpen) return
+    const slave = connection.slaves.find((item) => item.id === slaveId)
+    if (!slave) return
+    const group = slave.registerGroups.find((item) => item.id === groupId)
+    if (!group) return
+
+    const unitId = toUnitIdString(slave.slaveId)
+    const boolType = getBackendBoolRegisterType(group.type)
+    if (boolType) {
+      Object.entries(valueMap).forEach(([addressStr, rawValue]) => {
+        const address = Number(addressStr)
+        const value = clamp(Math.round(rawValue), 0, 65535)
+        void window.api.setBool({
+          uuid: connectionId,
+          unitId,
+          registerType: boolType,
+          address,
+          state: value !== 0
+        })
+      })
+      return
+    }
+
+    const numberType = getBackendNumberRegisterType(group.type)
+    if (!numberType) return
+
+    Object.entries(valueMap).forEach(([addressStr, rawValue]) => {
+      const address = Number(addressStr)
+      const value = clamp(Math.round(rawValue), 0, 65535)
+      const existing = group.registers.find((item) => item.address === address)
+      const nextRegister: Register = {
+        address,
+        value,
+        variableName: existing?.variableName ?? '',
+        comment: existing?.comment ?? ''
+      }
+
+      void window.api.addReplaceServerRegister({
+        uuid: connectionId,
+        unitId,
+        littleEndian: false,
+        params: toStaticRegisterParams(nextRegister, numberType)
+      })
+    })
   }
+
+  const getScriptTargetEntries = (
+    connectionId: string,
+    unitId: number,
+    registerType: RegisterGroup['type']
+  ): Array<{ slaveId: string; groupId: string; registers: Register[] }> => {
+    const connection = connectionsRef.current.find((conn) => conn.id === connectionId)
+    if (!connection) return []
+
+    const targets: Array<{ slaveId: string; groupId: string; registers: Register[] }> = []
+    connection.slaves.forEach((slave) => {
+      if (slave.slaveId !== unitId) return
+      slave.registerGroups.forEach((group) => {
+        if (group.type !== registerType) return
+        targets.push({ slaveId: slave.id, groupId: group.id, registers: group.registers })
+      })
+    })
+    return targets
+  }
+
+  const executeScript = async (
+    connectionId: string,
+    scriptId: string,
+    trigger: 'manual' | 'interval'
+  ): Promise<void> => {
+    const scripts = scriptsByConnection[connectionId] ?? []
+    const script = scripts.find((item) => item.id === scriptId)
+    if (!script) return
+
+    const scopeKey = `${connectionId}:${scriptId}`
+    const scope = scriptStateMapRef.current[scopeKey] ?? {}
+    scriptStateMapRef.current[scopeKey] = scope
+
+    const api: ScriptRuntimeApi = {
+      getValue: (unitId: number, registerType: RegisterGroup['type'], address: number): number | undefined => {
+        const targets = getScriptTargetEntries(connectionId, unitId, registerType)
+        for (const target of targets) {
+          const register = target.registers.find((item) => item.address === address)
+          if (register) return register.value
+        }
+        return undefined
+      },
+      setValue: (
+        unitId: number,
+        registerType: RegisterGroup['type'],
+        address: number,
+        value: number
+      ): boolean => {
+        const targets = getScriptTargetEntries(connectionId, unitId, registerType)
+        if (targets.length === 0) return false
+        const normalized =
+          registerType === '01' || registerType === '02'
+            ? value !== 0
+              ? 1
+              : 0
+            : clamp(Math.round(value), 0, 65535)
+
+        targets.forEach((target) => {
+          updateRegister(connectionId, target.slaveId, target.groupId, address, { value: normalized })
+        })
+        return true
+      },
+      setValues: (
+        unitId: number,
+        registerType: RegisterGroup['type'],
+        values: Record<number, number>
+      ): number => {
+        const targets = getScriptTargetEntries(connectionId, unitId, registerType)
+        if (targets.length === 0) return 0
+        const normalizedMap = Object.fromEntries(
+          Object.entries(values).map(([addressStr, value]) => {
+            const normalized =
+              registerType === '01' || registerType === '02'
+                ? value !== 0
+                  ? 1
+                  : 0
+                : clamp(Math.round(value), 0, 65535)
+            return [Number(addressStr), normalized]
+          })
+        ) as Record<number, number>
+
+        targets.forEach((target) => {
+          updateRegistersBatch(connectionId, target.slaveId, target.groupId, normalizedMap)
+        })
+        return Object.keys(normalizedMap).length
+      },
+      log: (...args: unknown[]): void => {
+        console.log(`[Script:${connectionId}/${script.name}]`, ...args)
+      }
+    }
+
+    try {
+      const runner = new Function(
+        'api',
+        'state',
+        'event',
+        `"use strict"; return (async () => { ${script.code}\n })();`
+      ) as (
+        api: ScriptRuntimeApi,
+        state: Record<string, unknown>,
+        event: ScriptRuntimeEvent
+      ) => Promise<void>
+
+      await runner(api, scope, { type: trigger, timestamp: Date.now() })
+
+      setScriptsByConnection((prev) => ({
+        ...prev,
+        [connectionId]: (prev[connectionId] ?? []).map((item) =>
+          item.id === scriptId ? { ...item, lastRunAt: Date.now(), lastError: undefined } : item
+        )
+      }))
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setScriptsByConnection((prev) => ({
+        ...prev,
+        [connectionId]: (prev[connectionId] ?? []).map((item) =>
+          item.id === scriptId ? { ...item, enabled: false, lastError: message } : item
+        )
+      }))
+      console.error(`Script failed (${connectionId}/${script.name}):`, error)
+      showUserError(`Script "${script.name}" failed and was disabled.`)
+    }
+  }
+
+  useEffect(() => {
+    const openConnectionIds = new Set(connections.filter((conn) => conn.isOpen).map((conn) => conn.id))
+    const activeTimerKeys = new Set<string>()
+
+    Object.entries(scriptsByConnection).forEach(([connectionId, scripts]) => {
+      if (!openConnectionIds.has(connectionId)) return
+      scripts.forEach((script) => {
+        if (!script.enabled) return
+        const key = `${connectionId}:${script.id}`
+        activeTimerKeys.add(key)
+        if (scriptTimerMapRef.current[key]) return
+        const intervalMs = Math.max(100, Number(script.intervalMs) || 1000)
+        scriptTimerMapRef.current[key] = setInterval(() => {
+          void executeScript(connectionId, script.id, 'interval')
+        }, intervalMs)
+      })
+    })
+
+    Object.entries(scriptTimerMapRef.current).forEach(([key, timer]) => {
+      if (activeTimerKeys.has(key)) return
+      clearInterval(timer)
+      delete scriptTimerMapRef.current[key]
+    })
+  }, [scriptsByConnection, connections])
+
+  useEffect(() => {
+    return () => {
+      Object.values(scriptTimerMapRef.current).forEach((timer) => clearInterval(timer))
+      scriptTimerMapRef.current = {}
+    }
+  }, [])
 
   const handleNewConnection = (connection: Connection) => {
     setConnections([...connections, connection])
     setExpandedConnections(new Set([...expandedConnections, connection.id]))
+    setScriptsByConnection((prev) => ({
+      ...prev,
+      [connection.id]: prev[connection.id] ?? []
+    }))
   }
 
   const handleNewSlave = (slave: Slave) => {
     if (!selectedConnectionForSlave) return
+    const connection = connections.find((item) => item.id === selectedConnectionForSlave)
     setConnections(
       connections.map((c) =>
         c.id === selectedConnectionForSlave ? { ...c, slaves: [...c.slaves, slave] } : c
       )
     )
     setExpandedSlaves(new Set([...expandedSlaves, slave.id]))
+
+    if (connection?.isOpen) {
+      void syncSlaveToBackend(connection.id, slave).catch((error) => {
+        console.error('Failed to sync new slave:', error)
+        showUserError('Failed to sync slave data to backend.')
+      })
+    }
   }
 
   const handleEditConnection = () => {
@@ -2292,10 +2922,20 @@ const Server = (): JSX.Element => {
     setEditConnectionOpen(true)
   }
 
-  const handleSaveEditedConnection = (connection: Connection) => {
+  const handleSaveEditedConnection = async (connection: Connection) => {
     setConnections(connections.map((c) => (c.id === connection.id ? connection : c)))
     setEditConnectionOpen(false)
     setEditingConnection(undefined)
+
+    if (!connection.isOpen) return
+
+    try {
+      await window.api.createServer({ uuid: connection.id, config: toServerConfig(connection) })
+      await syncConnectionToBackend(connection)
+    } catch (error) {
+      console.error('Failed to apply edited connection settings:', error)
+      showUserError('Failed to apply edited connection settings.')
+    }
   }
 
   const handleEditSlave = () => {
@@ -2309,6 +2949,7 @@ const Server = (): JSX.Element => {
 
   const handleSaveEditedSlave = (slave: Slave) => {
     if (!editingSlaveConnectionId) return
+    const connection = connections.find((item) => item.id === editingSlaveConnectionId)
     setConnections(
       connections.map((c) =>
         c.id === editingSlaveConnectionId
@@ -2319,16 +2960,24 @@ const Server = (): JSX.Element => {
     setEditSlaveOpen(false)
     setEditingSlave(undefined)
     setEditingSlaveConnectionId(null)
+
+    if (connection?.isOpen) {
+      void syncSlaveToBackend(connection.id, slave).catch((error) => {
+        console.error('Failed to sync edited slave:', error)
+        showUserError('Failed to sync slave data to backend.')
+      })
+    }
   }
 
   const handleSaveWorkspace = () => {
     const workspace = {
-      version: 2,
+      version: 3,
       connections: connections.map((c) => ({
         ...c,
         isOpen: false
       })),
-      tabSettings: workspaceTabSettings
+      tabSettings: workspaceTabSettings,
+      scriptsByConnection
     }
     const json = JSON.stringify(workspace, null, 2)
     const blob = new Blob([json], { type: 'application/json' })
@@ -2348,13 +2997,22 @@ const Server = (): JSX.Element => {
       const text = await file.text()
       const workspace = JSON.parse(text)
       if (
-        (workspace.version === 1 || workspace.version === 2) &&
+        (workspace.version === 1 || workspace.version === 2 || workspace.version === 3) &&
         Array.isArray(workspace.connections)
       ) {
         setConnections(workspace.connections)
         setWorkspaceTabSettings(
-          workspace.version === 2 && workspace.tabSettings && typeof workspace.tabSettings === 'object'
+          (workspace.version === 2 || workspace.version === 3) &&
+            workspace.tabSettings &&
+            typeof workspace.tabSettings === 'object'
             ? workspace.tabSettings
+            : {}
+        )
+        setScriptsByConnection(
+          workspace.version === 3 &&
+            workspace.scriptsByConnection &&
+            typeof workspace.scriptsByConnection === 'object'
+            ? workspace.scriptsByConnection
             : {}
         )
         setOpenTabs([])
@@ -2395,9 +3053,15 @@ const Server = (): JSX.Element => {
         config: toServerConfig(conn)
       }
       await window.api.createServer(params)
+      await syncConnectionToBackend(conn)
       setConnections((prev) => prev.map((c) => (c.id === conn.id ? { ...c, isOpen: true } : c)))
     } catch (error) {
       console.error('Failed to open connection:', error)
+      try {
+        await window.api.deleteServer(conn.id)
+      } catch {
+        // Ignore cleanup failures after open/sync error.
+      }
       showUserError('Failed to open connection.')
     }
   }
@@ -2480,6 +3144,7 @@ const Server = (): JSX.Element => {
         const isConnectionSelected = selectedNodeId && !selectedNodeId.includes('/')
         const isSlaveSelected = !!getSelectedSlave()
         const isConnectionOpen = selectedConn?.isOpen
+        const scriptTargetConnectionId = selectedNodeId?.split('/')[0] || null
         return (
           <AppBar
             position="static"
@@ -2596,7 +3261,17 @@ const Server = (): JSX.Element => {
                 </Button>
               </Tooltip>
               <Tooltip title={t('server.toolbar.editScript')}>
-                <Button size="small" variant="text" startIcon={<ScriptIcon />}>
+                <Button
+                  size="small"
+                  variant="text"
+                  startIcon={<ScriptIcon />}
+                  disabled={!scriptTargetConnectionId}
+                  onClick={() => {
+                    if (!scriptTargetConnectionId) return
+                    setScriptEditorConnectionId(scriptTargetConnectionId)
+                    setScriptEditorOpen(true)
+                  }}
+                >
                   {t('server.toolbar.editScript')}
                 </Button>
               </Tooltip>
@@ -3355,7 +4030,7 @@ const Server = (): JSX.Element => {
                                         </TableCell>
                                         <TableCell
                                           sx={{
-                                            fontFamily: 'monospace',
+                                            fontFamily: MONO_FONT_FAMILY,
                                             fontWeight: 'bold',
                                             width: currentWidths.address,
                                             minWidth: currentWidths.address,
@@ -3408,14 +4083,14 @@ const Server = (): JSX.Element => {
                                           {isCoilGroup ? (
                                             <Typography
                                               variant="body2"
-                                              sx={{ fontFamily: 'monospace', fontWeight: 700, color: 'inherit' }}
+                                              sx={{ fontFamily: MONO_FONT_FAMILY, fontWeight: 700, color: 'inherit' }}
                                             >
                                               {register.value !== 0 ? 'ON' : 'OFF'}
                                             </Typography>
                                           ) : (
                                             <Typography
                                               variant="body2"
-                                              sx={{ fontFamily: 'monospace', fontWeight: 700, color: 'inherit' }}
+                                              sx={{ fontFamily: MONO_FONT_FAMILY, fontWeight: 700, color: 'inherit' }}
                                             >
                                               {formatDisplayValue(
                                                 rawRegisterMap,
@@ -3851,7 +4526,7 @@ const Server = (): JSX.Element => {
                                                 <Typography
                                                   variant="body2"
                                                   sx={{
-                                                    fontFamily: 'monospace',
+                                                    fontFamily: MONO_FONT_FAMILY,
                                                     fontWeight: 700,
                                                     cursor: 'text'
                                                   }}
@@ -3953,7 +4628,7 @@ const Server = (): JSX.Element => {
                                                   'data-testid': `basic-${format}-${reg.address}`,
                                                   style: {
                                                     textAlign: 'center',
-                                                    fontFamily: 'monospace',
+                                                    fontFamily: MONO_FONT_FAMILY,
                                                     fontWeight: 700
                                                   }
                                                 }}
@@ -3973,7 +4648,7 @@ const Server = (): JSX.Element => {
 
                                         return (
                                           <TableRow key={reg.address}>
-                                            <TableCell sx={{ fontFamily: 'monospace', fontWeight: 700 }}>
+                                            <TableCell sx={{ fontFamily: MONO_FONT_FAMILY, fontWeight: 700 }}>
                                               {formatAddress(reg.address)}
                                             </TableCell>
                                             {isCoilGroup ? (
@@ -3996,7 +4671,7 @@ const Server = (): JSX.Element => {
                                                   ) : (
                                                     <Typography
                                                       variant="body2"
-                                                      sx={{ fontFamily: 'monospace', fontWeight: 700 }}
+                                                      sx={{ fontFamily: MONO_FONT_FAMILY, fontWeight: 700 }}
                                                     >
                                                       {reg.value !== 0 ? 'ON' : 'OFF'}
                                                     </Typography>
@@ -4020,7 +4695,7 @@ const Server = (): JSX.Element => {
                                                         <Typography
                                                           variant="body2"
                                                           sx={{
-                                                            fontFamily: 'monospace',
+                                                            fontFamily: MONO_FONT_FAMILY,
                                                             fontWeight: 700,
                                                             cursor: group.type === '01' ? 'text' : 'default'
                                                           }}
@@ -4122,7 +4797,7 @@ const Server = (): JSX.Element => {
                                                           'data-testid': `basic-${fmt}-${reg.address}`,
                                                           style: {
                                                             textAlign: 'center',
-                                                            fontFamily: 'monospace',
+                                                            fontFamily: MONO_FONT_FAMILY,
                                                             fontWeight: 700
                                                           }
                                                         }}
@@ -4161,7 +4836,7 @@ const Server = (): JSX.Element => {
                                             const start = groupItem.startBit
                                             return (
                                               <TableRow key={`coil-long-${idx}`}>
-                                                <TableCell sx={{ fontFamily: 'monospace' }}>
+                                                <TableCell sx={{ fontFamily: MONO_FONT_FAMILY }}>
                                                   {formatAddress(groupItem.startBit)} - {formatAddress(groupItem.endBit)}
                                                 </TableCell>
                                                 {(['ABCD', 'CDAB', 'BADC', 'DCBA'] as const).map((order) => {
@@ -4176,7 +4851,7 @@ const Server = (): JSX.Element => {
                                                         <Typography
                                                           variant="body2"
                                                           sx={{
-                                                            fontFamily: 'monospace',
+                                                            fontFamily: MONO_FONT_FAMILY,
                                                             fontWeight: 700,
                                                             cursor: group.type === '01' ? 'text' : 'default'
                                                           }}
@@ -4251,7 +4926,7 @@ const Server = (): JSX.Element => {
                                                             ;(event.target as HTMLInputElement).blur()
                                                           }
                                                         }}
-                                                        inputProps={{ style: { fontFamily: 'monospace' } }}
+                                                        inputProps={{ style: { fontFamily: MONO_FONT_FAMILY } }}
                                                       />
                                                     </TableCell>
                                                   )
@@ -4261,7 +4936,7 @@ const Server = (): JSX.Element => {
                                           })
                                         : pagedLongGroups.map((pair, idx) => (
                                             <TableRow key={`long-${idx}`}>
-                                              <TableCell sx={{ fontFamily: 'monospace' }}>
+                                              <TableCell sx={{ fontFamily: MONO_FONT_FAMILY }}>
                                                 {formatAddress(pair[0].address)} - {formatAddress(pair[1].address)}
                                               </TableCell>
                                               {(['ABCD', 'CDAB', 'BADC', 'DCBA'] as const).map((order) => {
@@ -4276,7 +4951,7 @@ const Server = (): JSX.Element => {
                                                     <TableCell key={`long-${start}-${order}`}>
                                                       <Typography
                                                         variant="body2"
-                                                        sx={{ fontFamily: 'monospace', fontWeight: 700, cursor: 'text' }}
+                                                        sx={{ fontFamily: MONO_FONT_FAMILY, fontWeight: 700, cursor: 'text' }}
                                                         onClick={() =>
                                                           setConversionEditCell({
                                                             tab: 'long',
@@ -4345,7 +5020,7 @@ const Server = (): JSX.Element => {
                                                           ;(event.target as HTMLInputElement).blur()
                                                         }
                                                       }}
-                                                      inputProps={{ style: { fontFamily: 'monospace' } }}
+                                                      inputProps={{ style: { fontFamily: MONO_FONT_FAMILY } }}
                                                     />
                                                   </TableCell>
                                                 )
@@ -4362,7 +5037,7 @@ const Server = (): JSX.Element => {
                                               const start = groupItem.startBit
                                               return (
                                                 <TableRow key={`coil-float-${idx}`}>
-                                                  <TableCell sx={{ fontFamily: 'monospace' }}>
+                                                  <TableCell sx={{ fontFamily: MONO_FONT_FAMILY }}>
                                                     {formatAddress(groupItem.startBit)} - {formatAddress(groupItem.endBit)}
                                                   </TableCell>
                                                   {(['ABCD', 'CDAB', 'BADC', 'DCBA'] as const).map((order) => {
@@ -4377,7 +5052,7 @@ const Server = (): JSX.Element => {
                                                           <Typography
                                                             variant="body2"
                                                             sx={{
-                                                              fontFamily: 'monospace',
+                                                              fontFamily: MONO_FONT_FAMILY,
                                                               fontWeight: 700,
                                                               cursor: group.type === '01' ? 'text' : 'default'
                                                             }}
@@ -4447,7 +5122,7 @@ const Server = (): JSX.Element => {
                                                               ;(event.target as HTMLInputElement).blur()
                                                             }
                                                           }}
-                                                          inputProps={{ style: { fontFamily: 'monospace' } }}
+                                                          inputProps={{ style: { fontFamily: MONO_FONT_FAMILY } }}
                                                         />
                                                       </TableCell>
                                                     )
@@ -4457,7 +5132,7 @@ const Server = (): JSX.Element => {
                                             })
                                           : pagedFloatGroups.map((pair, idx) => (
                                               <TableRow key={`float-${idx}`}>
-                                                <TableCell sx={{ fontFamily: 'monospace' }}>
+                                                <TableCell sx={{ fontFamily: MONO_FONT_FAMILY }}>
                                                   {formatAddress(pair[0].address)} - {formatAddress(pair[1].address)}
                                                 </TableCell>
                                                 {(['ABCD', 'CDAB', 'BADC', 'DCBA'] as const).map((order) => {
@@ -4472,7 +5147,7 @@ const Server = (): JSX.Element => {
                                                       <TableCell key={`float-${start}-${order}`}>
                                                         <Typography
                                                           variant="body2"
-                                                          sx={{ fontFamily: 'monospace', fontWeight: 700, cursor: 'text' }}
+                                                          sx={{ fontFamily: MONO_FONT_FAMILY, fontWeight: 700, cursor: 'text' }}
                                                           onClick={() =>
                                                             setConversionEditCell({
                                                               tab: 'float',
@@ -4541,7 +5216,7 @@ const Server = (): JSX.Element => {
                                                             ;(event.target as HTMLInputElement).blur()
                                                           }
                                                         }}
-                                                        inputProps={{ style: { fontFamily: 'monospace' } }}
+                                                        inputProps={{ style: { fontFamily: MONO_FONT_FAMILY } }}
                                                       />
                                                     </TableCell>
                                                   )
@@ -4561,7 +5236,7 @@ const Server = (): JSX.Element => {
                                                 const start = groupItem.startBit
                                                 return (
                                                   <TableRow key={`coil-double-${idx}`}>
-                                                    <TableCell sx={{ fontFamily: 'monospace' }}>
+                                                    <TableCell sx={{ fontFamily: MONO_FONT_FAMILY }}>
                                                       {formatAddress(groupItem.startBit)} - {formatAddress(groupItem.endBit)}
                                                     </TableCell>
                                                     {(['ABCDEFGH', 'GHEFCDAB', 'BADCFEHG', 'HGFEDCBA'] as const).map((order) => {
@@ -4576,7 +5251,7 @@ const Server = (): JSX.Element => {
                                                             <Typography
                                                               variant="body2"
                                                               sx={{
-                                                                fontFamily: 'monospace',
+                                                                fontFamily: MONO_FONT_FAMILY,
                                                                 fontWeight: 700,
                                                                 cursor: group.type === '01' ? 'text' : 'default'
                                                               }}
@@ -4646,7 +5321,7 @@ const Server = (): JSX.Element => {
                                                                 ;(event.target as HTMLInputElement).blur()
                                                               }
                                                             }}
-                                                            inputProps={{ style: { fontFamily: 'monospace' } }}
+                                                            inputProps={{ style: { fontFamily: MONO_FONT_FAMILY } }}
                                                           />
                                                         </TableCell>
                                                       )
@@ -4656,7 +5331,7 @@ const Server = (): JSX.Element => {
                                               })
                                             : pagedDoubleGroups.map((quad, idx) => (
                                                 <TableRow key={`double-${idx}`}>
-                                                  <TableCell sx={{ fontFamily: 'monospace' }}>
+                                                  <TableCell sx={{ fontFamily: MONO_FONT_FAMILY }}>
                                                     {formatAddress(quad[0].address)} - {formatAddress(quad[3].address)}
                                                   </TableCell>
                                                   {(['ABCDEFGH', 'GHEFCDAB', 'BADCFEHG', 'HGFEDCBA'] as const).map((order) => {
@@ -4671,7 +5346,7 @@ const Server = (): JSX.Element => {
                                                         <TableCell key={`double-${start}-${order}`}>
                                                           <Typography
                                                             variant="body2"
-                                                            sx={{ fontFamily: 'monospace', fontWeight: 700, cursor: 'text' }}
+                                                            sx={{ fontFamily: MONO_FONT_FAMILY, fontWeight: 700, cursor: 'text' }}
                                                             onClick={() =>
                                                               setConversionEditCell({
                                                                 tab: 'double',
@@ -4742,7 +5417,7 @@ const Server = (): JSX.Element => {
                                                               ;(event.target as HTMLInputElement).blur()
                                                             }
                                                           }}
-                                                          inputProps={{ style: { fontFamily: 'monospace' } }}
+                                                          inputProps={{ style: { fontFamily: MONO_FONT_FAMILY } }}
                                                         />
                                                       </TableCell>
                                                     )
@@ -4751,10 +5426,10 @@ const Server = (): JSX.Element => {
                                               ))
                                           : pagedPanelRegisters.map((reg) => (
                                                 <TableRow key={reg.address}>
-                                                  <TableCell sx={{ fontFamily: 'monospace', fontWeight: 700 }}>
+                                                  <TableCell sx={{ fontFamily: MONO_FONT_FAMILY, fontWeight: 700 }}>
                                                     {formatAddress(reg.address)}
                                                   </TableCell>
-                                                  <TableCell sx={{ fontFamily: 'monospace' }}>
+                                                  <TableCell sx={{ fontFamily: MONO_FONT_FAMILY }}>
                                                     {String.fromCharCode(
                                                       reg.value & 0xff,
                                                       (reg.value >> 8) & 0xff
@@ -5000,6 +5675,26 @@ const Server = (): JSX.Element => {
         </Box>
       </Box>
 
+      <ScriptEditorDialog
+        open={scriptEditorOpen}
+        onClose={() => setScriptEditorOpen(false)}
+        connectionAlias={
+          connections.find((connection) => connection.id === scriptEditorConnectionId)?.alias ||
+          'Connection'
+        }
+        scripts={scriptEditorConnectionId ? scriptsByConnection[scriptEditorConnectionId] ?? [] : []}
+        onChange={(scripts) => {
+          if (!scriptEditorConnectionId) return
+          setScriptsByConnection((prev) => ({
+            ...prev,
+            [scriptEditorConnectionId]: scripts
+          }))
+        }}
+        onRunScript={(scriptId) => {
+          if (!scriptEditorConnectionId) return
+          void executeScript(scriptEditorConnectionId, scriptId, 'manual')
+        }}
+      />
       <NewConnectionDialog
         open={newConnectionOpen}
         onClose={() => setNewConnectionOpen(false)}

@@ -264,6 +264,19 @@ function createASCIIFrame(binary: Buffer): Buffer {
   return Buffer.from(hexStr, 'ascii')
 }
 
+const getModbusExceptionCode = (error: unknown): number => {
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'modbusErrorCode' in error &&
+    typeof (error as { modbusErrorCode?: unknown }).modbusErrorCode === 'number'
+  ) {
+    const code = (error as { modbusErrorCode: number }).modbusErrorCode
+    if (code >= 1 && code <= 11) return code
+  }
+  return 0x04
+}
+
 export class RtuServerAdapter extends BaseServerAdapter {
   private _serialConfig: SerialConfig
   private _port: SerialPort | null = null
@@ -363,45 +376,98 @@ export class RtuServerAdapter extends BaseServerAdapter {
     }, this._FRAME_TIMEOUT_MS)
   }
 
+  private _getRTURequestFrameLength(buffer: Buffer, offset: number): number | null {
+    if (offset + 2 > buffer.length) return null
+    const functionCode = buffer[offset + 1]
+
+    // Fixed-length RTU requests: unit(1) + fc(1) + payload(4) + crc(2)
+    if ([0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x08, 0x0b, 0x11, 0x16].includes(functionCode)) {
+      return 8
+    }
+
+    // Variable-length write multiple coils/registers.
+    if (functionCode === 0x0f || functionCode === 0x10) {
+      if (offset + 7 > buffer.length) return null
+      const byteCount = buffer[offset + 6]
+      return 9 + byteCount
+    }
+
+    // Read/write multiple registers.
+    if (functionCode === 0x17) {
+      if (offset + 11 > buffer.length) return null
+      const byteCount = buffer[offset + 10]
+      return 13 + byteCount
+    }
+
+    // Read device identification (MEI 0x2B/0x0E) request is fixed 6-byte payload.
+    if (functionCode === 0x2b) {
+      return 10
+    }
+
+    return null
+  }
+
   private _processRTUFrame(): void {
     if (this._receiveBuffer.length < 4) {
       this._receiveBuffer = Buffer.alloc(0)
       return
     }
 
-    const frame = this._receiveBuffer
+    const buffer = this._receiveBuffer
     this._receiveBuffer = Buffer.alloc(0)
 
-    // Verify CRC
-    if (!verifyRTUCRC(frame)) {
-      console.error('RTU CRC error')
-      return
+    let offset = 0
+    while (offset + 4 <= buffer.length) {
+      const frameLength = this._getRTURequestFrameLength(buffer, offset)
+      if (!frameLength) break
+      if (offset + frameLength > buffer.length) break
+
+      const frame = buffer.slice(offset, offset + frameLength)
+      offset += frameLength
+
+      if (!verifyRTUCRC(frame)) {
+        console.error('RTU CRC error')
+        continue
+      }
+
+      const unitId = frame[0]
+      const functionCode = frame[1]
+      const data = frame.slice(2, -2)
+
+      this._recordSerialPacket('RX', frame, unitId)
+      void this._processRequest(unitId, functionCode, data, true)
     }
 
-    // Parse frame
-    const unitId = frame[0]
-    const functionCode = frame[1]
-    const data = frame.slice(2, -2)
-
-    this._recordSerialPacket('RX', frame, unitId)
-
-    // Process request using vector
-    this._processRequest(unitId, functionCode, data, true)
+    if (offset < buffer.length) {
+      this._receiveBuffer = buffer.slice(offset)
+    }
   }
 
   private async _readHoldingRegister(address: number, unitId: number): Promise<number> {
     const getter = this._vector.getHoldingRegister
-    if (!getter) return 0
-    return new Promise<number>((resolve) => {
-      getter(address, unitId, (_err, value) => resolve((value ?? 0) & 0xffff))
+    if (!getter) throw new Error('Holding register getter is not available')
+    return new Promise<number>((resolve, reject) => {
+      getter(address, unitId, (err, value) => {
+        if (err) {
+          reject(err)
+          return
+        }
+        resolve((value ?? 0) & 0xffff)
+      })
     })
   }
 
   private async _writeHoldingRegister(address: number, value: number, unitId: number): Promise<void> {
     const setter = this._vector.setRegister
-    if (!setter) return
-    await new Promise<void>((resolve) => {
-      setter(address, value & 0xffff, unitId, () => resolve())
+    if (!setter) throw new Error('Holding register setter is not available')
+    await new Promise<void>((resolve, reject) => {
+      setter(address, value & 0xffff, unitId, (err) => {
+        if (err) {
+          reject(err)
+          return
+        }
+        resolve()
+      })
     })
   }
 
@@ -434,13 +500,16 @@ export class RtuServerAdapter extends BaseServerAdapter {
 
           const values: boolean[] = []
           for (let i = 0; i < quantity; i++) {
-            const val = await new Promise<boolean | undefined>((resolve) => {
+            const val = await new Promise<boolean>((resolve, reject) => {
               getter(address + i, unitId, (err, value) => {
-                if (err) resolve(undefined)
-                else resolve(value)
+                if (err) {
+                  reject(err)
+                  return
+                }
+                resolve(value)
               })
             })
-            values.push(val ?? false)
+            values.push(val)
           }
 
           const byteCount = Math.ceil(quantity / 8)
@@ -465,13 +534,16 @@ export class RtuServerAdapter extends BaseServerAdapter {
 
           const values: number[] = []
           for (let i = 0; i < quantity; i++) {
-            const val = await new Promise<number | undefined>((resolve) => {
+            const val = await new Promise<number>((resolve, reject) => {
               getter(address + i, unitId, (err, value) => {
-                if (err) resolve(undefined)
-                else resolve(value)
+                if (err) {
+                  reject(err)
+                  return
+                }
+                resolve(value)
               })
             })
-            values.push(val ?? 0)
+            values.push(val)
           }
 
           const registerData = Buffer.alloc(quantity * 2)
@@ -487,8 +559,14 @@ export class RtuServerAdapter extends BaseServerAdapter {
           const value = data.readUInt16BE(2) === 0xff00
           const setter = this._vector.setCoil
           if (setter) {
-            await new Promise<void>((resolve) => {
-              setter(address, value, unitId, () => resolve())
+            await new Promise<void>((resolve, reject) => {
+              setter(address, value, unitId, (err) => {
+                if (err) {
+                  reject(err)
+                  return
+                }
+                resolve()
+              })
             })
           }
           response = Buffer.concat([Buffer.from([functionCode]), data])
@@ -499,8 +577,14 @@ export class RtuServerAdapter extends BaseServerAdapter {
           const value = data.readUInt16BE(2)
           const setter = this._vector.setRegister
           if (setter) {
-            await new Promise<void>((resolve) => {
-              setter(address, value, unitId, () => resolve())
+            await new Promise<void>((resolve, reject) => {
+              setter(address, value, unitId, (err) => {
+                if (err) {
+                  reject(err)
+                  return
+                }
+                resolve()
+              })
             })
           }
           response = Buffer.concat([Buffer.from([functionCode]), data])
@@ -535,8 +619,14 @@ export class RtuServerAdapter extends BaseServerAdapter {
               const byteIndex = Math.floor(i / 8)
               const bitIndex = i % 8
               const value = (coilData[byteIndex] & (1 << bitIndex)) !== 0
-              await new Promise<void>((resolve) => {
-                setter(address + i, value, unitId, () => resolve())
+              await new Promise<void>((resolve, reject) => {
+                setter(address + i, value, unitId, (err) => {
+                  if (err) {
+                    reject(err)
+                    return
+                  }
+                  resolve()
+                })
               })
             }
           }
@@ -554,8 +644,14 @@ export class RtuServerAdapter extends BaseServerAdapter {
           if (setter) {
             for (let i = 0; i < quantity; i++) {
               const value = registerData.readUInt16BE(i * 2)
-              await new Promise<void>((resolve) => {
-                setter(address + i, value, unitId, () => resolve())
+              await new Promise<void>((resolve, reject) => {
+                setter(address + i, value, unitId, (err) => {
+                  if (err) {
+                    reject(err)
+                    return
+                  }
+                  resolve()
+                })
               })
             }
           }
@@ -660,8 +756,8 @@ export class RtuServerAdapter extends BaseServerAdapter {
       }
     } catch (err) {
       console.error('Error processing Modbus request:', err)
-      // Exception: Server Device Failure
-      const exceptionFrame = Buffer.from([unitId, functionCode | 0x80, 0x04])
+      const exceptionCode = getModbusExceptionCode(err)
+      const exceptionFrame = Buffer.from([unitId, functionCode | 0x80, exceptionCode])
       if (isRTU) {
         const frameWithCRC = addRTUCRC(exceptionFrame)
         this._recordSerialPacket('TX', frameWithCRC, unitId)
