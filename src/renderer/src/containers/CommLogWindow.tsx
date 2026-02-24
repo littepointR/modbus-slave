@@ -11,24 +11,30 @@ import {
   Toolbar,
   Typography
 } from '@mui/material'
-import type { PacketStats, ServerCommPacket } from '@shared'
+import type { PacketStats, ServerCommPacket, SystemLogEntry, SystemLogStats } from '@shared'
 import { onEvent } from '@renderer/events'
 import {
+  GLOBAL_LOG_BUFFER_MB_KEY,
   GLOBAL_MONO_FONT_SIZE_KEY,
   GLOBAL_PREFERENCE_CHANGE_EVENT,
   type GlobalPreferenceChangeDetail,
+  getGlobalLogBufferSizePreference,
   getGlobalMonoFontSizePreference
 } from '@renderer/settings/global-preferences'
 
 const MONO_FONT_FAMILY = 'var(--modbux-mono-font, "Iosevka", "Cascadia Mono", "Consolas", monospace)'
 const MONO_FONT_SIZE = 'var(--modbux-mono-font-size, 13px)'
-const MAX_RENDER_BUFFER_BYTES = 100 * 1024 * 1024
 const OVERSCAN = 12
 
 interface CommLogEntry {
   id: number
+  kind: 'comm' | 'log'
   timestamp: number
-  direction: 'RX' | 'TX'
+  direction: 'RX' | 'TX' | 'LOG'
+  level: 'debug' | 'info' | 'warn' | 'error'
+  source: string
+  module: string
+  message: string
   protocol: string
   frameType: string
   clientAddr: string
@@ -70,6 +76,11 @@ const normalizeField = (input: string): string => {
   if (raw === 'client') return 'clientaddr'
   if (raw === 'exception' || raw === 'error') return 'exception'
   if (raw === 'data' || raw === 'payload') return 'data'
+  if (raw === 'level' || raw === 'lvl') return 'level'
+  if (raw === 'source' || raw === 'src') return 'source'
+  if (raw === 'module' || raw === 'mod') return 'module'
+  if (raw === 'message' || raw === 'msg') return 'message'
+  if (raw === 'kind') return 'kind'
   return raw
 }
 
@@ -199,6 +210,16 @@ const evalFilter = (ast: FilterAst, entry: CommLogEntry): boolean => {
         return entry.isException
       case 'data':
         return entry.dataHex
+      case 'level':
+        return entry.level
+      case 'source':
+        return entry.source
+      case 'module':
+        return entry.module
+      case 'message':
+        return entry.message
+      case 'kind':
+        return entry.kind
       default:
         return ''
     }
@@ -260,12 +281,17 @@ const buildEntry = (packet: ServerCommPacket): CommLogEntry => {
     .join(' ')
   const isException = Boolean(packet.parsed.isException || packet.parsed.exception !== undefined)
   const exc = packet.parsed.exception
-  const line = `[${timestamp}] ${packet.direction} ${packet.protocol}/${packet.frameType} | Unit:${slaveId} | FC:${packet.functionCode.toString(16).toUpperCase().padStart(2, '0')} | ${dataHex}${isException ? ` | EXC:${exc ?? 'ERR'}` : ''}`
+  const line = `[${timestamp}] ${packet.direction} | Unit:${slaveId} | ${dataHex}${isException ? ` | EXC:${exc ?? 'ERR'}` : ''}`
   const sizeBytes = 128 + packet.data.byteLength + packet.clientAddr.length * 2 + line.length * 2
   return {
     id: packet.id,
+    kind: 'comm',
     timestamp: packet.timestamp,
     direction: packet.direction,
+    level: isException ? 'error' : 'info',
+    source: 'comm',
+    module: `modbus.${packet.protocol.toLowerCase()}`,
+    message: isException ? `Exception FC ${packet.functionCode}` : `FC ${packet.functionCode}`,
     protocol: packet.protocol,
     frameType: packet.frameType,
     clientAddr: packet.clientAddr,
@@ -279,9 +305,43 @@ const buildEntry = (packet: ServerCommPacket): CommLogEntry => {
   }
 }
 
+const buildSystemLogEntry = (entry: SystemLogEntry): CommLogEntry => {
+  const timestamp = new Date(entry.timestamp).toISOString().split('T')[1].slice(0, 12)
+  const details =
+    entry.details === undefined
+      ? ''
+      : typeof entry.details === 'string'
+        ? entry.details
+        : JSON.stringify(entry.details)
+  const line = `[${timestamp}] [${entry.level.toUpperCase()}] ${entry.source}/${entry.module} | ${entry.message}${details ? ` | ${details}` : ''}`
+  const sizeBytes = 96 + line.length * 2
+
+  return {
+    id: entry.id,
+    kind: 'log',
+    timestamp: entry.timestamp,
+    direction: 'LOG',
+    level: entry.level,
+    source: entry.source,
+    module: entry.module,
+    message: entry.message,
+    protocol: '-',
+    frameType: '-',
+    clientAddr: '-',
+    slaveId: entry.slaveId ?? 0,
+    functionCode: 0,
+    dataHex: '',
+    isException: entry.level === 'error',
+    exceptionCode: undefined,
+    line,
+    sizeBytes
+  }
+}
+
 const CommLogWindow = (): JSX.Element => {
   const { t } = useTranslation()
   const [monoFontSize, setMonoFontSize] = useState<number>(getGlobalMonoFontSizePreference)
+  const [renderBufferLimitMb, setRenderBufferLimitMb] = useState<number>(getGlobalLogBufferSizePreference)
   const [paused, setPaused] = useState(false)
   const [autoScroll, setAutoScroll] = useState(true)
   const [filterInput, setFilterInput] = useState('')
@@ -290,15 +350,29 @@ const CommLogWindow = (): JSX.Element => {
   const [scrollTop, setScrollTop] = useState(0)
   const [viewportHeight, setViewportHeight] = useState(400)
   const [stats, setStats] = useState<PacketStats | null>(null)
+  const [systemLogStats, setSystemLogStats] = useState<SystemLogStats | null>(null)
 
   const containerRef = useRef<HTMLDivElement>(null)
   const entriesRef = useRef<CommLogEntry[]>([])
   const filteredIndicesRef = useRef<number[]>([])
   const bufferBytesRef = useRef(0)
   const pendingRef = useRef<ServerCommPacket[]>([])
+  const pendingSystemLogsRef = useRef<SystemLogEntry[]>([])
   const compiledFilterRef = useRef<FilterAst | null>(null)
   const filterDirtyRef = useRef(true)
+  const renderBufferLimitBytesRef = useRef(renderBufferLimitMb * 1024 * 1024)
   const lineHeight = useMemo(() => Math.max(24, monoFontSize + 10), [monoFontSize])
+
+  const trimEntriesToLimit = useCallback(() => {
+    while (
+      bufferBytesRef.current > renderBufferLimitBytesRef.current &&
+      entriesRef.current.length > 0
+    ) {
+      const first = entriesRef.current.shift()
+      if (!first) break
+      bufferBytesRef.current -= first.sizeBytes
+    }
+  }, [])
 
   const rebuildFilteredIndices = useCallback(() => {
     const entries = entriesRef.current
@@ -319,7 +393,7 @@ const CommLogWindow = (): JSX.Element => {
       bufferBytesRef.current += entry.sizeBytes
 
       let trimmed = 0
-      while (bufferBytesRef.current > MAX_RENDER_BUFFER_BYTES && entriesRef.current.length > 0) {
+      while (bufferBytesRef.current > renderBufferLimitBytesRef.current && entriesRef.current.length > 0) {
         const first = entriesRef.current.shift()
         if (!first) break
         bufferBytesRef.current -= first.sizeBytes
@@ -349,19 +423,50 @@ const CommLogWindow = (): JSX.Element => {
       if (paused) return
       pendingRef.current.push(packet)
     })
+    const systemLogUnlisten = onEvent('system_log_entry', (entry) => {
+      if (paused) return
+      pendingSystemLogsRef.current.push(entry)
+    })
     const clearUnlisten = onEvent('comm_monitor_clear', () => {
       entriesRef.current = []
       filteredIndicesRef.current = []
       bufferBytesRef.current = 0
       pendingRef.current = []
+      pendingSystemLogsRef.current = []
+      setRenderVersion((v) => v + 1)
+    })
+    const clearSystemLogUnlisten = onEvent('system_log_clear', () => {
+      entriesRef.current = []
+      filteredIndicesRef.current = []
+      bufferBytesRef.current = 0
+      pendingRef.current = []
+      pendingSystemLogsRef.current = []
       setRenderVersion((v) => v + 1)
     })
 
     return () => {
       packetUnlisten()
+      systemLogUnlisten()
       clearUnlisten()
+      clearSystemLogUnlisten()
     }
   }, [paused])
+
+  useEffect(() => {
+    window.api
+      .getSystemLogs(10000)
+      .then((logs) => {
+        if (!Array.isArray(logs) || logs.length === 0) return
+        const mapped = logs.map(buildSystemLogEntry)
+        entriesRef.current = [...entriesRef.current, ...mapped]
+        bufferBytesRef.current += mapped.reduce((sum, entry) => sum + entry.sizeBytes, 0)
+        trimEntriesToLimit()
+        filterDirtyRef.current = true
+        rebuildFilteredIndices()
+        setRenderVersion((v) => v + 1)
+      })
+      .catch(() => undefined)
+  }, [rebuildFilteredIndices, trimEntriesToLimit])
 
   useEffect(() => {
     try {
@@ -378,22 +483,38 @@ const CommLogWindow = (): JSX.Element => {
 
   useEffect(() => {
     const timer = window.setInterval(() => {
-      if (pendingRef.current.length === 0) return
-      const list = pendingRef.current.splice(0, pendingRef.current.length)
-      list.forEach(appendPacket)
+      if (pendingRef.current.length === 0 && pendingSystemLogsRef.current.length === 0) return
+      const packets = pendingRef.current.splice(0, pendingRef.current.length)
+      packets.forEach(appendPacket)
+
+      const logs = pendingSystemLogsRef.current.splice(0, pendingSystemLogsRef.current.length)
+      logs.forEach((item) => {
+        const entry = buildSystemLogEntry(item)
+        entriesRef.current.push(entry)
+        bufferBytesRef.current += entry.sizeBytes
+      })
+
+      trimEntriesToLimit()
+
+      filterDirtyRef.current = true
+      rebuildFilteredIndices()
       setRenderVersion((v) => v + 1)
     }, 50)
 
     return () => {
       window.clearInterval(timer)
     }
-  }, [appendPacket])
+  }, [appendPacket, rebuildFilteredIndices, trimEntriesToLimit])
 
   useEffect(() => {
     const timer = window.setInterval(() => {
       window.api
         .getCommStats()
         .then((next) => setStats(next))
+        .catch(() => undefined)
+      window.api
+        .getSystemLogStats()
+        .then((next) => setSystemLogStats(next))
         .catch(() => undefined)
     }, 1000)
 
@@ -411,12 +532,18 @@ const CommLogWindow = (): JSX.Element => {
       if (event.key === GLOBAL_MONO_FONT_SIZE_KEY) {
         syncFontSize()
       }
+      if (event.key === GLOBAL_LOG_BUFFER_MB_KEY) {
+        setRenderBufferLimitMb(getGlobalLogBufferSizePreference())
+      }
     }
 
     const onPreferenceChange = (event: Event): void => {
       const customEvent = event as CustomEvent<GlobalPreferenceChangeDetail>
       if (customEvent.detail?.key === GLOBAL_MONO_FONT_SIZE_KEY) {
         syncFontSize()
+      }
+      if (customEvent.detail?.key === GLOBAL_LOG_BUFFER_MB_KEY) {
+        setRenderBufferLimitMb(getGlobalLogBufferSizePreference())
       }
     }
 
@@ -427,6 +554,14 @@ const CommLogWindow = (): JSX.Element => {
       window.removeEventListener(GLOBAL_PREFERENCE_CHANGE_EVENT, onPreferenceChange as EventListener)
     }
   }, [])
+
+  useEffect(() => {
+    renderBufferLimitBytesRef.current = renderBufferLimitMb * 1024 * 1024
+    trimEntriesToLimit()
+    filterDirtyRef.current = true
+    rebuildFilteredIndices()
+    setRenderVersion((v) => v + 1)
+  }, [renderBufferLimitMb, rebuildFilteredIndices, trimEntriesToLimit])
 
   useEffect(() => {
     const container = containerRef.current
@@ -484,9 +619,11 @@ const CommLogWindow = (): JSX.Element => {
     entriesRef.current = []
     filteredIndicesRef.current = []
     pendingRef.current = []
+    pendingSystemLogsRef.current = []
     bufferBytesRef.current = 0
     setRenderVersion((v) => v + 1)
     window.api.clearCommMonitor()
+    window.api.clearSystemLogs()
   }, [])
 
   const handleSave = useCallback(() => {
@@ -505,7 +642,7 @@ const CommLogWindow = (): JSX.Element => {
   const renderedSummary = `${totalRows} / ${entriesRef.current.length}`
   const bufferSummary = stats
     ? `${formatBytes(stats.bufferBytes)} / ${formatBytes(stats.bufferLimitBytes)}`
-    : `${formatBytes(bufferBytesRef.current)} / ${formatBytes(MAX_RENDER_BUFFER_BYTES)}`
+    : `${formatBytes(bufferBytesRef.current)} / ${formatBytes(renderBufferLimitBytesRef.current)}`
 
   return (
     <Box sx={{ height: '100vh', width: '100vw', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -518,13 +655,18 @@ const CommLogWindow = (): JSX.Element => {
             size="small"
             value={filterInput}
             onChange={(e) => handleFilterChange(e.target.value)}
-            placeholder='Filter (e.g. direction == RX and fc == 3 and not exception)'
+            placeholder='Filter (e.g. kind == comm and direction == RX and fc == 3) or (level == error)'
             error={Boolean(filterError)}
-            helperText={filterError || 'Wireshark-like: and/or/not, == != > < >= <=, contains, matches'}
+            helperText={
+              filterError ||
+              'Fields: kind/direction/fc/unit/data/level/source/module/message/exception'
+            }
             sx={{ minWidth: 460, maxWidth: 720 }}
           />
           <Chip label={`Rows: ${renderedSummary}`} size="small" />
           <Chip label={`Buffer: ${bufferSummary}`} size="small" />
+          <Chip label={`Logs: ${systemLogStats?.total ?? 0}`} size="small" />
+          <Chip label={`Log Errors: ${systemLogStats?.byLevel.error ?? 0}`} size="small" color="error" variant="outlined" />
           <Chip label="RX" size="small" sx={{ bgcolor: '#1976d2', color: '#fff' }} />
           <Chip label="TX" size="small" sx={{ bgcolor: '#2e7d32', color: '#fff' }} />
           <Chip label={`Exceptions: ${stats?.exceptionCount ?? 0}`} color="error" size="small" variant="outlined" />
@@ -568,7 +710,7 @@ const CommLogWindow = (): JSX.Element => {
           <Box sx={{ position: 'relative', height: totalRows * lineHeight }}>
             {visibleRows.map(({ offset, entry }) => (
               <Box
-                key={entry.id}
+                key={`${entry.kind}-${entry.id}-${entry.timestamp}`}
                 sx={(theme) => ({
                   position: 'absolute',
                   top: offset,
@@ -588,18 +730,26 @@ const CommLogWindow = (): JSX.Element => {
                       ? theme.palette.mode === 'dark'
                         ? 'rgba(25,118,210,0.16)'
                         : 'rgba(25,118,210,0.08)'
-                      : theme.palette.mode === 'dark'
-                        ? 'rgba(46,125,50,0.16)'
-                        : 'rgba(46,125,50,0.08)',
+                      : entry.direction === 'TX'
+                        ? theme.palette.mode === 'dark'
+                          ? 'rgba(46,125,50,0.16)'
+                          : 'rgba(46,125,50,0.08)'
+                        : theme.palette.mode === 'dark'
+                          ? 'rgba(158,158,158,0.2)'
+                          : 'rgba(158,158,158,0.08)',
                   color: entry.isException
                     ? 'error.main'
                     : entry.direction === 'RX'
                       ? theme.palette.mode === 'dark'
                         ? '#90caf9'
                         : '#0d47a1'
-                      : theme.palette.mode === 'dark'
-                        ? '#a5d6a7'
-                        : '#1b5e20',
+                      : entry.direction === 'TX'
+                        ? theme.palette.mode === 'dark'
+                          ? '#a5d6a7'
+                          : '#1b5e20'
+                        : theme.palette.mode === 'dark'
+                          ? '#e0e0e0'
+                          : '#424242',
                   borderBottom: '1px solid rgba(255,255,255,0.02)'
                 })}
               >

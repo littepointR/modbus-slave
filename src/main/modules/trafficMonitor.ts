@@ -1,5 +1,6 @@
 import type { ServerCommPacket, PacketFilter, PacketStats } from '@shared'
 import type { Windows } from '@shared'
+import type { SystemLogger } from './systemLogger'
 
 export type PacketHandler = (packet: ServerCommPacket) => void
 
@@ -12,17 +13,31 @@ export class TrafficMonitor {
   private _maxBufferBytes = 100 * 1024 * 1024
   private _isRunning = false
   private _packetId = 0
+  private _logger?: SystemLogger
 
-  constructor(windows: Windows) {
+  constructor(windows: Windows, logger?: SystemLogger) {
     this._windows = windows
+    this._logger = logger
   }
 
   start(): void {
     this._isRunning = true
+    this._logger?.log({
+      level: 'info',
+      source: 'comm',
+      module: 'trafficMonitor',
+      message: 'Communication monitor started'
+    })
   }
 
   stop(): void {
     this._isRunning = false
+    this._logger?.log({
+      level: 'info',
+      source: 'comm',
+      module: 'trafficMonitor',
+      message: 'Communication monitor stopped'
+    })
   }
 
   isRunning(): boolean {
@@ -35,6 +50,12 @@ export class TrafficMonitor {
     this._bufferBytes = 0
     this._packetId = 0
     this._notifyClear()
+    this._logger?.log({
+      level: 'info',
+      source: 'comm',
+      module: 'trafficMonitor',
+      message: 'Communication monitor buffer cleared'
+    })
   }
 
   onPacket(handler: PacketHandler): () => void {
@@ -56,14 +77,25 @@ export class TrafficMonitor {
     this._packetSizes.push(packetSize)
     this._bufferBytes += packetSize
 
-    while (this._bufferBytes > this._maxBufferBytes && this._packets.length > 0) {
-      this._packets.shift()
-      const shiftedSize = this._packetSizes.shift() ?? 0
-      this._bufferBytes = Math.max(0, this._bufferBytes - shiftedSize)
-    }
+    this._trimToBufferLimit()
 
     this._notifyHandlers(fullPacket)
     this._emitToRenderer(fullPacket)
+    if (fullPacket.parsed.isException) {
+      this._logger?.log({
+        level: 'warn',
+        source: 'comm',
+        module: 'trafficMonitor',
+        message: 'Modbus exception response captured',
+        slaveId: fullPacket.slaveId,
+        details: {
+          direction: fullPacket.direction,
+          functionCode: fullPacket.functionCode,
+          exceptionCode: fullPacket.parsed.exception,
+          clientAddr: fullPacket.clientAddr
+        }
+      })
+    }
   }
 
   getPackets(filter?: PacketFilter): ServerCommPacket[] {
@@ -140,8 +172,26 @@ export class TrafficMonitor {
     this._windows.send('comm_monitor_clear', undefined)
   }
 
+  setMaxBufferBytes(nextLimitBytes: number): void {
+    const normalized = Math.max(1, Math.floor(nextLimitBytes))
+    this._maxBufferBytes = normalized
+    this._trimToBufferLimit()
+  }
+
+  getMaxBufferBytes(): number {
+    return this._maxBufferBytes
+  }
+
   private _emitToRenderer(packet: ServerCommPacket): void {
     this._windows.send('comm_packet', packet)
+  }
+
+  private _trimToBufferLimit(): void {
+    while (this._bufferBytes > this._maxBufferBytes && this._packets.length > 0) {
+      this._packets.shift()
+      const shiftedSize = this._packetSizes.shift() ?? 0
+      this._bufferBytes = Math.max(0, this._bufferBytes - shiftedSize)
+    }
   }
 
   private _estimatePacketBytes(packet: ServerCommPacket): number {

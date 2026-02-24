@@ -34,6 +34,7 @@ export default {
     globalFont: 'Global Font',
     globalFontSize: 'Global Font Size',
     globalEncoding: 'Global Encoding',
+    logBufferSize: 'Log Buffer Size (MB)',
     returnToHome: 'Return to home',
     view: 'View',
     refresh: 'Refresh',
@@ -166,6 +167,9 @@ export default {
     port: 'Port',
     portWithNumber: 'Port {{port}}',
     toolbar: {
+      workspaceMenu: 'Workspace',
+      connectionMenu: 'Connection',
+      toolsMenu: 'Tools',
       saveWorkspace: 'Save Workspace',
       saveWorkspaceAs: 'Save Workspace As',
       openWorkspace: 'Open Workspace',

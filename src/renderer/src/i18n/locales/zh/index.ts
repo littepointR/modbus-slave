@@ -34,6 +34,7 @@ export default {
     globalFont: '全局字体',
     globalFontSize: '全局字号',
     globalEncoding: '全局编码',
+    logBufferSize: '日志缓冲区大小 (MB)',
     returnToHome: '返回主页',
     view: '查看',
     refresh: '刷新',
@@ -166,6 +167,9 @@ export default {
     port: '端口',
     portWithNumber: '端口 {{port}}',
     toolbar: {
+      workspaceMenu: '工作空间',
+      connectionMenu: '连接',
+      toolsMenu: '工具',
       saveWorkspace: '保存工作空间',
       saveWorkspaceAs: '工作空间另存为',
       openWorkspace: '打开工作空间',

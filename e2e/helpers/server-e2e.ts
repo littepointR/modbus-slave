@@ -101,7 +101,7 @@ export const createConnectionViaDialog = async ({
   port?: number
   frameFormat?: 'rtu' | 'ascii'
 }): Promise<void> => {
-  await page.getByRole('button', { name: /新建连接|New Connection/ }).click()
+  await clickNewConnectionAction(page)
   await expect(page.getByRole('heading', { name: /新建连接|New Connection/ })).toBeVisible()
 
   await page.getByLabel('Connection Alias').fill(alias)
@@ -127,8 +127,40 @@ export const createConnectionViaDialog = async ({
 
 export const openAndCloseConnection = async (page: Page, alias: string): Promise<void> => {
   await page.getByText(alias, { exact: true }).click()
-  await page.getByRole('button', { name: /打开连接|Open Connection/ }).click()
-  await expect(page.getByRole('button', { name: /关闭连接|Close Connection/ })).toBeEnabled()
-  await page.getByRole('button', { name: /关闭连接|Close Connection/ }).click()
-  await expect(page.getByRole('button', { name: /打开连接|Open Connection/ })).toBeEnabled()
+  await clickOpenConnectionAction(page)
+  await clickCloseConnectionAction(page)
+}
+
+const openConnectionMenu = async (page: Page): Promise<void> => {
+  await page.getByRole('button', { name: /^(连接|Connection)$/ }).click()
+}
+
+const clickMenuAction = async (page: Page, name: RegExp): Promise<void> => {
+  const item = page.getByRole('menuitem', { name }).first()
+  await item.click()
+}
+
+export const clickNewConnectionAction = async (page: Page): Promise<void> => {
+  await openConnectionMenu(page)
+  await clickMenuAction(page, /新建连接|New Connection/)
+}
+
+export const clickNewSlaveAction = async (page: Page): Promise<void> => {
+  await openConnectionMenu(page)
+  await clickMenuAction(page, /新建从站|New Slave/)
+}
+
+export const clickOpenConnectionAction = async (page: Page): Promise<void> => {
+  await openConnectionMenu(page)
+  await clickMenuAction(page, /^(连接|Connect)/)
+}
+
+export const clickCloseConnectionAction = async (page: Page): Promise<void> => {
+  await openConnectionMenu(page)
+  await clickMenuAction(page, /^(断开|Disconnect)/)
+}
+
+export const clickEditConnectionAction = async (page: Page): Promise<void> => {
+  await page.getByRole('button', { name: /工具|Tools/ }).click()
+  await clickMenuAction(page, /编辑连接|Edit Connection/)
 }

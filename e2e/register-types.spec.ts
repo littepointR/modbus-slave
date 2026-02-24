@@ -1,5 +1,10 @@
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test'
-import { closeApp, createConnectionViaDialog, launchMainWindow } from './helpers/server-e2e'
+import {
+  clickNewSlaveAction,
+  closeApp,
+  createConnectionViaDialog,
+  launchMainWindow
+} from './helpers/server-e2e'
 
 let app: ElectronApplication
 let page: Page
@@ -27,7 +32,7 @@ test.describe.serial('Server Register Type Matrix E2E', () => {
     })
 
     await page.getByText(CONN_ALIAS, { exact: true }).click()
-    await page.getByRole('button', { name: /新建从站|New Slave/ }).click()
+    await clickNewSlaveAction(page)
     await expect(page.getByRole('heading', { name: /新建从站|New Slave/ })).toBeVisible()
 
     await page.getByLabel('Slave Alias').fill(MATRIX_SLAVE_ALIAS)

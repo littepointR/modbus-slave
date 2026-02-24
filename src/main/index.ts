@@ -16,6 +16,7 @@ import type {
 } from '@shared'
 import { startCliApiServerWithOptions, stopCliApiServer } from './cliApi'
 import { CliWorkspaceRuntime } from './modules/cliWorkspace'
+import { SystemLogger } from './modules/systemLogger'
 
 if (is.dev && os.platform() === 'darwin') {
   app.disableHardwareAcceleration()
@@ -23,16 +24,23 @@ if (is.dev && os.platform() === 'darwin') {
 }
 
 const windows = new Windows()
+const systemLogger = new SystemLogger(windows, join(app.getPath('userData'), 'logs'))
+systemLogger.log({
+  level: 'info',
+  source: 'system',
+  module: 'main',
+  message: 'System logger initialized'
+})
 
 // Initialize the app state
 const appState = new AppState()
 
 // Initialize the modbus server
-const server = new ModbusServer({ windows })
-const cliWorkspaceRuntime = new CliWorkspaceRuntime(server)
+const server = new ModbusServer({ windows, logger: systemLogger })
+const cliWorkspaceRuntime = new CliWorkspaceRuntime(server, systemLogger)
 
 // IPC
-initIpc(app, appState, server)
+initIpc(app, appState, server, systemLogger)
 
 // Single instance - DISABLED for multi-instance dev mode
 // DISABLE_SINGLE_INSTANCE

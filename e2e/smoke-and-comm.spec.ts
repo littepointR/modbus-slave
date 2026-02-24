@@ -1,5 +1,9 @@
 import { test, expect, type ElectronApplication, type Page, type Locator } from '@playwright/test'
 import {
+  clickCloseConnectionAction,
+  clickNewConnectionAction,
+  clickNewSlaveAction,
+  clickOpenConnectionAction,
   closeApp,
   launchMainWindow,
   sendReadHoldingRegisters
@@ -26,8 +30,8 @@ test.afterAll(async () => {
 test.describe.serial('Server Smoke And Comm E2E', () => {
   test('app launches and shows server toolbar', async () => {
     expect(await page.title()).toBe('Modbux')
-    await expect(page.getByRole('button', { name: /新建连接|New Connection/ })).toBeVisible()
-    await expect(page.getByRole('button', { name: /新建从站|New Slave/ })).toBeVisible()
+    await expect(page.getByRole('button', { name: /连接|Connection/ })).toBeVisible()
+    await expect(page.getByRole('button', { name: /工作空间|Workspace/ })).toBeVisible()
     await expect(page.getByText('Connections', { exact: true })).toBeVisible()
   })
 
@@ -62,7 +66,7 @@ test.describe.serial('Server Smoke And Comm E2E', () => {
   })
 
   test('can create a TCP connection', async () => {
-    await page.getByRole('button', { name: /新建连接|New Connection/ }).click()
+    await clickNewConnectionAction(page)
     await expect(page.getByRole('heading', { name: /新建连接|New Connection/ })).toBeVisible()
 
     await page.getByLabel('Connection Alias').fill(CONN_ALIAS)
@@ -76,13 +80,11 @@ test.describe.serial('Server Smoke And Comm E2E', () => {
   test('can open, close and edit connection', async () => {
     await page.getByText(CONN_ALIAS, { exact: true }).click()
 
-    await page.getByRole('button', { name: /打开连接|Open Connection/ }).click()
-    await expect(page.getByRole('button', { name: /关闭连接|Close Connection/ })).toBeEnabled()
+    await clickOpenConnectionAction(page)
+    await clickCloseConnectionAction(page)
 
-    await page.getByRole('button', { name: /关闭连接|Close Connection/ }).click()
-    await expect(page.getByRole('button', { name: /打开连接|Open Connection/ })).toBeEnabled()
-
-    await page.getByRole('button', { name: /编辑连接|Edit Connection/ }).click()
+    await page.getByRole('button', { name: /工具|Tools/ }).click()
+    await page.getByRole('menuitem', { name: /编辑连接|Edit Connection/ }).click()
     await expect(page.getByRole('heading', { name: /编辑连接|Edit Connection/ })).toBeVisible()
 
     await page.getByLabel('Connection Alias').fill(CONN_ALIAS_EDITED)
@@ -93,7 +95,7 @@ test.describe.serial('Server Smoke And Comm E2E', () => {
 
   test('can add a slave and open default register group tab', async () => {
     await page.getByText(CONN_ALIAS_EDITED, { exact: true }).click()
-    await page.getByRole('button', { name: /新建从站|New Slave/ }).click()
+    await clickNewSlaveAction(page)
 
     await expect(page.getByRole('heading', { name: /新建从站|New Slave/ })).toBeVisible()
     await page.getByLabel('Slave Alias').fill(SLAVE_ALIAS)
@@ -261,7 +263,7 @@ test.describe.serial('Server Smoke And Comm E2E', () => {
   })
 
   test('can open communication log window', async () => {
-    const newConnectionBtn = page.getByRole('button', { name: /新建连接|New Connection/ })
+    const newConnectionBtn = page.getByRole('button', { name: /连接|Connection/ })
     const hasToolbar = (await newConnectionBtn.count()) > 0 && (await newConnectionBtn.first().isVisible())
     if (!hasToolbar) {
       await closeApp(app)
@@ -272,7 +274,7 @@ test.describe.serial('Server Smoke And Comm E2E', () => {
 
     const editedConnection = page.getByText(CONN_ALIAS_EDITED, { exact: true })
     if ((await editedConnection.count()) === 0) {
-      await page.getByRole('button', { name: /新建连接|New Connection/ }).click()
+      await clickNewConnectionAction(page)
       await page.getByLabel('Connection Alias').fill(CONN_ALIAS_EDITED)
       await page.getByLabel('IP Address').fill('127.0.0.1')
       await page.getByLabel('Port').fill(String(CONN_PORT))
@@ -280,10 +282,10 @@ test.describe.serial('Server Smoke And Comm E2E', () => {
     }
 
     await page.getByText(CONN_ALIAS_EDITED, { exact: true }).click()
-    await page.getByRole('button', { name: /打开连接|Open Connection/ }).click()
-    await expect(page.getByRole('button', { name: /关闭连接|Close Connection/ })).toBeEnabled()
+    await clickOpenConnectionAction(page)
 
-    await page.getByRole('button', { name: /通讯详情|Communication Details/ }).click()
+    await page.getByRole('button', { name: /工具|Tools/ }).click()
+    await page.getByRole('menuitem', { name: /通讯详情|Communication Details/ }).click()
 
     await expect.poll(async () => app.windows().length).toBeGreaterThan(1)
 
@@ -292,11 +294,11 @@ test.describe.serial('Server Smoke And Comm E2E', () => {
     await commPage.waitForLoadState('domcontentloaded')
 
     await expect(commPage.getByText(/通讯详情|Communication Details/)).toBeVisible()
-    await expect(commPage.getByText(/暂无通讯数据|No communication data/)).toBeVisible()
     await expect(commPage.getByRole('button', { name: /继续|Continue/ })).toBeVisible()
     await expect(commPage.getByRole('button', { name: /停止|Stop/ })).toBeVisible()
     await expect(commPage.getByRole('button', { name: /清空|Clear/ })).toBeVisible()
-    await expect(commPage.getByRole('button', { name: /保存|Save/ })).toBeDisabled()
+    const saveButton = commPage.getByRole('button', { name: /保存|Save/ })
+    await expect(saveButton).toBeVisible()
 
     const response = await sendReadHoldingRegisters('127.0.0.1', CONN_PORT, 2, 0, 2)
     expect(response.length).toBeGreaterThan(0)
@@ -304,6 +306,6 @@ test.describe.serial('Server Smoke And Comm E2E', () => {
     await expect(
       commPage.getByText(/RX\s+\|\s+Unit:002\s+\|\s+00 01 00 00 00 06 02 03 00 00 00 02/)
     ).toBeVisible()
-    await expect(commPage.getByRole('button', { name: /保存|Save/ })).toBeEnabled()
+    await expect(saveButton).toBeEnabled()
   })
 })

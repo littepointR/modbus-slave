@@ -1,5 +1,12 @@
 import { test, expect, type ElectronApplication, type Locator, type Page } from '@playwright/test'
-import { closeApp, launchMainWindow, sendReadHoldingRegisters } from './helpers/server-e2e'
+import {
+  clickNewConnectionAction,
+  clickNewSlaveAction,
+  clickOpenConnectionAction,
+  closeApp,
+  launchMainWindow,
+  sendReadHoldingRegisters
+} from './helpers/server-e2e'
 
 let app: ElectronApplication
 let page: Page
@@ -26,10 +33,9 @@ test.afterAll(async () => {
 })
 
 test('realistic server user journey e2e', async () => {
-  await expect(page.getByRole('button', { name: /编辑连接|Edit Connection/ })).toBeVisible()
-  await expect(page.getByRole('button', { name: /编辑从站|Edit Slave/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /工具|Tools/ })).toBeVisible()
 
-  await page.getByRole('button', { name: /新建连接|New Connection/ }).click()
+  await clickNewConnectionAction(page)
   await page.getByLabel('Connection Alias').fill(JOURNEY_CONN_ALIAS)
   await page.getByLabel('IP Address').fill('127.0.0.1')
   await page.getByLabel('Port').fill(String(JOURNEY_PORT))
@@ -37,7 +43,7 @@ test('realistic server user journey e2e', async () => {
   await expect(page.getByText(JOURNEY_CONN_ALIAS, { exact: true })).toBeVisible()
 
   await page.getByText(JOURNEY_CONN_ALIAS, { exact: true }).click()
-  await page.getByRole('button', { name: /新建从站|New Slave/ }).click()
+  await clickNewSlaveAction(page)
   await page.getByLabel('Slave Alias').fill(JOURNEY_SLAVE_ALIAS)
   await page.getByLabel('Slave ID').fill('4')
   await page.getByRole('button', { name: /确定|OK/ }).click()
@@ -87,11 +93,11 @@ test('realistic server user journey e2e', async () => {
   await page.keyboard.press('Escape')
 
   await page.getByText(JOURNEY_CONN_ALIAS, { exact: true }).click()
-  await page.getByRole('button', { name: /打开连接|Open Connection/ }).click()
-  await expect(page.getByRole('button', { name: /关闭连接|Close Connection/ })).toBeEnabled()
+  await clickOpenConnectionAction(page)
 
   const commWindowPromise = app.waitForEvent('window')
-  await page.getByRole('button', { name: /通讯详情|Communication Details/ }).click()
+  await page.getByRole('button', { name: /工具|Tools/ }).click()
+  await page.getByRole('menuitem', { name: /通讯详情|Communication Details/ }).click()
   const commPage = await commWindowPromise
   await commPage.waitForLoadState('domcontentloaded')
   await expect(commPage.getByText(/通讯详情|Communication Details/)).toBeVisible()

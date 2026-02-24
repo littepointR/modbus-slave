@@ -1,6 +1,7 @@
 export const GLOBAL_MONO_FONT_KEY = 'modbux.global.monoFont'
 export const GLOBAL_MONO_FONT_SIZE_KEY = 'modbux.global.monoFontSize'
 export const GLOBAL_STRING_ENCODING_KEY = 'modbux.global.stringEncoding'
+export const GLOBAL_LOG_BUFFER_MB_KEY = 'modbux.global.logBufferMb'
 export const GLOBAL_PREFERENCE_CHANGE_EVENT = 'modbux-global-preference-change'
 
 export interface GlobalPreferenceChangeDetail {
@@ -13,6 +14,9 @@ export const GLOBAL_DEFAULT_MONO_FONT = 'Iosevka'
 export const GLOBAL_DEFAULT_MONO_FONT_SIZE = 13
 export const GLOBAL_MIN_MONO_FONT_SIZE = 10
 export const GLOBAL_MAX_MONO_FONT_SIZE = 24
+export const GLOBAL_DEFAULT_LOG_BUFFER_MB = 100
+export const GLOBAL_MIN_LOG_BUFFER_MB = 1
+export const GLOBAL_MAX_LOG_BUFFER_MB = 1024
 
 export const GLOBAL_MONO_FONT_CANDIDATES = [
   'Iosevka',
@@ -112,3 +116,21 @@ export const setGlobalStringEncodingPreference = (encoding: string): void => {
   dispatchPreferenceChange(GLOBAL_STRING_ENCODING_KEY, value)
 }
 
+const clampLogBufferMb = (value: number): number => {
+  if (!Number.isFinite(value)) return GLOBAL_DEFAULT_LOG_BUFFER_MB
+  return Math.max(GLOBAL_MIN_LOG_BUFFER_MB, Math.min(GLOBAL_MAX_LOG_BUFFER_MB, Math.round(value)))
+}
+
+export const getGlobalLogBufferSizePreference = (): number => {
+  const raw = localStorage.getItem(GLOBAL_LOG_BUFFER_MB_KEY)
+  if (!raw) return GLOBAL_DEFAULT_LOG_BUFFER_MB
+  const parsed = Number.parseInt(raw, 10)
+  return clampLogBufferMb(parsed)
+}
+
+export const setGlobalLogBufferSizePreference = (bufferMb: number): number => {
+  const value = clampLogBufferMb(bufferMb)
+  localStorage.setItem(GLOBAL_LOG_BUFFER_MB_KEY, String(value))
+  dispatchPreferenceChange(GLOBAL_LOG_BUFFER_MB_KEY, String(value))
+  return value
+}

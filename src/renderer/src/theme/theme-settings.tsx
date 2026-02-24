@@ -14,10 +14,12 @@ import {
   type ThemePrimaryPreset
 } from './index'
 import {
+  GLOBAL_LOG_BUFFER_MB_KEY,
   GLOBAL_MONO_FONT_KEY,
   GLOBAL_MONO_FONT_SIZE_KEY,
   applyGlobalMonoFontPreference,
   applyGlobalMonoFontSizePreference,
+  getGlobalLogBufferSizePreference,
   getGlobalMonoFontPreference,
   getGlobalMonoFontSizePreference
 } from '@renderer/settings/global-preferences'
@@ -98,6 +100,7 @@ export const ThemeSettingsProvider = ({ children }: PropsWithChildren): JSX.Elem
   useEffect(() => {
     applyGlobalMonoFontPreference(getGlobalMonoFontPreference())
     applyGlobalMonoFontSizePreference(getGlobalMonoFontSizePreference())
+    void window.api.setLogBufferLimitMb(getGlobalLogBufferSizePreference())
   }, [])
 
   useEffect(() => {
@@ -128,6 +131,9 @@ export const ThemeSettingsProvider = ({ children }: PropsWithChildren): JSX.Elem
       }
       if (event.key === GLOBAL_MONO_FONT_SIZE_KEY) {
         applyGlobalMonoFontSizePreference(getGlobalMonoFontSizePreference())
+      }
+      if (event.key === GLOBAL_LOG_BUFFER_MB_KEY) {
+        void window.api.setLogBufferLimitMb(getGlobalLogBufferSizePreference())
       }
     }
 

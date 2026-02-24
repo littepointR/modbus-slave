@@ -25,7 +25,10 @@ import type {
   SerialPortInfo,
   SerialPortValidationResult,
   ServerCommPacket,
-  PacketStats
+  PacketStats,
+  AppendSystemLogParams,
+  SystemLogEntry,
+  SystemLogStats
 } from '@shared'
 import { SharedProps } from 'notistack'
 
@@ -79,6 +82,13 @@ export const IPC_CHANNELS = [
   'read_text_file',
   'write_text_file',
   'pick_workspace_file',
+  'append_system_log',
+  'get_system_logs',
+  'get_system_log_stats',
+  'clear_system_logs',
+  'export_system_logs',
+  'set_log_buffer_limit_mb',
+  'get_log_buffer_limit_mb',
   'export_server_data',
   'import_server_data',
   'create_excel_template'
@@ -318,6 +328,48 @@ export interface IpcHandlerSpec {
     return: string | null
   }
 
+  /** Append a system log entry */
+  ['append_system_log']: {
+    args: [AppendSystemLogParams]
+    return: void
+  }
+
+  /** Get latest system log entries */
+  ['get_system_logs']: {
+    args: [number?]
+    return: SystemLogEntry[]
+  }
+
+  /** Get system log statistics */
+  ['get_system_log_stats']: {
+    args: []
+    return: SystemLogStats
+  }
+
+  /** Clear system logs */
+  ['clear_system_logs']: {
+    args: []
+    return: void
+  }
+
+  /** Export system logs to file */
+  ['export_system_logs']: {
+    args: [string]
+    return: void
+  }
+
+  /** Set communication/system log ring-buffer limit (MB) */
+  ['set_log_buffer_limit_mb']: {
+    args: [number]
+    return: number
+  }
+
+  /** Get communication/system log ring-buffer limit (MB) */
+  ['get_log_buffer_limit_mb']: {
+    args: []
+    return: number
+  }
+
   /** Export server register data to Excel */
   ['export_server_data']: {
     args: [ExportServerDataParams]
@@ -469,7 +521,9 @@ export const IPC_EVENTS = [
   'script_editor_init',
   'script_editor_apply',
   'script_editor_run_once',
-  'script_editor_window_closed'
+  'script_editor_window_closed',
+  'system_log_entry',
+  'system_log_clear'
 ] as const
 
 export type IpcEvent = (typeof IPC_EVENTS)[number]
@@ -499,6 +553,8 @@ export interface IpcEventPayloadMap {
   ['script_editor_apply']: [ScriptEditorApplyPayload]
   ['script_editor_run_once']: [ScriptEditorRunPayload]
   ['script_editor_window_closed']: [string]
+  ['system_log_entry']: [SystemLogEntry]
+  ['system_log_clear']: [void]
 }
 
 export interface BackendMessage {

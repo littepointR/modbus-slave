@@ -2,6 +2,7 @@ import { AppState } from './state'
 import { IpcHandlerMap, IpcEvent, IpcEventPayloadMap } from '@shared'
 import { ModbusServer } from './modules/mobusServer'
 import { IpcMainEvent, IpcMainInvokeEvent, dialog, ipcMain } from 'electron'
+import type { SystemLogger } from './modules/systemLogger'
 
 const ipcHandlerRegistry = new Map<keyof IpcHandlerMap, (...args: unknown[]) => unknown>()
 
@@ -45,9 +46,14 @@ export const listRegisteredIpcHandlers = (): (keyof IpcHandlerMap)[] => {
   return [...ipcHandlerRegistry.keys()]
 }
 
-type InitIpcFn = (app: Electron.App, state: AppState, server: ModbusServer) => void
+type InitIpcFn = (
+  app: Electron.App,
+  state: AppState,
+  server: ModbusServer,
+  logger?: SystemLogger
+) => void
 
-export const initIpc: InitIpcFn = (app, _state, server) => {
+export const initIpc: InitIpcFn = (app, _state, server, logger) => {
   // Server
   ipcHandle('add_replace_server_register', (_, params) => server.addRegister(params))
   ipcHandle('remove_server_register', (_, params) => server.removeRegister(params))
@@ -84,6 +90,48 @@ export const initIpc: InitIpcFn = (app, _state, server) => {
     })
     if (result.canceled || result.filePaths.length === 0) return null
     return result.filePaths[0]
+  })
+  ipcHandle('append_system_log', (_, params) => {
+    logger?.log(params)
+  })
+  ipcHandle('get_system_logs', (_, limit?: number) => {
+    return logger?.getEntries(limit) ?? []
+  })
+  ipcHandle('get_system_log_stats', () => {
+    return (
+      logger?.getStats() ?? {
+        total: 0,
+        byLevel: { debug: 0, info: 0, warn: 0, error: 0 },
+        bySource: {
+          system: 0,
+          comm: 0,
+          script: 0,
+          connection: 0,
+          register: 0,
+          workspace: 0,
+          cli: 0
+        },
+        bufferBytes: 0,
+        bufferLimitBytes: 0
+      }
+    )
+  })
+  ipcHandle('clear_system_logs', () => {
+    logger?.clear()
+  })
+  ipcHandle('export_system_logs', (_, filepath: string) => {
+    logger?.exportToFile(filepath)
+  })
+  ipcHandle('set_log_buffer_limit_mb', (_, limitMb: number) => {
+    const parsed = Number.isFinite(limitMb) ? limitMb : 100
+    const normalizedMb = Math.max(1, Math.min(1024, Math.round(parsed)))
+    const limitBytes = normalizedMb * 1024 * 1024
+    server.getTrafficMonitor().setMaxBufferBytes(limitBytes)
+    logger?.setMaxBufferBytes(limitBytes)
+    return normalizedMb
+  })
+  ipcHandle('get_log_buffer_limit_mb', () => {
+    return Math.max(1, Math.round(server.getTrafficMonitor().getMaxBufferBytes() / (1024 * 1024)))
   })
 
   ipcHandle('get_app_version', () => app.getVersion())

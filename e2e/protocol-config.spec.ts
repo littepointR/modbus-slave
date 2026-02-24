@@ -1,5 +1,6 @@
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test'
 import {
+  clickEditConnectionAction,
   closeApp,
   createConnectionViaDialog,
   launchMainWindow,
@@ -78,7 +79,7 @@ test.describe.serial('Server Protocol And Config E2E', () => {
 
   test('covers connection config changes across protocols', async () => {
     await page.getByText(MODE_TCP_ALIAS, { exact: true }).click()
-    await page.getByRole('button', { name: /编辑连接|Edit Connection/ }).click()
+    await clickEditConnectionAction(page)
     await expect(page.getByRole('heading', { name: /编辑连接|Edit Connection/ })).toBeVisible()
 
     await selectConnectionMode(page, 'udp')
@@ -89,7 +90,7 @@ test.describe.serial('Server Protocol And Config E2E', () => {
     await openAndCloseConnection(page, MODE_TCP_ALIAS)
 
     await page.getByText(MODE_TCP_ALIAS, { exact: true }).click()
-    await page.getByRole('button', { name: /编辑连接|Edit Connection/ }).click()
+    await clickEditConnectionAction(page)
     await selectConnectionMode(page, 'rtuovertcp')
     await page.getByLabel('IP Address').fill('127.0.0.1')
     await page.getByLabel('Port').fill('15131')
@@ -98,12 +99,12 @@ test.describe.serial('Server Protocol And Config E2E', () => {
     await openAndCloseConnection(page, MODE_TCP_ALIAS)
 
     await page.getByText(MODE_RTU_ALIAS, { exact: true }).click()
-    await page.getByRole('button', { name: /编辑连接|Edit Connection/ }).click()
+    await clickEditConnectionAction(page)
     await page.getByLabel('ASCII').check()
     await page.getByRole('button', { name: /保存|Save/ }).click()
 
     await page.getByText(MODE_RTU_ALIAS, { exact: true }).click()
-    await page.getByRole('button', { name: /编辑连接|Edit Connection/ }).click()
+    await clickEditConnectionAction(page)
     await expect(page.getByLabel('ASCII')).toBeChecked()
     await page.getByRole('button', { name: /取消|Cancel/ }).click()
   })

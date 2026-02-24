@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid'
 import { ModbusServer } from './mobusServer'
 import { CreateServerParams, RegisterParams, ServerConnectionConfig, UnitIdString } from '@shared'
+import type { SystemLogger } from './systemLogger'
 
 type RegisterTypeCode = '01' | '02' | '03' | '04'
 
@@ -170,10 +171,12 @@ export class CliWorkspaceRuntime {
     scriptsByConnection: {}
   }
   private readonly server: ModbusServer
+  private readonly logger?: SystemLogger
   private scriptScopeMap = new Map<string, Record<string, unknown>>()
 
-  constructor(server: ModbusServer) {
+  constructor(server: ModbusServer, logger?: SystemLogger) {
     this.server = server
+    this.logger = logger
   }
 
   getState(): WorkspaceState {
@@ -181,6 +184,13 @@ export class CliWorkspaceRuntime {
   }
 
   async dispatch(action: string, payload: UiActionPayload = {}): Promise<unknown> {
+    this.logger?.log({
+      level: 'debug',
+      source: 'cli',
+      module: 'cliWorkspace',
+      message: `Dispatch action: ${action}`,
+      details: payload
+    })
     switch (action) {
       case 'workspace.get':
         return this.getState()
@@ -213,6 +223,12 @@ export class CliWorkspaceRuntime {
       case 'script.run':
         return await this.runScript(payload)
       default:
+        this.logger?.log({
+          level: 'error',
+          source: 'cli',
+          module: 'cliWorkspace',
+          message: `Unknown ui action: ${action}`
+        })
         throw new Error(`Unknown ui action: ${action}`)
     }
   }
@@ -448,6 +464,13 @@ export class CliWorkspaceRuntime {
       },
       log: (...args: unknown[]): void => {
         console.log(`[CLI Script ${connectionId}/${script.name}]`, ...args)
+        this.logger?.log({
+          level: 'info',
+          source: 'script',
+          module: 'cliWorkspace',
+          message: `[CLI Script ${script.name}] ${args.map((arg) => String(arg)).join(' ')}`,
+          connectionId
+        })
       }
     }
 
@@ -462,10 +485,41 @@ export class CliWorkspaceRuntime {
       event: { type: 'manual'; timestamp: number }
     ) => Promise<void>
 
-    await fn(api, state, { type: 'manual', timestamp: Date.now() })
-    script.lastRunAt = Date.now()
-    script.lastError = undefined
-    return { scriptId, ranAt: script.lastRunAt }
+    this.logger?.log({
+      level: 'info',
+      source: 'script',
+      module: 'cliWorkspace',
+      message: `CLI script run started: ${script.name}`,
+      connectionId,
+      details: { scriptId }
+    })
+
+    try {
+      await fn(api, state, { type: 'manual', timestamp: Date.now() })
+      script.lastRunAt = Date.now()
+      script.lastError = undefined
+      this.logger?.log({
+        level: 'info',
+        source: 'script',
+        module: 'cliWorkspace',
+        message: `CLI script run completed: ${script.name}`,
+        connectionId,
+        details: { scriptId, ranAt: script.lastRunAt }
+      })
+      return { scriptId, ranAt: script.lastRunAt }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      script.lastError = message
+      this.logger?.log({
+        level: 'error',
+        source: 'script',
+        module: 'cliWorkspace',
+        message: `CLI script run failed: ${script.name} - ${message}`,
+        connectionId,
+        details: { scriptId }
+      })
+      throw error
+    }
   }
 
   private findConnection(connectionId: string): ConnectionEntry {

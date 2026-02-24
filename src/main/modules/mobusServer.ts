@@ -22,6 +22,7 @@ import type { IServiceVector, FCallbackVal } from 'modbus-serial'
 import { createServerAdapter, ServerAdapter, TcpServerAdapter } from './modbusServer/serverAdapter'
 import type { ServerConnectionConfig, ServerProtocol } from '@shared'
 import { TrafficMonitor } from './trafficMonitor'
+import type { SystemLogger } from './systemLogger'
 
 const getDefaultGenerators = (): ValueGenerators => ({
   input_registers: new Map(),
@@ -61,6 +62,7 @@ type ValueGeneratorsMap = Map<string, ValueGeneratorsUnitMap>
 
 export interface ServerParams {
   windows: Windows
+  logger?: SystemLogger
 }
 
 /**
@@ -72,6 +74,7 @@ export class ModbusServer {
   private _adapters: Map<string, ServerAdapter> = new Map()
   private _windows: Windows
   private _trafficMonitor: TrafficMonitor
+  private _logger?: SystemLogger
 
   // Map to store server data for each unit ID of a server UUID
   private _serverData: ServerDataMap = new Map()
@@ -81,9 +84,10 @@ export class ModbusServer {
    * Construct a ModbusServer instance.
    * @param windows - Windows IPC interface for backend/frontend communication.
    */
-  constructor({ windows }: ServerParams) {
+  constructor({ windows, logger }: ServerParams) {
     this._windows = windows
-    this._trafficMonitor = new TrafficMonitor(windows)
+    this._logger = logger
+    this._trafficMonitor = new TrafficMonitor(windows, logger)
   }
 
   /**
@@ -198,8 +202,23 @@ export class ModbusServer {
 
     try {
       await adapter.start()
+      this._logger?.log({
+        level: 'info',
+        source: 'connection',
+        module: 'modbusServer',
+        message: `Connection started (${config.protocol})`,
+        connectionId: uuid,
+        details: config
+      })
     } catch (error) {
       const startError = error instanceof Error ? error : new Error(String(error))
+      this._logger?.log({
+        level: 'error',
+        source: 'connection',
+        module: 'modbusServer',
+        message: `Connection start failed: ${startError.message}`,
+        connectionId: uuid
+      })
       this._emitMessage({
         message: `Failed to start ${config.protocol} server`,
         variant: 'error',
@@ -220,14 +239,35 @@ export class ModbusServer {
   public deleteServer = async (uuid: string): Promise<void> => {
     const adapter = this._adapters.get(uuid)
     if (!adapter) {
+      this._logger?.log({
+        level: 'warn',
+        source: 'connection',
+        module: 'modbusServer',
+        message: `Connection close skipped: not found (${uuid})`,
+        connectionId: uuid
+      })
       this._emitMessage({ message: `No server found for UUID ${uuid}`, variant: 'error' })
       return
     }
 
     try {
       await adapter.stop()
+      this._logger?.log({
+        level: 'info',
+        source: 'connection',
+        module: 'modbusServer',
+        message: 'Connection stopped',
+        connectionId: uuid
+      })
     } catch (error) {
       const stopError = error instanceof Error ? error : new Error(String(error))
+      this._logger?.log({
+        level: 'error',
+        source: 'connection',
+        module: 'modbusServer',
+        message: `Connection stop failed: ${stopError.message}`,
+        connectionId: uuid
+      })
       this._emitMessage({ message: 'Error closing server', variant: 'error', error: stopError })
     }
 
@@ -367,6 +407,14 @@ export class ModbusServer {
     registerValues,
     littleEndian
   }: SyncRegisterValueParams): void => {
+    this._logger?.log({
+      level: 'info',
+      source: 'register',
+      module: 'modbusServer',
+      message: `Sync registers (${registerValues.length})`,
+      connectionId: uuid,
+      slaveId: Number(unitId)
+    })
     // Cleanup generators only for this unitId
     const unitIdGenerators = this._generatorMap.get(uuid)
     if (unitIdGenerators) {
@@ -418,6 +466,14 @@ export class ModbusServer {
     serverData[registerType][address] = state
     this._setServerData(uuid, unitId, serverData)
     this._windows.send('boolean_value', { uuid, unitId, registerType, address, value: state })
+    this._logger?.log({
+      level: 'debug',
+      source: 'register',
+      module: 'modbusServer',
+      message: `Set ${registerType}[${address}] = ${state ? 1 : 0}`,
+      connectionId: uuid,
+      slaveId: Number(unitId)
+    })
   }
 
   /**

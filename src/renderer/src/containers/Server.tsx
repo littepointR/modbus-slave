@@ -49,14 +49,7 @@ import { alpha } from '@mui/material/styles'
 import { useSnackbar } from 'notistack'
 import {
   Add as AddIcon,
-  CreateNewFolder as NewConnectionIcon,
-  DeviceHub as NewSlaveIcon,
-  FolderOpen as OpenIcon,
-  Save as SaveIcon,
   Close as CloseIcon,
-  Edit as EditIcon,
-  SettingsEthernet as CommDetailsIcon,
-  Code as ScriptIcon,
   Delete as DeleteIcon,
   DeviceHub as DeviceIcon,
   Link as LinkIcon,
@@ -68,8 +61,7 @@ import {
   Storage as HoldingRegisterIcon,
   Input as InputRegisterIcon,
   Refresh as RefreshIcon,
-  ShowChart as ShowChartIcon,
-  History as HistoryIcon
+  ShowChart as ShowChartIcon
 } from '@mui/icons-material'
 import { v4 as uuidv4 } from 'uuid'
 import SettingsMenu from '@renderer/components/shared/SettingsMenu'
@@ -1875,13 +1867,17 @@ const Server = (): JSX.Element => {
   const [workspaceFilename, setWorkspaceFilename] = useState<string | null>(null)
   const [workspaceFilePath, setWorkspaceFilePath] = useState<string | null>(null)
   const [recentWorkspaces, setRecentWorkspaces] = useState<RecentWorkspaceEntry[]>([])
-  const [recentWorkspaceAnchorEl, setRecentWorkspaceAnchorEl] = useState<null | HTMLElement>(null)
+  const [workspaceMenuAnchorEl, setWorkspaceMenuAnchorEl] = useState<null | HTMLElement>(null)
+  const [connectionMenuAnchorEl, setConnectionMenuAnchorEl] = useState<null | HTMLElement>(null)
+  const [toolsMenuAnchorEl, setToolsMenuAnchorEl] = useState<null | HTMLElement>(null)
   const [globalEncoding, setGlobalEncoding] = useState<string>(getGlobalStringEncodingPreference)
   const [scriptsByConnection, setScriptsByConnection] = useState<Record<string, ScriptDefinition[]>>(
     {}
   )
   const scriptStateMapRef = useRef<Record<string, Record<string, unknown>>>({})
-  const scriptTimerMapRef = useRef<Record<string, ReturnType<typeof setInterval>>>({})
+  const scriptTimerMapRef = useRef<
+    Record<string, { timer: ReturnType<typeof setInterval>; intervalMs: number }>
+  >({})
   const connectionsRef = useRef<Connection[]>([])
 
   const [newConnectionOpen, setNewConnectionOpen] = useState(false)
@@ -2694,10 +2690,27 @@ const Server = (): JSX.Element => {
       },
       log: (...args: unknown[]): void => {
         console.log(`[Script:${connectionId}/${script.name}]`, ...args)
+        void window.api.appendSystemLog({
+          level: 'info',
+          source: 'script',
+          module: 'server.ui',
+          message: `[${script.name}] ${args.map((arg) => String(arg)).join(' ')}`,
+          connectionId,
+          details: { scriptId, trigger }
+        })
       }
     }
 
     try {
+      void window.api.appendSystemLog({
+        level: 'info',
+        source: 'script',
+        module: 'server.ui',
+        message: `Script started: ${script.name}`,
+        connectionId,
+        details: { scriptId, trigger }
+      })
+
       const runner = new Function(
         'api',
         'state',
@@ -2717,6 +2730,14 @@ const Server = (): JSX.Element => {
           item.id === scriptId ? { ...item, lastRunAt: Date.now(), lastError: undefined } : item
         )
       }))
+      void window.api.appendSystemLog({
+        level: 'info',
+        source: 'script',
+        module: 'server.ui',
+        message: `Script completed: ${script.name}`,
+        connectionId,
+        details: { scriptId, trigger }
+      })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       setScriptsByConnection((prev) => ({
@@ -2727,6 +2748,14 @@ const Server = (): JSX.Element => {
       }))
       console.error(`Script failed (${connectionId}/${script.name}):`, error)
       showUserError(`Script "${script.name}" failed and was disabled.`)
+      void window.api.appendSystemLog({
+        level: 'error',
+        source: 'script',
+        module: 'server.ui',
+        message: `Script failed: ${script.name} - ${message}`,
+        connectionId,
+        details: { scriptId, trigger }
+      })
     }
   }
 
@@ -2748,33 +2777,37 @@ const Server = (): JSX.Element => {
   }, [executeScript])
 
   useEffect(() => {
-    const openConnectionIds = new Set(connections.filter((conn) => conn.isOpen).map((conn) => conn.id))
     const activeTimerKeys = new Set<string>()
 
     Object.entries(scriptsByConnection).forEach(([connectionId, scripts]) => {
-      if (!openConnectionIds.has(connectionId)) return
       scripts.forEach((script) => {
         if (!script.enabled) return
         const key = `${connectionId}:${script.id}`
         activeTimerKeys.add(key)
-        if (scriptTimerMapRef.current[key]) return
         const intervalMs = Math.max(100, Number(script.intervalMs) || 1000)
-        scriptTimerMapRef.current[key] = setInterval(() => {
+        const existing = scriptTimerMapRef.current[key]
+        if (existing && existing.intervalMs === intervalMs) return
+        if (existing) {
+          clearInterval(existing.timer)
+          delete scriptTimerMapRef.current[key]
+        }
+        const timer = setInterval(() => {
           void executeScript(connectionId, script.id, 'interval')
         }, intervalMs)
+        scriptTimerMapRef.current[key] = { timer, intervalMs }
       })
     })
 
     Object.entries(scriptTimerMapRef.current).forEach(([key, timer]) => {
       if (activeTimerKeys.has(key)) return
-      clearInterval(timer)
+      clearInterval(timer.timer)
       delete scriptTimerMapRef.current[key]
     })
-  }, [scriptsByConnection, connections])
+  }, [scriptsByConnection, executeScript])
 
   useEffect(() => {
     return () => {
-      Object.values(scriptTimerMapRef.current).forEach((timer) => clearInterval(timer))
+      Object.values(scriptTimerMapRef.current).forEach((timer) => clearInterval(timer.timer))
       scriptTimerMapRef.current = {}
     }
   }, [])
@@ -3071,6 +3104,14 @@ const Server = (): JSX.Element => {
       const applied = applyWorkspaceSnapshot(workspace, { fileName, filePath: path })
       if (!applied) return false
 
+      void window.api.appendSystemLog({
+        level: 'info',
+        source: 'workspace',
+        module: 'server.ui',
+        message: `Workspace loaded: ${fileName}`,
+        details: { path }
+      })
+
       upsertRecentWorkspaceByPath(path, fileName || options?.fallbackName || path, {
         setAsLast: options?.setAsLast
       })
@@ -3105,6 +3146,12 @@ const Server = (): JSX.Element => {
     if (workspaceFilePath && !forceChooseNewFile) {
       try {
         await window.api.writeTextFile(workspaceFilePath, JSON.stringify(workspace, null, 2))
+        void window.api.appendSystemLog({
+          level: 'info',
+          source: 'workspace',
+          module: 'server.ui',
+          message: `Workspace saved: ${workspaceFilePath}`
+        })
         upsertRecentWorkspaceByPath(
           workspaceFilePath,
           workspaceFilename || workspaceFilePath.split(/[\\/]/).pop() || 'Workspace',
@@ -3142,6 +3189,12 @@ const Server = (): JSX.Element => {
       const writable = await handle.createWritable()
       await writable.write(JSON.stringify(workspace, null, 2))
       await writable.close()
+      void window.api.appendSystemLog({
+        level: 'info',
+        source: 'workspace',
+        module: 'server.ui',
+        message: `Workspace saved via file picker: ${handle.name || 'unnamed'}`
+      })
       setWorkspaceFileHandle(handle)
       if (handle.name) setWorkspaceFilename(handle.name)
       if (workspaceFilePath) {
@@ -3194,12 +3247,10 @@ const Server = (): JSX.Element => {
     }
   }
 
-  const handleOpenRecentWorkspaceMenu = (event: ReactMouseEvent<HTMLButtonElement>): void => {
-    setRecentWorkspaceAnchorEl(event.currentTarget)
-  }
-
-  const handleCloseRecentWorkspaceMenu = (): void => {
-    setRecentWorkspaceAnchorEl(null)
+  const closeTitleMenus = (): void => {
+    setWorkspaceMenuAnchorEl(null)
+    setConnectionMenuAnchorEl(null)
+    setToolsMenuAnchorEl(null)
   }
 
   const handleSelectRecentWorkspace = (entry: RecentWorkspaceEntry): void => {
@@ -3211,7 +3262,7 @@ const Server = (): JSX.Element => {
       if (!ok) {
         showUserError('Workspace file is invalid or no longer exists.')
       }
-      handleCloseRecentWorkspaceMenu()
+      closeTitleMenus()
     })
   }
 
@@ -3267,7 +3318,7 @@ const Server = (): JSX.Element => {
       }
     }
 
-    Object.values(scriptTimerMapRef.current).forEach((timer) => clearInterval(timer))
+    Object.values(scriptTimerMapRef.current).forEach((timer) => clearInterval(timer.timer))
     scriptTimerMapRef.current = {}
     scriptStateMapRef.current = {}
 
@@ -3285,7 +3336,7 @@ const Server = (): JSX.Element => {
     setWorkspaceFileHandle(null)
     setWorkspaceFilename(null)
     setWorkspaceFilePath(null)
-    setRecentWorkspaceAnchorEl(null)
+    closeTitleMenus()
     markLastWorkspaceId(null)
   }
 
@@ -3300,6 +3351,79 @@ const Server = (): JSX.Element => {
       showUserError('Failed to close connection.')
     }
   }
+
+  useEffect(() => {
+    const isEditableTarget = (target: EventTarget | null): boolean => {
+      if (!(target instanceof HTMLElement)) return false
+      if (target.isContentEditable) return true
+      const tag = target.tagName
+      return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
+    }
+
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (isEditableTarget(event.target)) return
+      if (!event.altKey || event.ctrlKey || event.metaKey) return
+      const key = event.key.toLowerCase()
+
+      switch (key) {
+        case 'o':
+          event.preventDefault()
+          void handleOpenWorkspace()
+          closeTitleMenus()
+          break
+        case 's':
+          event.preventDefault()
+          void handleSaveWorkspace()
+          closeTitleMenus()
+          break
+        case 'a':
+          event.preventDefault()
+          void handleSaveWorkspaceAs()
+          closeTitleMenus()
+          break
+        case 'w':
+          event.preventDefault()
+          void handleCloseWorkspace()
+          closeTitleMenus()
+          break
+        case 'n':
+          event.preventDefault()
+          setNewConnectionOpen(true)
+          closeTitleMenus()
+          break
+        case 'l':
+          event.preventDefault()
+          if (connectionsRef.current.length > 0) {
+            setSelectedConnectionForSlave(selectedNodeId?.split('/')[0] || connectionsRef.current[0]?.id)
+            setNewSlaveOpen(true)
+            closeTitleMenus()
+          }
+          break
+        case 'c':
+          event.preventDefault()
+          void handleOpenConnection()
+          closeTitleMenus()
+          break
+        case 'd':
+          event.preventDefault()
+          void handleCloseConnection()
+          closeTitleMenus()
+          break
+        case 'm':
+          event.preventDefault()
+          sendEvent('open_comm_log_window')
+          closeTitleMenus()
+          break
+        default:
+          break
+      }
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [selectedNodeId, connections, handleOpenConnection, handleCloseConnection])
 
   const handleOpenRegisterPlot = (
     tab: OpenTab,
@@ -3380,145 +3504,223 @@ const Server = (): JSX.Element => {
                 <Button
                   size="small"
                   variant="text"
-                  startIcon={<OpenIcon />}
-                  onClick={() => void handleOpenWorkspace()}
+                  onClick={(event) => {
+                    setWorkspaceMenuAnchorEl(event.currentTarget)
+                    setConnectionMenuAnchorEl(null)
+                    setToolsMenuAnchorEl(null)
+                  }}
                 >
-                  {t('server.toolbar.openWorkspace')}
+                  {t('server.toolbar.workspaceMenu')}
                 </Button>
-                <Tooltip title={t('server.toolbar.saveWorkspace')}>
-                  <Button
-                    size="small"
-                    variant="text"
-                    startIcon={<SaveIcon />}
-                    onClick={() => void handleSaveWorkspace()}
-                  >
-                    {t('server.toolbar.saveWorkspace')}
-                  </Button>
-                </Tooltip>
-                <Tooltip title={t('server.toolbar.saveWorkspaceAs')}>
-                  <Button
-                    size="small"
-                    variant="text"
-                    startIcon={<SaveIcon />}
-                    onClick={() => void handleSaveWorkspaceAs()}
-                  >
-                    {t('server.toolbar.saveWorkspaceAs')}
-                  </Button>
-                </Tooltip>
-                <Tooltip title={t('server.toolbar.recentWorkspaces')}>
-                  <Button
-                    size="small"
-                    variant="text"
-                    startIcon={<HistoryIcon />}
-                    onClick={handleOpenRecentWorkspaceMenu}
-                    disabled={recentWorkspaces.length === 0}
-                  >
-                    {t('server.toolbar.recentWorkspaces')}
-                  </Button>
-                </Tooltip>
-                <Tooltip title={t('server.toolbar.closeWorkspace')}>
-                  <Button
-                    size="small"
-                    variant="text"
-                    startIcon={<CloseIcon />}
-                    onClick={() => void handleCloseWorkspace()}
-                    disabled={connections.length === 0}
-                  >
-                    {t('server.toolbar.closeWorkspace')}
-                  </Button>
-                </Tooltip>
+                <Button
+                  size="small"
+                  variant="text"
+                  onClick={(event) => {
+                    setConnectionMenuAnchorEl(event.currentTarget)
+                    setWorkspaceMenuAnchorEl(null)
+                    setToolsMenuAnchorEl(null)
+                  }}
+                >
+                  {t('server.toolbar.connectionMenu')}
+                </Button>
+                <Button
+                  size="small"
+                  variant="text"
+                  onClick={(event) => {
+                    setToolsMenuAnchorEl(event.currentTarget)
+                    setWorkspaceMenuAnchorEl(null)
+                    setConnectionMenuAnchorEl(null)
+                  }}
+                >
+                  {t('server.toolbar.toolsMenu')}
+                </Button>
               </Box>
-              <Divider orientation="vertical" flexItem />
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-              <Tooltip title={t('server.toolbar.newConnection')}>
-                <Button
-                  size="small"
-                  variant="text"
-                  startIcon={<NewConnectionIcon />}
-                  onClick={() => setNewConnectionOpen(true)}
-                >
-                  {t('server.toolbar.newConnection')}
-                </Button>
-              </Tooltip>
-              <Tooltip title={t('server.toolbar.newSlave')}>
-                <Button
-                  size="small"
-                  variant="text"
-                  startIcon={<NewSlaveIcon />}
+              <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1 }}>
+                {workspaceFilename ? (
+                  <Typography variant="caption" color="text.secondary" sx={{ maxWidth: 240 }} noWrap>
+                    {workspaceFilename}
+                  </Typography>
+                ) : null}
+                <SettingsMenu />
+              </Box>
+              <Menu
+                anchorEl={workspaceMenuAnchorEl}
+                open={Boolean(workspaceMenuAnchorEl)}
+                onClose={closeTitleMenus}
+              >
+                <MenuItem
                   onClick={() => {
-                    setSelectedConnectionForSlave(
-                      selectedNodeId?.split('/')[0] || connections[0]?.id
-                    )
-                    setNewSlaveOpen(true)
+                    void handleOpenWorkspace()
+                    closeTitleMenus()
+                  }}
+                >
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', minWidth: 250 }}>
+                    <Typography variant="body2">{t('server.toolbar.openWorkspace')} (O)</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Alt+O
+                    </Typography>
+                  </Box>
+                </MenuItem>
+                <MenuItem
+                  onClick={() => {
+                    void handleSaveWorkspace()
+                    closeTitleMenus()
+                  }}
+                >
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', minWidth: 250 }}>
+                    <Typography variant="body2">{t('server.toolbar.saveWorkspace')} (S)</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Alt+S
+                    </Typography>
+                  </Box>
+                </MenuItem>
+                <MenuItem
+                  onClick={() => {
+                    void handleSaveWorkspaceAs()
+                    closeTitleMenus()
+                  }}
+                >
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', minWidth: 250 }}>
+                    <Typography variant="body2">{t('server.toolbar.saveWorkspaceAs')} (A)</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Alt+A
+                    </Typography>
+                  </Box>
+                </MenuItem>
+                <MenuItem
+                  onClick={() => {
+                    void handleCloseWorkspace()
+                    closeTitleMenus()
                   }}
                   disabled={connections.length === 0}
                 >
-                  {t('server.toolbar.newSlave')}
-                </Button>
-              </Tooltip>
-              <Tooltip title={t('server.toolbar.openConnection')}>
-                <Button
-                  size="small"
-                  variant="text"
-                  startIcon={<OpenIcon />}
-                  onClick={handleOpenConnection}
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', minWidth: 250 }}>
+                    <Typography variant="body2">{t('server.toolbar.closeWorkspace')} (W)</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Alt+W
+                    </Typography>
+                  </Box>
+                </MenuItem>
+                <Divider />
+                <MenuItem disabled>{t('server.toolbar.recentWorkspaces')}</MenuItem>
+                {recentWorkspaces.length === 0 ? (
+                  <MenuItem disabled>
+                    <Typography variant="caption" color="text.secondary">
+                      -
+                    </Typography>
+                  </MenuItem>
+                ) : (
+                  recentWorkspaces.map((entry) => (
+                    <MenuItem key={entry.id} onClick={() => handleSelectRecentWorkspace(entry)}>
+                      <Box sx={{ display: 'flex', flexDirection: 'column', minWidth: 260 }}>
+                        <Typography variant="body2" noWrap>
+                          {entry.name}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {new Date(entry.updatedAt).toLocaleString()}
+                        </Typography>
+                      </Box>
+                    </MenuItem>
+                  ))
+                )}
+              </Menu>
+              <Menu
+                anchorEl={connectionMenuAnchorEl}
+                open={Boolean(connectionMenuAnchorEl)}
+                onClose={closeTitleMenus}
+              >
+                <MenuItem
+                  onClick={() => {
+                    setNewConnectionOpen(true)
+                    closeTitleMenus()
+                  }}
+                >
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', minWidth: 250 }}>
+                    <Typography variant="body2">{t('server.toolbar.newConnection')} (N)</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Alt+N
+                    </Typography>
+                  </Box>
+                </MenuItem>
+                <MenuItem
+                  disabled={connections.length === 0}
+                  onClick={() => {
+                    setSelectedConnectionForSlave(selectedNodeId?.split('/')[0] || connections[0]?.id)
+                    setNewSlaveOpen(true)
+                    closeTitleMenus()
+                  }}
+                >
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', minWidth: 250 }}>
+                    <Typography variant="body2">{t('server.toolbar.newSlave')} (L)</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Alt+L
+                    </Typography>
+                  </Box>
+                </MenuItem>
+                <Divider />
+                <MenuItem
                   disabled={!isConnectionSelected || isConnectionOpen}
+                  onClick={() => {
+                    void handleOpenConnection()
+                    closeTitleMenus()
+                  }}
                 >
-                  {t('common.connect')}
-                </Button>
-              </Tooltip>
-              <Tooltip title={t('server.toolbar.closeConnection')}>
-                <Button
-                  size="small"
-                  variant="text"
-                  startIcon={<CloseIcon />}
-                  onClick={handleCloseConnection}
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', minWidth: 250 }}>
+                    <Typography variant="body2">{t('common.connect')} (C)</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Alt+C
+                    </Typography>
+                  </Box>
+                </MenuItem>
+                <MenuItem
                   disabled={!isConnectionSelected || !isConnectionOpen}
+                  onClick={() => {
+                    void handleCloseConnection()
+                    closeTitleMenus()
+                  }}
                 >
-                  {t('common.disconnect')}
-                </Button>
-              </Tooltip>
-              </Box>
-              <Divider orientation="vertical" flexItem />
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-              <Tooltip title={t('server.toolbar.editConnection')}>
-                <Button
-                  size="small"
-                  variant="text"
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', minWidth: 250 }}>
+                    <Typography variant="body2">{t('common.disconnect')} (D)</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Alt+D
+                    </Typography>
+                  </Box>
+                </MenuItem>
+              </Menu>
+              <Menu anchorEl={toolsMenuAnchorEl} open={Boolean(toolsMenuAnchorEl)} onClose={closeTitleMenus}>
+                <MenuItem
                   disabled={!isConnectionSelected}
-                  onClick={handleEditConnection}
-                  startIcon={<EditIcon />}
+                  onClick={() => {
+                    handleEditConnection()
+                    closeTitleMenus()
+                  }}
                 >
-                  {t('server.toolbar.editConnection')}
-                </Button>
-              </Tooltip>
-              <Tooltip title={t('server.toolbar.editSlave')}>
-                <Button
-                  size="small"
-                  variant="text"
+                  <Typography variant="body2">{t('server.toolbar.editConnection')}</Typography>
+                </MenuItem>
+                <MenuItem
                   disabled={!isSlaveSelected}
-                  onClick={handleEditSlave}
-                  startIcon={<DeviceIcon />}
+                  onClick={() => {
+                    handleEditSlave()
+                    closeTitleMenus()
+                  }}
                 >
-                  {t('server.toolbar.editSlave')}
-                </Button>
-              </Tooltip>
-              <Tooltip title={t('server.toolbar.commDetails')}>
-                <Button
-                  size="small"
-                  variant="text"
+                  <Typography variant="body2">{t('server.toolbar.editSlave')}</Typography>
+                </MenuItem>
+                <MenuItem
                   disabled={!selectedNodeId}
-                  onClick={() => sendEvent('open_comm_log_window')}
-                  startIcon={<CommDetailsIcon />}
+                  onClick={() => {
+                    sendEvent('open_comm_log_window')
+                    closeTitleMenus()
+                  }}
                 >
-                  {t('server.toolbar.commDetails')}
-                </Button>
-              </Tooltip>
-              <Tooltip title={t('server.toolbar.editScript')}>
-                <Button
-                  size="small"
-                  variant="text"
-                  startIcon={<ScriptIcon />}
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', minWidth: 250 }}>
+                    <Typography variant="body2">{t('server.toolbar.commDetails')} (M)</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Alt+M
+                    </Typography>
+                  </Box>
+                </MenuItem>
+                <MenuItem
                   disabled={!scriptTargetConnectionId}
                   onClick={() => {
                     if (!scriptTargetConnectionId) return
@@ -3528,37 +3730,11 @@ const Server = (): JSX.Element => {
                       connectionAlias: targetConn?.alias || 'Connection',
                       scripts: scriptsByConnection[scriptTargetConnectionId] ?? []
                     })
+                    closeTitleMenus()
                   }}
                 >
-                  {t('server.toolbar.editScript')}
-                </Button>
-              </Tooltip>
-              </Box>
-              <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1 }}>
-                {workspaceFilename ? (
-                  <Typography variant="caption" color="text.secondary" sx={{ maxWidth: 240 }} noWrap>
-                    {workspaceFilename}
-                  </Typography>
-                ) : null}
-              <SettingsMenu />
-              </Box>
-              <Menu
-                anchorEl={recentWorkspaceAnchorEl}
-                open={Boolean(recentWorkspaceAnchorEl)}
-                onClose={handleCloseRecentWorkspaceMenu}
-              >
-                {recentWorkspaces.map((entry) => (
-                  <MenuItem key={entry.id} onClick={() => handleSelectRecentWorkspace(entry)}>
-                    <Box sx={{ display: 'flex', flexDirection: 'column', minWidth: 220 }}>
-                      <Typography variant="body2" noWrap>
-                        {entry.name}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {new Date(entry.updatedAt).toLocaleString()}
-                      </Typography>
-                    </Box>
-                  </MenuItem>
-                ))}
+                  <Typography variant="body2">{t('server.toolbar.editScript')}</Typography>
+                </MenuItem>
               </Menu>
             </Toolbar>
           </AppBar>
