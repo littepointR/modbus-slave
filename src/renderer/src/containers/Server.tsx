@@ -62,7 +62,10 @@ import {
   Storage as HoldingRegisterIcon,
   Input as InputRegisterIcon,
   Refresh as RefreshIcon,
-  ShowChart as ShowChartIcon
+  ShowChart as ShowChartIcon,
+  DashboardCustomize as WorkspaceMenuIcon,
+  Cable as ConnectionMenuIcon,
+  Construction as ToolsMenuIcon
 } from '@mui/icons-material'
 import { v4 as uuidv4 } from 'uuid'
 import SettingsMenu from '@renderer/components/shared/SettingsMenu'
@@ -88,7 +91,7 @@ import {
   getWordSpanForInterpretation
 } from './register-plot.helpers'
 import { buildWorkspaceTabSettingsSnapshot } from './server-workspace.helpers'
-import { confirmUnsavedWorkspaceChanges } from './server-unsaved-guard.helpers'
+import { confirmUnsavedWorkspaceChanges, getWorkspaceDirtyState } from './server-unsaved-guard.helpers'
 
 // =============================================================================
 // TYPES
@@ -361,6 +364,36 @@ const DEFAULT_WORKSPACE_FILENAME_PREFIX = 'modbux_workspace'
 const RECENT_WORKSPACES_STORAGE_KEY = 'modbux.server.recentWorkspaces.v1'
 const LAST_WORKSPACE_ID_STORAGE_KEY = 'modbux.server.lastWorkspaceId.v1'
 const MAX_RECENT_WORKSPACES = 8
+const WINDOW_TITLEBAR_PADDING_TOP = 'calc(env(titlebar-area-height, 0px) + 6px)'
+const TOP_MENU_BUTTON_SX = {
+  borderRadius: 999,
+  px: 1.25,
+  py: 0.45,
+  textTransform: 'none',
+  fontWeight: 600,
+  letterSpacing: 0.1,
+  border: '1px solid',
+  borderColor: (theme) => (theme.palette.mode === 'dark' ? 'rgba(148,163,184,0.35)' : '#94a3b8'),
+  color: (theme) => (theme.palette.mode === 'dark' ? '#e2e8f0' : '#0f172a'),
+  bgcolor: (theme) =>
+    theme.palette.mode === 'dark' ? 'rgba(15,23,42,0.58)' : 'rgba(255,255,255,0.96)',
+  backdropFilter: 'blur(8px)',
+  boxShadow: (theme) =>
+    theme.palette.mode === 'dark'
+      ? '0 6px 16px rgba(15,23,42,0.24)'
+      : '0 6px 14px rgba(15,23,42,0.14)',
+  WebkitAppRegion: 'no-drag',
+  '&:hover': {
+    borderColor: (theme) => (theme.palette.mode === 'dark' ? '#60a5fa' : '#2563eb'),
+    color: (theme) => (theme.palette.mode === 'dark' ? '#bfdbfe' : '#1d4ed8'),
+    bgcolor: (theme) =>
+      theme.palette.mode === 'dark' ? 'rgba(30,58,138,0.26)' : 'rgba(226,232,240,0.98)',
+    boxShadow: (theme) =>
+      theme.palette.mode === 'dark'
+        ? '0 8px 18px rgba(37,99,235,0.32)'
+        : '0 8px 18px rgba(37,99,235,0.18)'
+  }
+} as const
 
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value))
 
@@ -1883,6 +1916,7 @@ const Server = (): JSX.Element => {
     Record<string, { timer: ReturnType<typeof setInterval>; intervalMs: number }>
   >({})
   const pendingMarkWorkspaceSavedRef = useRef(false)
+  const workspaceInitialFingerprintRef = useRef<string | null>(null)
   const connectionsRef = useRef<Connection[]>([])
 
   const [newConnectionOpen, setNewConnectionOpen] = useState(false)
@@ -2978,12 +3012,16 @@ const Server = (): JSX.Element => {
     () => serializeWorkspaceSnapshot(getWorkspaceSnapshot()),
     [connections, workspaceTabSettings, scriptsByConnection, openTabs, activeTabId]
   )
-  const isWorkspaceDirty =
-    workspaceFilename !== null &&
-    workspaceSavedFingerprint !== null &&
-    workspaceCurrentFingerprint !== workspaceSavedFingerprint
+  const isWorkspaceDirty = getWorkspaceDirtyState(
+    workspaceCurrentFingerprint,
+    workspaceSavedFingerprint,
+    workspaceInitialFingerprintRef.current
+  )
 
   useEffect(() => {
+    if (workspaceInitialFingerprintRef.current === null) {
+      workspaceInitialFingerprintRef.current = workspaceCurrentFingerprint
+    }
     if (!pendingMarkWorkspaceSavedRef.current) return
     pendingMarkWorkspaceSavedRef.current = false
     setWorkspaceSavedFingerprint(workspaceCurrentFingerprint)
@@ -3390,6 +3428,7 @@ const Server = (): JSX.Element => {
     setWorkspaceFilename(null)
     setWorkspaceFilePath(null)
     setWorkspaceSavedFingerprint(null)
+    workspaceInitialFingerprintRef.current = null
     pendingMarkWorkspaceSavedRef.current = false
     closeTitleMenus()
     markLastWorkspaceId(null)
@@ -3558,7 +3597,7 @@ const Server = (): JSX.Element => {
   }
 
   return (
-    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', pt: WINDOW_TITLEBAR_PADDING_TOP }}>
       {(() => {
         const selectedConn = getSelectedConnection()
         const isConnectionSelected = selectedNodeId && !selectedNodeId.includes('/')
@@ -3570,13 +3609,24 @@ const Server = (): JSX.Element => {
             position="static"
             color="default"
             elevation={0}
-            sx={{ bgcolor: 'background.paper', borderBottom: 1, borderColor: 'divider' }}
+            sx={{
+              bgcolor: (theme) =>
+                theme.palette.mode === 'dark' ? 'rgba(11,18,32,0.82)' : 'rgba(236,243,252,0.98)',
+              borderBottom: 1,
+              borderColor: (theme) => (theme.palette.mode === 'dark' ? 'divider' : '#cbd5e1'),
+              backdropFilter: 'blur(10px)'
+            }}
           >
-            <Toolbar variant="dense" sx={{ gap: 1, minHeight: 42, flexWrap: 'wrap' }}>
+            <Toolbar
+              variant="dense"
+              sx={{ gap: 0.8, minHeight: 44, flexWrap: 'wrap', WebkitAppRegion: 'drag' }}
+            >
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                 <Button
                   size="small"
-                  variant="text"
+                  variant="outlined"
+                  startIcon={<WorkspaceMenuIcon sx={{ fontSize: 16 }} />}
+                  sx={TOP_MENU_BUTTON_SX}
                   onClick={(event) => {
                     setWorkspaceMenuAnchorEl(event.currentTarget)
                     setConnectionMenuAnchorEl(null)
@@ -3587,7 +3637,9 @@ const Server = (): JSX.Element => {
                 </Button>
                 <Button
                   size="small"
-                  variant="text"
+                  variant="outlined"
+                  startIcon={<ConnectionMenuIcon sx={{ fontSize: 16 }} />}
+                  sx={TOP_MENU_BUTTON_SX}
                   onClick={(event) => {
                     setConnectionMenuAnchorEl(event.currentTarget)
                     setWorkspaceMenuAnchorEl(null)
@@ -3598,7 +3650,9 @@ const Server = (): JSX.Element => {
                 </Button>
                 <Button
                   size="small"
-                  variant="text"
+                  variant="outlined"
+                  startIcon={<ToolsMenuIcon sx={{ fontSize: 16 }} />}
+                  sx={TOP_MENU_BUTTON_SX}
                   onClick={(event) => {
                     setToolsMenuAnchorEl(event.currentTarget)
                     setWorkspaceMenuAnchorEl(null)
@@ -3608,7 +3662,7 @@ const Server = (): JSX.Element => {
                   {t('server.toolbar.toolsMenu')}
                 </Button>
               </Box>
-              <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1, WebkitAppRegion: 'no-drag' }}>
                 {workspaceFilename ? (
                   <Typography variant="caption" color="text.secondary" sx={{ maxWidth: 240 }} noWrap>
                     {workspaceFilename}
