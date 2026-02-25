@@ -518,51 +518,79 @@ const CommLogWindow = (): JSX.Element => {
           boxShadow: '0 6px 18px rgba(15,23,42,0.1)'
         }}
       >
-        <Toolbar variant="dense" sx={{ gap: 1, flexWrap: 'wrap', py: 0.4 }}>
-          <Typography variant="h6" sx={{ fontSize: '1rem', mr: 1 }}>
-            {t('server.toolbar.commDetails')}
-          </Typography>
-          <TextField
-            size="small"
-            value={filterInput}
-            onChange={(e) => setFilterInput(e.target.value)}
-            placeholder='Filter (e.g. direction == RX and fc == 3 and unit == 1)'
-            error={Boolean(filterError)}
-            helperText={filterError || 'Fields: direction/fc/unit/client/protocol/frame/data/exception'}
-            sx={{ minWidth: 420, maxWidth: 720 }}
-          />
-          <Chip label={`Rows: ${renderedSummary}`} size="small" />
-          <Chip label={`Buffer: ${bufferSummary}`} size="small" />
-          <Chip label="RX" size="small" sx={{ bgcolor: '#1976d2', color: '#fff' }} />
-          <Chip label="TX" size="small" sx={{ bgcolor: '#2e7d32', color: '#fff' }} />
-          <Chip label={`Exceptions: ${stats?.exceptionCount ?? 0}`} color="error" size="small" variant="outlined" />
-          <Button variant={paused ? 'contained' : 'outlined'} size="small" onClick={() => setPaused(false)} disabled={!paused}>
-            {t('common.continue')}
-          </Button>
-          <Button variant={paused ? 'outlined' : 'contained'} size="small" onClick={() => setPaused(true)} disabled={paused}>
-            {t('common.stop')}
-          </Button>
-          <Button variant="outlined" size="small" onClick={handleClear}>
-            {t('common.clear')}
-          </Button>
-          <Button variant="outlined" size="small" onClick={handleSave} disabled={totalRows === 0}>
-            {t('common.save')}
-          </Button>
-          <FormControlLabel
-            control={<Checkbox checked={autoScroll} onChange={(e) => setAutoScroll(e.target.checked)} size="small" />}
-            label={t('common.autoScroll')}
-          />
-          <FormControlLabel
-            control={
-              <Checkbox
-                checked={alwaysOnTop}
-                onChange={(e) => setWindowAlwaysOnTop(e.target.checked)}
-                size="small"
-              />
-            }
-            label={t('common.alwaysOnTop')}
-          />
-        </Toolbar>
+        <Box sx={{ px: 1, py: 0.6, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+          <Toolbar variant="dense" disableGutters sx={{ minHeight: 34, gap: 1, flexWrap: 'wrap' }}>
+            <Typography variant="h6" sx={{ fontSize: '1rem', mr: 0.5 }}>
+              {t('server.toolbar.commDetails')}
+            </Typography>
+            <Chip label={`Rows: ${renderedSummary}`} size="small" />
+            <Chip label={`Buffer: ${bufferSummary}`} size="small" />
+            <Chip label="RX" size="small" sx={{ bgcolor: '#1976d2', color: '#fff' }} />
+            <Chip label="TX" size="small" sx={{ bgcolor: '#2e7d32', color: '#fff' }} />
+            <Chip
+              label={`Exceptions: ${stats?.exceptionCount ?? 0}`}
+              color="error"
+              size="small"
+              variant="outlined"
+            />
+            <Box sx={{ flex: 1 }} />
+            <FormControlLabel
+              sx={{ m: 0, mr: 0.5, '& .MuiFormControlLabel-label': { fontSize: 12.5 } }}
+              control={
+                <Checkbox checked={autoScroll} onChange={(e) => setAutoScroll(e.target.checked)} size="small" />
+              }
+              label={t('common.autoScroll')}
+            />
+            <FormControlLabel
+              sx={{ m: 0, '& .MuiFormControlLabel-label': { fontSize: 12.5 } }}
+              control={
+                <Checkbox
+                  checked={alwaysOnTop}
+                  onChange={(e) => setWindowAlwaysOnTop(e.target.checked)}
+                  size="small"
+                />
+              }
+              label={t('common.alwaysOnTop')}
+            />
+          </Toolbar>
+          <Toolbar
+            variant="dense"
+            disableGutters
+            sx={{ minHeight: 38, alignItems: 'flex-start', gap: 1, flexWrap: 'wrap' }}
+          >
+            <TextField
+              size="small"
+              value={filterInput}
+              onChange={(e) => setFilterInput(e.target.value)}
+              placeholder='Filter (e.g. direction == RX and fc == 3 and unit == 1)'
+              error={Boolean(filterError)}
+              helperText={filterError || 'Fields: direction/fc/unit/client/protocol/frame/data/exception'}
+              sx={{ flex: '1 1 560px', minWidth: 320, maxWidth: 860 }}
+            />
+            <Button
+              variant={paused ? 'contained' : 'outlined'}
+              size="small"
+              onClick={() => setPaused(false)}
+              disabled={!paused}
+            >
+              {t('common.continue')}
+            </Button>
+            <Button
+              variant={paused ? 'outlined' : 'contained'}
+              size="small"
+              onClick={() => setPaused(true)}
+              disabled={paused}
+            >
+              {t('common.stop')}
+            </Button>
+            <Button variant="outlined" size="small" onClick={handleClear}>
+              {t('common.clear')}
+            </Button>
+            <Button variant="outlined" size="small" onClick={handleSave} disabled={totalRows === 0}>
+              {t('common.save')}
+            </Button>
+          </Toolbar>
+        </Box>
       </AppBar>
 
       <Box

@@ -31,6 +31,7 @@ import {
 import { useWindowAlwaysOnTop } from '@renderer/hooks/useWindowAlwaysOnTop'
 
 loader.config({ monaco })
+const WINDOW_TITLEBAR_PADDING_TOP = 'calc(env(titlebar-area-height, 0px) + 10px)'
 
 const DEFAULT_SCRIPT_TEMPLATE = `// event.type: 'interval' | 'manual'
 // api.getValue(unitId, registerType, address)
@@ -138,29 +139,52 @@ const ScriptEditorWindow = (): JSX.Element => {
   }, [])
 
   return (
-    <Box sx={{ height: '100dvh', display: 'flex', flexDirection: 'column', gap: 1, p: 1.5 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Typography variant="subtitle2">{`Script Editor - ${connectionAlias}`}</Typography>
-        <FormControlLabel
-          sx={{ m: 0 }}
-          control={
-            <Switch
-              size="small"
-              checked={alwaysOnTop}
-              onChange={(event) => setWindowAlwaysOnTop(event.target.checked)}
-            />
-          }
-          label={t('common.alwaysOnTop')}
-        />
-      </Box>
+    <Box
+      sx={{
+        height: '100dvh',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 1,
+        p: 1.5,
+        pt: WINDOW_TITLEBAR_PADDING_TOP
+      }}
+    >
+      <Paper variant="outlined" sx={{ px: 1.25, py: 0.75 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+            {`Script Editor - ${connectionAlias}`}
+          </Typography>
+          <Box sx={{ flex: 1 }} />
+          <FormControlLabel
+            sx={{ m: 0, '& .MuiFormControlLabel-label': { fontSize: 12.5 } }}
+            control={
+              <Switch
+                size="small"
+                checked={alwaysOnTop}
+                onChange={(event) => setWindowAlwaysOnTop(event.target.checked)}
+              />
+            }
+            label={t('common.alwaysOnTop')}
+          />
+        </Box>
+        <Box sx={{ mt: 0.5, display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+          <Typography variant="caption" color="text.secondary">
+            {`Scripts: ${scripts.length}`}
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            {selectedScript ? `Current: ${selectedScript.name}` : 'Current: None'}
+          </Typography>
+          <Box sx={{ flex: 1 }} />
+          <Button onClick={addScript} startIcon={<AddIcon />} size="small" variant="outlined">
+            Add Script
+          </Button>
+        </Box>
+      </Paper>
       <Box sx={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: '340px 1fr', gap: 1.5 }}>
       <Paper variant="outlined" sx={{ p: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         <Typography variant="subtitle2" sx={{ mb: 1 }}>
           {`Scripts - ${connectionAlias}`}
         </Typography>
-        <Button onClick={addScript} startIcon={<AddIcon />} size="small" variant="outlined">
-          Add Script
-        </Button>
         <Divider sx={{ my: 1 }} />
         <Box sx={{ overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 1, pr: 0.5 }}>
           {scripts.map((script) => (

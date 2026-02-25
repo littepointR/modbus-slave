@@ -284,47 +284,71 @@ const SystemLogWindow = (): JSX.Element => {
           boxShadow: '0 6px 18px rgba(15,23,42,0.1)'
         }}
       >
-        <Toolbar variant="dense" sx={{ gap: 1, flexWrap: 'wrap', py: 0.4 }}>
-          <Typography variant="h6" sx={{ fontSize: '1rem', mr: 1 }}>
-            System Logs
-          </Typography>
-          <TextField
-            size="small"
-            value={filterInput}
-            onChange={(e) => setFilterInput(e.target.value)}
-            placeholder='Filter (level/source/module/message)'
-            sx={{ minWidth: 360, maxWidth: 620 }}
-          />
-          <Chip label={`Rows: ${renderedSummary}`} size="small" />
-          <Chip label={`Buffer: ${bufferSummary}`} size="small" />
-          <Chip label={`Errors: ${stats?.byLevel.error ?? 0}`} size="small" color="error" variant="outlined" />
-          <Button variant={paused ? 'contained' : 'outlined'} size="small" onClick={() => setPaused(false)} disabled={!paused}>
-            {t('common.continue')}
-          </Button>
-          <Button variant={paused ? 'outlined' : 'contained'} size="small" onClick={() => setPaused(true)} disabled={paused}>
-            {t('common.stop')}
-          </Button>
-          <Button variant="outlined" size="small" onClick={handleClear}>
-            {t('common.clear')}
-          </Button>
-          <Button variant="outlined" size="small" onClick={handleSave} disabled={totalRows === 0}>
-            {t('common.save')}
-          </Button>
-          <FormControlLabel
-            control={<Checkbox checked={autoScroll} onChange={(e) => setAutoScroll(e.target.checked)} size="small" />}
-            label={t('common.autoScroll')}
-          />
-          <FormControlLabel
-            control={
-              <Checkbox
-                checked={alwaysOnTop}
-                onChange={(e) => setWindowAlwaysOnTop(e.target.checked)}
-                size="small"
-              />
-            }
-            label={t('common.alwaysOnTop')}
-          />
-        </Toolbar>
+        <Box sx={{ px: 1, py: 0.6, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+          <Toolbar variant="dense" disableGutters sx={{ minHeight: 34, gap: 1, flexWrap: 'wrap' }}>
+            <Typography variant="h6" sx={{ fontSize: '1rem', mr: 0.5 }}>
+              System Logs
+            </Typography>
+            <Chip label={`Rows: ${renderedSummary}`} size="small" />
+            <Chip label={`Buffer: ${bufferSummary}`} size="small" />
+            <Chip
+              label={`Errors: ${stats?.byLevel.error ?? 0}`}
+              size="small"
+              color="error"
+              variant="outlined"
+            />
+            <Box sx={{ flex: 1 }} />
+            <FormControlLabel
+              sx={{ m: 0, mr: 0.5, '& .MuiFormControlLabel-label': { fontSize: 12.5 } }}
+              control={
+                <Checkbox checked={autoScroll} onChange={(e) => setAutoScroll(e.target.checked)} size="small" />
+              }
+              label={t('common.autoScroll')}
+            />
+            <FormControlLabel
+              sx={{ m: 0, '& .MuiFormControlLabel-label': { fontSize: 12.5 } }}
+              control={
+                <Checkbox
+                  checked={alwaysOnTop}
+                  onChange={(e) => setWindowAlwaysOnTop(e.target.checked)}
+                  size="small"
+                />
+              }
+              label={t('common.alwaysOnTop')}
+            />
+          </Toolbar>
+          <Toolbar variant="dense" disableGutters sx={{ minHeight: 38, gap: 1, flexWrap: 'wrap' }}>
+            <TextField
+              size="small"
+              value={filterInput}
+              onChange={(e) => setFilterInput(e.target.value)}
+              placeholder='Filter (level/source/module/message)'
+              sx={{ flex: '1 1 500px', minWidth: 320, maxWidth: 820 }}
+            />
+            <Button
+              variant={paused ? 'contained' : 'outlined'}
+              size="small"
+              onClick={() => setPaused(false)}
+              disabled={!paused}
+            >
+              {t('common.continue')}
+            </Button>
+            <Button
+              variant={paused ? 'outlined' : 'contained'}
+              size="small"
+              onClick={() => setPaused(true)}
+              disabled={paused}
+            >
+              {t('common.stop')}
+            </Button>
+            <Button variant="outlined" size="small" onClick={handleClear}>
+              {t('common.clear')}
+            </Button>
+            <Button variant="outlined" size="small" onClick={handleSave} disabled={totalRows === 0}>
+              {t('common.save')}
+            </Button>
+          </Toolbar>
+        </Box>
       </AppBar>
 
       <Box

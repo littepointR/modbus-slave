@@ -18,6 +18,7 @@ import { useWindowAlwaysOnTop } from '@renderer/hooks/useWindowAlwaysOnTop'
 interface PlotSample extends RegisterPlotData {}
 
 const STROKE_PATTERNS = ['', '6 4', '2 3', '10 4', '4 2 1 2']
+const WINDOW_TITLEBAR_PADDING_TOP = 'calc(env(titlebar-area-height, 0px) + 10px)'
 
 const RegisterPlotWindow = (): JSX.Element => {
   const { t } = useTranslation()
@@ -137,6 +138,7 @@ const RegisterPlotWindow = (): JSX.Element => {
     <Box
       sx={{
         p: 1,
+        pt: WINDOW_TITLEBAR_PADDING_TOP,
         height: '100dvh',
         boxSizing: 'border-box',
         display: 'flex',
@@ -144,8 +146,8 @@ const RegisterPlotWindow = (): JSX.Element => {
         gap: 1
       }}
     >
-      <Paper variant="outlined" sx={{ p: 1 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+      <Paper variant="outlined" sx={{ px: 1.25, py: 0.75 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
           <Box sx={{ minWidth: 0 }}>
             <Typography variant="subtitle1" sx={{ lineHeight: 1.2 }}>
               {config.title}
@@ -154,9 +156,20 @@ const RegisterPlotWindow = (): JSX.Element => {
               {config.connectionAlias} / {config.slaveAlias} / {config.registerGroupName}
             </Typography>
           </Box>
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, justifyContent: 'flex-end' }}>
+          <Box sx={{ flex: 1 }} />
+          <Button
+            size="small"
+            variant={paused ? 'contained' : 'outlined'}
+            onClick={() => setPaused((prev) => !prev)}
+            sx={{ minWidth: 92 }}
+          >
+            {paused ? t('common.continue') : t('common.stop')}
+          </Button>
+        </Box>
+        <Box sx={{ mt: 0.5, display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
             <FormControlLabel
-              sx={{ mr: 0 }}
+              sx={{ m: 0, '& .MuiFormControlLabel-label': { fontSize: 12.5 } }}
               control={
                 <Checkbox
                   size="small"
@@ -172,7 +185,7 @@ const RegisterPlotWindow = (): JSX.Element => {
               label={t('common.autoScaleX')}
             />
             <FormControlLabel
-              sx={{ mr: 0 }}
+              sx={{ m: 0, '& .MuiFormControlLabel-label': { fontSize: 12.5 } }}
               control={
                 <Checkbox
                   size="small"
@@ -183,7 +196,7 @@ const RegisterPlotWindow = (): JSX.Element => {
               label={t('common.autoScaleY')}
             />
             <FormControlLabel
-              sx={{ mr: 0 }}
+              sx={{ m: 0, '& .MuiFormControlLabel-label': { fontSize: 12.5 } }}
               control={
                 <Checkbox
                   size="small"
@@ -193,31 +206,24 @@ const RegisterPlotWindow = (): JSX.Element => {
               }
               label={t('common.alwaysOnTop')}
             />
-            <TextField
-              size="small"
-              label={t('common.yMin')}
-              value={yMinInput}
-              onChange={(e) => setYMinInput(e.target.value)}
-              disabled={yAutoScale}
-              sx={{ width: 96 }}
-            />
-            <TextField
-              size="small"
-              label={t('common.yMax')}
-              value={yMaxInput}
-              onChange={(e) => setYMaxInput(e.target.value)}
-              disabled={yAutoScale}
-              sx={{ width: 96 }}
-            />
-            <Button
-              size="small"
-              variant={paused ? 'contained' : 'outlined'}
-              onClick={() => setPaused((prev) => !prev)}
-              sx={{ ml: 0.5 }}
-            >
-              {paused ? t('common.continue') : t('common.stop')}
-            </Button>
           </Box>
+          <Box sx={{ flex: 1 }} />
+          <TextField
+            size="small"
+            label={t('common.yMin')}
+            value={yMinInput}
+            onChange={(e) => setYMinInput(e.target.value)}
+            disabled={yAutoScale}
+            sx={{ width: 96 }}
+          />
+          <TextField
+            size="small"
+            label={t('common.yMax')}
+            value={yMaxInput}
+            onChange={(e) => setYMaxInput(e.target.value)}
+            disabled={yAutoScale}
+            sx={{ width: 96 }}
+          />
         </Box>
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
           {config.series.map((series, idx) => {

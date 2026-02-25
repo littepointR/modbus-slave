@@ -2062,6 +2062,10 @@ const Server = (): JSX.Element => {
   }, [connections])
 
   useEffect(() => {
+    const globalWindow = window as Window & { __modbuxAutoRestoreTriggered?: boolean }
+    if (globalWindow.__modbuxAutoRestoreTriggered) return
+    globalWindow.__modbuxAutoRestoreTriggered = true
+
     const recents = loadRecentWorkspacesFromStorage()
     setRecentWorkspaces(recents)
 
