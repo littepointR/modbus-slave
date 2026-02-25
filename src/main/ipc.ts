@@ -199,11 +199,24 @@ export const initIpc: InitIpcFn = (app, _state, server, logger) => {
   ipcHandle('get_app_version', () => app.getVersion())
   ipcHandle('confirm_window_close', (event) => {
     const win = BrowserWindow.fromWebContents(event.sender) as
-      | (BrowserWindow & { __modbuxAllowClose?: boolean })
+      | (BrowserWindow & {
+          __modbuxAllowClose?: boolean
+          __modbuxCloseRequestPending?: boolean
+        })
       | null
     if (!win || win.isDestroyed()) return
+    win.__modbuxCloseRequestPending = false
     win.__modbuxAllowClose = true
     win.close()
+  })
+  ipcHandle('reject_window_close', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender) as
+      | (BrowserWindow & {
+          __modbuxCloseRequestPending?: boolean
+        })
+      | null
+    if (!win || win.isDestroyed()) return
+    win.__modbuxCloseRequestPending = false
   })
   ipcHandle('set_window_always_on_top', (event, alwaysOnTop: boolean) => {
     const win = BrowserWindow.fromWebContents(event.sender)

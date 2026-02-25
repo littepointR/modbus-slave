@@ -96,6 +96,7 @@ export const IPC_CHANNELS = [
   'import_server_data',
   'create_excel_template',
   'confirm_window_close',
+  'reject_window_close',
   'set_window_always_on_top',
   'get_window_always_on_top'
 ] as const
@@ -414,6 +415,12 @@ export interface IpcHandlerSpec {
 
   /** Confirm and proceed window close from renderer */
   ['confirm_window_close']: {
+    args: []
+    return: void
+  }
+
+  /** Reject and cancel pending window close from renderer */
+  ['reject_window_close']: {
     args: []
     return: void
   }

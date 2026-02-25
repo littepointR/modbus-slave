@@ -60,6 +60,7 @@ describe('initIpc', () => {
     expect(channels).toContain('update_register_config')
     expect(channels).toContain('stop_scanning_unit_ids')
     expect(channels).toContain('get_comm_packets')
+    expect(channels).toContain('reject_window_close')
     expect(channels).toContain('set_window_always_on_top')
     expect(channels).toContain('get_window_always_on_top')
   })

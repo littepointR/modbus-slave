@@ -45,15 +45,10 @@ const attachCloseRequestBridge = (window: BrowserWindow): void => {
   const guardedWindow = window as BrowserWindow & {
     __modbuxAllowClose?: boolean
     __modbuxCloseRequestPending?: boolean
-    __modbuxCloseFallbackTimer?: ReturnType<typeof setTimeout>
   }
   window.on('close', (event) => {
     if (guardedWindow.__modbuxAllowClose) {
       guardedWindow.__modbuxCloseRequestPending = false
-      if (guardedWindow.__modbuxCloseFallbackTimer) {
-        clearTimeout(guardedWindow.__modbuxCloseFallbackTimer)
-        guardedWindow.__modbuxCloseFallbackTimer = undefined
-      }
       return
     }
     if (window.webContents.isDestroyed()) return
@@ -64,13 +59,6 @@ const attachCloseRequestBridge = (window: BrowserWindow): void => {
     event.preventDefault()
     guardedWindow.__modbuxCloseRequestPending = true
     window.webContents.send('request_window_close')
-    guardedWindow.__modbuxCloseFallbackTimer = setTimeout(() => {
-      if (window.isDestroyed()) return
-      if (guardedWindow.__modbuxAllowClose) return
-      guardedWindow.__modbuxAllowClose = true
-      guardedWindow.__modbuxCloseRequestPending = false
-      window.close()
-    }, 1800)
   })
 }
 

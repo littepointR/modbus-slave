@@ -250,6 +250,14 @@ const buildEntry = (packet: ServerCommPacket): CommLogEntry => {
   }
 }
 
+const dedupePacketsById = (packets: ServerCommPacket[]): ServerCommPacket[] => {
+  const packetMap = new Map<number, ServerCommPacket>()
+  packets.forEach((packet) => {
+    packetMap.set(packet.id, packet)
+  })
+  return [...packetMap.values()].sort((a, b) => a.id - b.id)
+}
+
 const CommLogWindow = (): JSX.Element => {
   const { t } = useTranslation()
   const { alwaysOnTop, setWindowAlwaysOnTop } = useWindowAlwaysOnTop()
@@ -270,6 +278,7 @@ const CommLogWindow = (): JSX.Element => {
   const filteredIndicesRef = useRef<number[]>([])
   const bufferBytesRef = useRef(0)
   const pendingRef = useRef<ServerCommPacket[]>([])
+  const initialSnapshotReadyRef = useRef(false)
   const compiledFilterRef = useRef<FilterAst | null>(null)
   const filterDirtyRef = useRef(true)
   const renderBufferLimitBytesRef = useRef(renderBufferLimitMb * 1024 * 1024)
@@ -322,8 +331,11 @@ const CommLogWindow = (): JSX.Element => {
     window.api
       .getCommPackets(10000)
       .then((packets) => {
-        if (!Array.isArray(packets) || packets.length === 0) return
-        const mapped = packets.map(buildEntry)
+        const snapshotPackets = Array.isArray(packets) ? packets : []
+        const queuedPackets = pendingRef.current.splice(0, pendingRef.current.length)
+        const mergedPackets = dedupePacketsById([...snapshotPackets, ...queuedPackets])
+        if (mergedPackets.length === 0) return
+        const mapped = mergedPackets.map(buildEntry)
         entriesRef.current = mapped
         maxLineCharsRef.current = mapped.reduce((max, entry) => Math.max(max, entry.line.length), 0)
         bufferBytesRef.current = mapped.reduce((sum, entry) => sum + entry.sizeBytes, 0)
@@ -333,6 +345,9 @@ const CommLogWindow = (): JSX.Element => {
         setRenderVersion((v) => v + 1)
       })
       .catch(() => undefined)
+      .finally(() => {
+        initialSnapshotReadyRef.current = true
+      })
   }, [rebuildFilteredIndices, trimEntriesToLimit])
 
   useEffect(() => {
@@ -369,6 +384,7 @@ const CommLogWindow = (): JSX.Element => {
 
   useEffect(() => {
     const timer = window.setInterval(() => {
+      if (!initialSnapshotReadyRef.current) return
       if (pendingRef.current.length === 0) return
       const packets = pendingRef.current.splice(0, pendingRef.current.length)
       packets.forEach(appendPacket)

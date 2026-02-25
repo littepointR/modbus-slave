@@ -3151,11 +3151,15 @@ const Server = (): JSX.Element => {
     }
 
     const usedUnitIds = new Set(connection.slaves.map((item) => item.slaveId))
-    let nextUnitId = copiedSlave.slaveId
-    while (usedUnitIds.has(nextUnitId) && nextUnitId < 255) {
-      nextUnitId += 1
+    let nextUnitId: number | null = null
+    for (let offset = 0; offset < 256; offset++) {
+      const candidate = (copiedSlave.slaveId + offset) % 256
+      if (!usedUnitIds.has(candidate)) {
+        nextUnitId = candidate
+        break
+      }
     }
-    if (usedUnitIds.has(nextUnitId)) {
+    if (nextUnitId === null) {
       showUserError('No available slave ID for copy.')
       return
     }
@@ -3374,7 +3378,7 @@ const Server = (): JSX.Element => {
   const applyWorkspaceSnapshot = (
     workspace: PersistedWorkspaceSnapshot,
     options?: { fileName?: string; filePath?: string | null }
-  ): boolean => {
+  ): string | null => {
     const workspaceVersion = workspace.version
     if (
       (workspaceVersion === 1 || workspaceVersion === 2 || workspaceVersion === 3 || workspaceVersion === 4) &&
@@ -3411,16 +3415,26 @@ const Server = (): JSX.Element => {
               .filter((tab): tab is OpenTab => tab !== null)
           : []
 
-      setConnections(workspace.connections)
-      setWorkspaceTabSettings(restoredTabSettings)
-      setScriptsByConnection(
+      const normalizedConnections = workspace.connections.map((connection) => ({
+        ...connection,
+        isOpen: false
+      }))
+      const normalizedTabSettings = buildWorkspaceTabSettingsSnapshot(
+        restoredTabSettings,
+        restoredOpenTabs.map((tab) => ({
+          tabId: getTabId(tab.connectionId, tab.slaveId, tab.registerGroupId),
+          interpretationTab: tab.interpretationTab,
+          stringEncoding: tab.stringEncoding,
+          typedInterpretation: tab.typedInterpretation,
+          registerDisplayFormat: tab.registerDisplayFormat
+        }))
+      )
+      const normalizedScriptsByConnection =
         (workspaceVersion === 3 || workspaceVersion === 4) &&
-          workspace.scriptsByConnection &&
-          typeof workspace.scriptsByConnection === 'object'
+        workspace.scriptsByConnection &&
+        typeof workspace.scriptsByConnection === 'object'
           ? workspace.scriptsByConnection
           : {}
-      )
-      setOpenTabs(restoredOpenTabs)
       const preferredActiveTabId =
         workspaceVersion === 4 && typeof workspace.activeTabId === 'string' ? workspace.activeTabId : null
       const hasPreferredTab =
@@ -3428,7 +3442,8 @@ const Server = (): JSX.Element => {
         restoredOpenTabs.some(
           (tab) => getTabId(tab.connectionId, tab.slaveId, tab.registerGroupId) === preferredActiveTabId
         )
-      setActiveTabId(
+
+      const nextActiveTabId =
         hasPreferredTab
           ? preferredActiveTabId
           : restoredOpenTabs[0]
@@ -3438,16 +3453,32 @@ const Server = (): JSX.Element => {
                 restoredOpenTabs[0].registerGroupId
               )
             : null
-      )
+
+      setConnections(normalizedConnections)
+      setWorkspaceTabSettings(normalizedTabSettings)
+      setScriptsByConnection(normalizedScriptsByConnection)
+      setOpenTabs(restoredOpenTabs)
+      setActiveTabId(nextActiveTabId)
       setExpandedConnections(new Set(restoredOpenTabs.map((tab) => tab.connectionId)))
       setExpandedSlaves(new Set(restoredOpenTabs.map((tab) => tab.slaveId)))
       setWorkspaceFileHandle(null)
       setWorkspaceFilename(options?.fileName || null)
       setWorkspaceFilePath(options?.filePath || null)
-      return true
+      return serializeWorkspaceSnapshot({
+        version: 4,
+        connections: normalizedConnections,
+        tabSettings: normalizedTabSettings,
+        scriptsByConnection: normalizedScriptsByConnection,
+        openTabs: restoredOpenTabs.map((tab) => ({
+          connectionId: tab.connectionId,
+          slaveId: tab.slaveId,
+          registerGroupId: tab.registerGroupId
+        })),
+        activeTabId: nextActiveTabId
+      })
     }
     showUserError('Invalid workspace file format.')
-    return false
+    return null
   }
 
   const openWorkspaceByPath = async (
@@ -3460,7 +3491,7 @@ const Server = (): JSX.Element => {
       const fileName = path.split(/[\\/]/).pop() || options?.fallbackName
       const applied = applyWorkspaceSnapshot(workspace, { fileName, filePath: path })
       if (!applied) return false
-      setWorkspaceSavedFingerprint(serializeWorkspaceSnapshot(workspace))
+      setWorkspaceSavedFingerprint(applied)
 
       void window.api.appendSystemLog({
         level: 'info',
@@ -3604,7 +3635,7 @@ const Server = (): JSX.Element => {
       const fileName = filePath.split(/[\\/]/).pop() || 'Workspace'
       const applied = applyWorkspaceSnapshot(workspace, { fileName, filePath })
       if (applied) {
-        setWorkspaceSavedFingerprint(serializeWorkspaceSnapshot(workspace))
+        setWorkspaceSavedFingerprint(applied)
         upsertRecentWorkspaceByPath(filePath, fileName, { setAsLast: true })
       }
     } catch (error) {
@@ -3855,7 +3886,10 @@ const Server = (): JSX.Element => {
     const offCloseRequest = onEvent('request_window_close', () => {
       void (async () => {
         const shouldClose = await requestUnsavedChangesConfirmation()
-        if (!shouldClose) return
+        if (!shouldClose) {
+          await window.api.rejectWindowClose()
+          return
+        }
         await window.api.confirmWindowClose()
       })()
     })
