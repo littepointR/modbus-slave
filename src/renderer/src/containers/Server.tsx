@@ -1915,7 +1915,6 @@ const Server = (): JSX.Element => {
   const scriptTimerMapRef = useRef<
     Record<string, { timer: ReturnType<typeof setInterval>; intervalMs: number }>
   >({})
-  const pendingMarkWorkspaceSavedRef = useRef(false)
   const workspaceInitialFingerprintRef = useRef<string | null>(null)
   const connectionsRef = useRef<Connection[]>([])
   const unsavedConfirmResolverRef = useRef<((confirmed: boolean) => void) | null>(null)
@@ -3038,9 +3037,6 @@ const Server = (): JSX.Element => {
     if (workspaceInitialFingerprintRef.current === null) {
       workspaceInitialFingerprintRef.current = workspaceCurrentFingerprint
     }
-    if (!pendingMarkWorkspaceSavedRef.current) return
-    pendingMarkWorkspaceSavedRef.current = false
-    setWorkspaceSavedFingerprint(workspaceCurrentFingerprint)
   }, [workspaceCurrentFingerprint])
 
   const getDefaultWorkspaceFilename = () =>
@@ -3189,7 +3185,7 @@ const Server = (): JSX.Element => {
       const fileName = path.split(/[\\/]/).pop() || options?.fallbackName
       const applied = applyWorkspaceSnapshot(workspace, { fileName, filePath: path })
       if (!applied) return false
-      pendingMarkWorkspaceSavedRef.current = true
+      setWorkspaceSavedFingerprint(serializeWorkspaceSnapshot(workspace))
 
       void window.api.appendSystemLog({
         level: 'info',
@@ -3333,7 +3329,7 @@ const Server = (): JSX.Element => {
       const fileName = filePath.split(/[\\/]/).pop() || 'Workspace'
       const applied = applyWorkspaceSnapshot(workspace, { fileName, filePath })
       if (applied) {
-        pendingMarkWorkspaceSavedRef.current = true
+        setWorkspaceSavedFingerprint(serializeWorkspaceSnapshot(workspace))
         upsertRecentWorkspaceByPath(filePath, fileName, { setAsLast: true })
       }
     } catch (error) {
@@ -3440,7 +3436,6 @@ const Server = (): JSX.Element => {
     setWorkspaceFilePath(null)
     setWorkspaceSavedFingerprint(null)
     workspaceInitialFingerprintRef.current = null
-    pendingMarkWorkspaceSavedRef.current = false
     closeTitleMenus()
     markLastWorkspaceId(null)
   }

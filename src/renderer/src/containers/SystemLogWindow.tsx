@@ -28,6 +28,21 @@ interface LogRow {
   sizeBytes: number
 }
 
+const buildFilteredIndices = (rows: LogRow[], query: string): number[] => {
+  const normalized = query.trim().toLowerCase()
+  const next: number[] = []
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i]
+    if (!normalized) {
+      next.push(i)
+      continue
+    }
+    const haystack = `${row.level} ${row.source} ${row.module} ${row.message} ${row.line}`.toLowerCase()
+    if (haystack.includes(normalized)) next.push(i)
+  }
+  return next
+}
+
 const formatBytes = (bytes: number): string => {
   if (bytes >= 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
   if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
@@ -74,6 +89,7 @@ const SystemLogWindow = (): JSX.Element => {
   const filteredIndicesRef = useRef<number[]>([])
   const bufferBytesRef = useRef(0)
   const pendingRef = useRef<SystemLogEntry[]>([])
+  const filterInputRef = useRef('')
   const renderBufferLimitBytesRef = useRef(renderBufferLimitMb * 1024 * 1024)
   const maxLineCharsRef = useRef(0)
   const lineHeight = useMemo(() => Math.max(24, monoFontSize + 10), [monoFontSize])
@@ -87,19 +103,8 @@ const SystemLogWindow = (): JSX.Element => {
   }, [])
 
   const rebuildFiltered = useCallback(() => {
-    const query = filterInput.trim().toLowerCase()
-    const next: number[] = []
-    for (let i = 0; i < rowsRef.current.length; i++) {
-      const row = rowsRef.current[i]
-      if (!query) {
-        next.push(i)
-        continue
-      }
-      const haystack = `${row.level} ${row.source} ${row.module} ${row.message} ${row.line}`.toLowerCase()
-      if (haystack.includes(query)) next.push(i)
-    }
-    filteredIndicesRef.current = next
-  }, [filterInput])
+    filteredIndicesRef.current = buildFilteredIndices(rowsRef.current, filterInputRef.current)
+  }, [])
 
   useEffect(() => {
     window.api
@@ -108,10 +113,10 @@ const SystemLogWindow = (): JSX.Element => {
         if (!Array.isArray(logs) || logs.length === 0) return
         const mapped = logs.map(toRow)
         rowsRef.current = mapped
-        filteredIndicesRef.current = mapped.map((_, index) => index)
         maxLineCharsRef.current = mapped.reduce((max, row) => Math.max(max, row.line.length), 0)
         bufferBytesRef.current = mapped.reduce((sum, row) => sum + row.sizeBytes, 0)
         trimToLimit()
+        filteredIndicesRef.current = buildFilteredIndices(rowsRef.current, filterInputRef.current)
         setRenderVersion((v) => v + 1)
       })
       .catch(() => undefined)
@@ -153,6 +158,7 @@ const SystemLogWindow = (): JSX.Element => {
   }, [rebuildFiltered, trimToLimit])
 
   useEffect(() => {
+    filterInputRef.current = filterInput
     rebuildFiltered()
     setRenderVersion((v) => v + 1)
   }, [filterInput, rebuildFiltered])
