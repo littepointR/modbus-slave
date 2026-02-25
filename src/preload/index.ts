@@ -5,6 +5,7 @@ import { IPC_CHANNELS, IpcHandlerMap, snakeToCamel } from '@shared'
 const passedArgs = process.argv.slice(2)
 const isServerWindow = passedArgs.includes('is-server-window')
 const isCommLogWindow = passedArgs.includes('is-comm-log-window')
+const isSystemLogWindow = passedArgs.includes('is-system-log-window')
 const isRegisterPlotWindow = passedArgs.includes('is-register-plot-window')
 const isScriptEditorWindow = passedArgs.includes('is-script-editor-window')
 
@@ -69,6 +70,7 @@ type Handlers = typeof handlers
 export type Api = {
   isServerWindow: boolean
   isCommLogWindow: boolean
+  isSystemLogWindow: boolean
   isRegisterPlotWindow: boolean
   isScriptEditorWindow: boolean
 } & Handlers
@@ -81,6 +83,7 @@ export type Api = {
 const api = {
   isServerWindow,
   isCommLogWindow,
+  isSystemLogWindow,
   isRegisterPlotWindow,
   isScriptEditorWindow,
   ...handlers

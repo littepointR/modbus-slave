@@ -90,6 +90,8 @@ function createWindow(): BrowserWindow {
 
   windows.main.on('close', () => {
     windows.server?.close()
+    windows.commLog?.close()
+    windows.systemLog?.close()
     scriptEditorWindow?.close()
     registerPlotWindows.forEach((plotWindow) => plotWindow.close())
   })
@@ -226,6 +228,42 @@ onIpcEvent('register_plot_data', (_event, payload: RegisterPlotData) => {
   const plotWin = registerPlotWindows.get(payload.chartId)
   if (!plotWin || plotWin.isDestroyed() || plotWin.webContents.isDestroyed()) return
   plotWin.webContents.send('register_plot_data', payload)
+})
+
+onIpcEvent('open_system_log_window', () => {
+  if (windows.systemLog) {
+    windows.systemLog.focus()
+    return
+  }
+
+  windows.systemLog = new BrowserWindow({
+    width: 900,
+    height: 620,
+    minWidth: 640,
+    minHeight: 420,
+    autoHideMenuBar: true,
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      sandbox: false,
+      nodeIntegration: false,
+      contextIsolation: true,
+      additionalArguments: ['is-system-log-window']
+    },
+    title: 'System Logs',
+    backgroundColor: '#181818'
+  })
+
+  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+    windows.systemLog.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/system-log`)
+  } else {
+    windows.systemLog.loadFile(join(__dirname, '../renderer/index.html'), {
+      hash: '#/system-log'
+    })
+  }
+
+  windows.systemLog.on('close', () => {
+    windows.systemLog = null
+  })
 })
 
 onIpcEvent('close_register_plot_windows', () => {

@@ -1,7 +1,9 @@
 export const GLOBAL_MONO_FONT_KEY = 'modbux.global.monoFont'
 export const GLOBAL_MONO_FONT_SIZE_KEY = 'modbux.global.monoFontSize'
 export const GLOBAL_STRING_ENCODING_KEY = 'modbux.global.stringEncoding'
-export const GLOBAL_LOG_BUFFER_MB_KEY = 'modbux.global.logBufferMb'
+export const GLOBAL_COMM_BUFFER_MB_KEY = 'modbux.global.commBufferMb'
+export const GLOBAL_SYSTEM_LOG_BUFFER_MB_KEY = 'modbux.global.systemLogBufferMb'
+export const GLOBAL_LEGACY_LOG_BUFFER_MB_KEY = 'modbux.global.logBufferMb'
 export const GLOBAL_PREFERENCE_CHANGE_EVENT = 'modbux-global-preference-change'
 
 export interface GlobalPreferenceChangeDetail {
@@ -121,16 +123,31 @@ const clampLogBufferMb = (value: number): number => {
   return Math.max(GLOBAL_MIN_LOG_BUFFER_MB, Math.min(GLOBAL_MAX_LOG_BUFFER_MB, Math.round(value)))
 }
 
-export const getGlobalLogBufferSizePreference = (): number => {
-  const raw = localStorage.getItem(GLOBAL_LOG_BUFFER_MB_KEY)
+const parseWithLegacyFallback = (key: string): number => {
+  const raw = localStorage.getItem(key) ?? localStorage.getItem(GLOBAL_LEGACY_LOG_BUFFER_MB_KEY)
   if (!raw) return GLOBAL_DEFAULT_LOG_BUFFER_MB
   const parsed = Number.parseInt(raw, 10)
   return clampLogBufferMb(parsed)
 }
 
-export const setGlobalLogBufferSizePreference = (bufferMb: number): number => {
+export const getGlobalCommBufferSizePreference = (): number => {
+  return parseWithLegacyFallback(GLOBAL_COMM_BUFFER_MB_KEY)
+}
+
+export const setGlobalCommBufferSizePreference = (bufferMb: number): number => {
   const value = clampLogBufferMb(bufferMb)
-  localStorage.setItem(GLOBAL_LOG_BUFFER_MB_KEY, String(value))
-  dispatchPreferenceChange(GLOBAL_LOG_BUFFER_MB_KEY, String(value))
+  localStorage.setItem(GLOBAL_COMM_BUFFER_MB_KEY, String(value))
+  dispatchPreferenceChange(GLOBAL_COMM_BUFFER_MB_KEY, String(value))
+  return value
+}
+
+export const getGlobalSystemLogBufferSizePreference = (): number => {
+  return parseWithLegacyFallback(GLOBAL_SYSTEM_LOG_BUFFER_MB_KEY)
+}
+
+export const setGlobalSystemLogBufferSizePreference = (bufferMb: number): number => {
+  const value = clampLogBufferMb(bufferMb)
+  localStorage.setItem(GLOBAL_SYSTEM_LOG_BUFFER_MB_KEY, String(value))
+  dispatchPreferenceChange(GLOBAL_SYSTEM_LOG_BUFFER_MB_KEY, String(value))
   return value
 }

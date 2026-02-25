@@ -20,6 +20,7 @@ export default {
     showLog: '显示日志',
     hideLog: '隐藏日志',
     settings: '设置',
+    version: '版本',
     language: '语言',
     theme: '主题',
     themeMode: '外观模式',
@@ -34,7 +35,8 @@ export default {
     globalFont: '全局字体',
     globalFontSize: '全局字号',
     globalEncoding: '全局编码',
-    logBufferSize: '日志缓冲区大小 (MB)',
+    commBufferSize: '通讯缓冲区大小 (MB)',
+    systemLogBufferSize: '系统日志缓冲区大小 (MB)',
     returnToHome: '返回主页',
     view: '查看',
     refresh: '刷新',
@@ -182,6 +184,7 @@ export default {
       editConnection: '编辑连接',
       editSlave: '编辑从站',
       commDetails: '通讯详情',
+      systemLogs: '系统日志',
       editScript: '编辑脚本'
     },
     dialog: {
@@ -214,7 +217,8 @@ export default {
       registerType: '寄存器类型',
       startAddress: '起始地址',
       count: '数量',
-      addGroup: '添加寄存器组'
+      addGroup: '添加寄存器组',
+      unsavedChangesOnClose: '当前工作空间有未保存修改，继续将丢失这些修改，是否继续？'
     },
     connection: {
       protocol: '协议',

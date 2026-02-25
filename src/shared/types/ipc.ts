@@ -87,8 +87,10 @@ export const IPC_CHANNELS = [
   'get_system_log_stats',
   'clear_system_logs',
   'export_system_logs',
-  'set_log_buffer_limit_mb',
-  'get_log_buffer_limit_mb',
+  'set_comm_buffer_limit_mb',
+  'get_comm_buffer_limit_mb',
+  'set_system_log_buffer_limit_mb',
+  'get_system_log_buffer_limit_mb',
   'export_server_data',
   'import_server_data',
   'create_excel_template'
@@ -358,14 +360,26 @@ export interface IpcHandlerSpec {
     return: void
   }
 
-  /** Set communication/system log ring-buffer limit (MB) */
-  ['set_log_buffer_limit_mb']: {
+  /** Set communication ring-buffer limit (MB) */
+  ['set_comm_buffer_limit_mb']: {
     args: [number]
     return: number
   }
 
-  /** Get communication/system log ring-buffer limit (MB) */
-  ['get_log_buffer_limit_mb']: {
+  /** Get communication ring-buffer limit (MB) */
+  ['get_comm_buffer_limit_mb']: {
+    args: []
+    return: number
+  }
+
+  /** Set system log ring-buffer limit (MB) */
+  ['set_system_log_buffer_limit_mb']: {
+    args: [number]
+    return: number
+  }
+
+  /** Get system log ring-buffer limit (MB) */
+  ['get_system_log_buffer_limit_mb']: {
     args: []
     return: number
   }
@@ -509,6 +523,7 @@ export const IPC_EVENTS = [
   'window_update',
   'open_server_window',
   'open_comm_log_window',
+  'open_system_log_window',
   'open_register_plot_window',
   'address_groups',
   'comm_packet',
@@ -540,6 +555,7 @@ export interface IpcEventPayloadMap {
   ['window_update']: [WindowsOpen]
   ['open_server_window']: []
   ['open_comm_log_window']: []
+  ['open_system_log_window']: []
   ['open_register_plot_window']: [RegisterPlotWindowInit]
   ['address_groups']: [AddressGroup[]]
   ['comm_packet']: [ServerCommPacket]

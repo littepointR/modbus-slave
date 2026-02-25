@@ -87,6 +87,8 @@ import {
   getBatchAssignableAddresses,
   getWordSpanForInterpretation
 } from './register-plot.helpers'
+import { buildWorkspaceTabSettingsSnapshot } from './server-workspace.helpers'
+import { confirmUnsavedWorkspaceChanges } from './server-unsaved-guard.helpers'
 
 // =============================================================================
 // TYPES
@@ -2943,13 +2945,24 @@ const Server = (): JSX.Element => {
   }
 
   const getWorkspaceSnapshot = (): PersistedWorkspaceSnapshot => {
+    const tabSettingsSnapshot = buildWorkspaceTabSettingsSnapshot(
+      workspaceTabSettings,
+      openTabs.map((tab) => ({
+        tabId: getTabId(tab.connectionId, tab.slaveId, tab.registerGroupId),
+        interpretationTab: tab.interpretationTab,
+        stringEncoding: tab.stringEncoding,
+        typedInterpretation: tab.typedInterpretation,
+        registerDisplayFormat: tab.registerDisplayFormat
+      }))
+    )
+
     return {
       version: 4,
       connections: connections.map((c) => ({
         ...c,
         isOpen: false
       })),
-      tabSettings: workspaceTabSettings,
+      tabSettings: tabSettingsSnapshot,
       scriptsByConnection,
       openTabs: openTabs.map((tab) => ({
         connectionId: tab.connectionId,
@@ -3255,6 +3268,11 @@ const Server = (): JSX.Element => {
   }
 
   const handleOpenWorkspace = async () => {
+    const shouldContinue = confirmUnsavedWorkspaceChanges(isWorkspaceDirty, () =>
+      window.confirm(t('server.dialog.unsavedChangesOnClose'))
+    )
+    if (!shouldContinue) return
+
     try {
       const filePath = await window.api.pickWorkspaceFile()
       if (!filePath) return
@@ -3279,6 +3297,11 @@ const Server = (): JSX.Element => {
   }
 
   const handleSelectRecentWorkspace = (entry: RecentWorkspaceEntry): void => {
+    const shouldContinue = confirmUnsavedWorkspaceChanges(isWorkspaceDirty, () =>
+      window.confirm(t('server.dialog.unsavedChangesOnClose'))
+    )
+    if (!shouldContinue) return
+
     void openWorkspaceByPath(entry.path, {
       fallbackName: entry.name,
       removeOnError: true,
@@ -3330,6 +3353,11 @@ const Server = (): JSX.Element => {
   }
 
   const handleCloseWorkspace = async (): Promise<void> => {
+    const shouldContinue = confirmUnsavedWorkspaceChanges(isWorkspaceDirty, () =>
+      window.confirm(t('server.dialog.unsavedChangesOnClose'))
+    )
+    if (!shouldContinue) return
+
     const activeConnections = connectionsRef.current
     const openConnections = activeConnections.filter((conn) => conn.isOpen)
 
@@ -3456,6 +3484,19 @@ const Server = (): JSX.Element => {
       window.removeEventListener('keydown', onKeyDown)
     }
   }, [selectedNodeId, connections, handleOpenConnection, handleCloseConnection])
+
+  useEffect(() => {
+    const onBeforeUnload = (event: BeforeUnloadEvent): void => {
+      if (!isWorkspaceDirty) return
+      event.preventDefault()
+      event.returnValue = ''
+    }
+
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => {
+      window.removeEventListener('beforeunload', onBeforeUnload)
+    }
+  }, [isWorkspaceDirty])
 
   const handleOpenRegisterPlot = (
     tab: OpenTab,

@@ -2,6 +2,7 @@ import { AppState } from './state'
 import { IpcHandlerMap, IpcEvent, IpcEventPayloadMap } from '@shared'
 import { ModbusServer } from './modules/mobusServer'
 import { IpcMainEvent, IpcMainInvokeEvent, dialog, ipcMain } from 'electron'
+import { defaultClientState, type ClientState } from '@shared'
 import type { SystemLogger } from './modules/systemLogger'
 
 const ipcHandlerRegistry = new Map<keyof IpcHandlerMap, (...args: unknown[]) => unknown>()
@@ -54,6 +55,50 @@ type InitIpcFn = (
 ) => void
 
 export const initIpc: InitIpcFn = (app, _state, server, logger) => {
+  let clientState: ClientState = { ...defaultClientState }
+
+  const patchClientState = (patch: Partial<ClientState>): void => {
+    clientState = { ...clientState, ...patch }
+  }
+
+  // Client (legacy compatibility)
+  ipcHandle('get_connection_config', () => _state.connectionConfig)
+  ipcHandle('update_connection_config', (_, config) => _state.updateConnectionConfig(config))
+  ipcHandle('update_register_config', (_, config) => _state.updateRegisterConfig(config))
+  ipcHandle('get_client_state', () => clientState)
+  ipcHandle('set_register_mapping', (_, mapping) => _state.setRegisterMapping(mapping))
+  ipcHandle('connect', () => {
+    patchClientState({ connectState: 'connected' })
+  })
+  ipcHandle('disconnect', () => {
+    patchClientState({
+      connectState: 'disconnected',
+      polling: false,
+      scanningUniId: false,
+      scanningRegisters: false
+    })
+  })
+  ipcHandle('read', () => {})
+  ipcHandle('start_polling', () => {
+    patchClientState({ polling: true })
+  })
+  ipcHandle('stop_polling', () => {
+    patchClientState({ polling: false })
+  })
+  ipcHandle('write', () => {})
+  ipcHandle('scan_unit_ids', () => {
+    patchClientState({ scanningUniId: true })
+  })
+  ipcHandle('stop_scanning_unit_ids', () => {
+    patchClientState({ scanningUniId: false })
+  })
+  ipcHandle('scan_registers', () => {
+    patchClientState({ scanningRegisters: true })
+  })
+  ipcHandle('stop_scanning_registers', () => {
+    patchClientState({ scanningRegisters: false })
+  })
+
   // Server
   ipcHandle('add_replace_server_register', (_, params) => server.addRegister(params))
   ipcHandle('remove_server_register', (_, params) => server.removeRegister(params))
@@ -122,16 +167,25 @@ export const initIpc: InitIpcFn = (app, _state, server, logger) => {
   ipcHandle('export_system_logs', (_, filepath: string) => {
     logger?.exportToFile(filepath)
   })
-  ipcHandle('set_log_buffer_limit_mb', (_, limitMb: number) => {
+  ipcHandle('set_comm_buffer_limit_mb', (_, limitMb: number) => {
     const parsed = Number.isFinite(limitMb) ? limitMb : 100
     const normalizedMb = Math.max(1, Math.min(1024, Math.round(parsed)))
     const limitBytes = normalizedMb * 1024 * 1024
     server.getTrafficMonitor().setMaxBufferBytes(limitBytes)
+    return normalizedMb
+  })
+  ipcHandle('get_comm_buffer_limit_mb', () => {
+    return Math.max(1, Math.round(server.getTrafficMonitor().getMaxBufferBytes() / (1024 * 1024)))
+  })
+  ipcHandle('set_system_log_buffer_limit_mb', (_, limitMb: number) => {
+    const parsed = Number.isFinite(limitMb) ? limitMb : 100
+    const normalizedMb = Math.max(1, Math.min(1024, Math.round(parsed)))
+    const limitBytes = normalizedMb * 1024 * 1024
     logger?.setMaxBufferBytes(limitBytes)
     return normalizedMb
   })
-  ipcHandle('get_log_buffer_limit_mb', () => {
-    return Math.max(1, Math.round(server.getTrafficMonitor().getMaxBufferBytes() / (1024 * 1024)))
+  ipcHandle('get_system_log_buffer_limit_mb', () => {
+    return logger ? Math.max(1, Math.round(logger.getMaxBufferBytes() / (1024 * 1024))) : 100
   })
 
   ipcHandle('get_app_version', () => app.getVersion())

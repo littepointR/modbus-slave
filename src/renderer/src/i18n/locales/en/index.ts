@@ -20,6 +20,7 @@ export default {
     showLog: 'Show Log',
     hideLog: 'Hide Log',
     settings: 'Settings',
+    version: 'Version',
     language: 'Language',
     theme: 'Theme',
     themeMode: 'Appearance',
@@ -34,7 +35,8 @@ export default {
     globalFont: 'Global Font',
     globalFontSize: 'Global Font Size',
     globalEncoding: 'Global Encoding',
-    logBufferSize: 'Log Buffer Size (MB)',
+    commBufferSize: 'Communication Buffer Size (MB)',
+    systemLogBufferSize: 'System Log Buffer Size (MB)',
     returnToHome: 'Return to home',
     view: 'View',
     refresh: 'Refresh',
@@ -182,6 +184,7 @@ export default {
       editConnection: 'Edit Connection',
       editSlave: 'Edit Slave',
       commDetails: 'Communication Details',
+      systemLogs: 'System Logs',
       editScript: 'Edit Script'
     },
     dialog: {
@@ -214,7 +217,9 @@ export default {
       registerType: 'Register Type',
       startAddress: 'Start Address',
       count: 'Count',
-      addGroup: 'Add Register Group'
+      addGroup: 'Add Register Group',
+      unsavedChangesOnClose:
+        'You have unsaved workspace changes. Continue and discard these changes?'
     },
     connection: {
       protocol: 'Protocol',
