@@ -18,6 +18,7 @@ import * as monaco from 'monaco-editor'
 import { v4 as uuidv4 } from 'uuid'
 import { onEvent, sendEvent } from '@renderer/events'
 import type { ScriptDefinitionPayload, ScriptEditorWindowInit } from '@shared'
+import { useTranslation } from 'react-i18next'
 import {
   GLOBAL_MONO_FONT_KEY,
   GLOBAL_MONO_FONT_SIZE_KEY,
@@ -27,6 +28,7 @@ import {
   getGlobalMonoFontPreference,
   getGlobalMonoFontSizePreference
 } from '@renderer/settings/global-preferences'
+import { useWindowAlwaysOnTop } from '@renderer/hooks/useWindowAlwaysOnTop'
 
 loader.config({ monaco })
 
@@ -50,7 +52,9 @@ const createDefaultScript = (index: number): ScriptDefinitionPayload => ({
 })
 
 const ScriptEditorWindow = (): JSX.Element => {
+  const { t } = useTranslation()
   const theme = useTheme()
+  const { alwaysOnTop, setWindowAlwaysOnTop } = useWindowAlwaysOnTop()
   const [monoFontFamily, setMonoFontFamily] = useState<string>(() =>
     getGlobalMonoFontFamily(getGlobalMonoFontPreference())
   )
@@ -134,7 +138,22 @@ const ScriptEditorWindow = (): JSX.Element => {
   }, [])
 
   return (
-    <Box sx={{ height: '100dvh', display: 'grid', gridTemplateColumns: '340px 1fr', gap: 1.5, p: 1.5 }}>
+    <Box sx={{ height: '100dvh', display: 'flex', flexDirection: 'column', gap: 1, p: 1.5 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Typography variant="subtitle2">{`Script Editor - ${connectionAlias}`}</Typography>
+        <FormControlLabel
+          sx={{ m: 0 }}
+          control={
+            <Switch
+              size="small"
+              checked={alwaysOnTop}
+              onChange={(event) => setWindowAlwaysOnTop(event.target.checked)}
+            />
+          }
+          label={t('common.alwaysOnTop')}
+        />
+      </Box>
+      <Box sx={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: '340px 1fr', gap: 1.5 }}>
       <Paper variant="outlined" sx={{ p: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         <Typography variant="subtitle2" sx={{ mb: 1 }}>
           {`Scripts - ${connectionAlias}`}
@@ -261,6 +280,7 @@ const ScriptEditorWindow = (): JSX.Element => {
           </Box>
         )}
       </Paper>
+      </Box>
     </Box>
   )
 }

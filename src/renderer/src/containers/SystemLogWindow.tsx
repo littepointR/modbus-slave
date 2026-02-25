@@ -3,6 +3,7 @@ import { AppBar, Box, Button, Checkbox, Chip, FormControlLabel, TextField, Toolb
 import { useTranslation } from 'react-i18next'
 import type { SystemLogEntry, SystemLogStats } from '@shared'
 import { onEvent } from '@renderer/events'
+import { useWindowAlwaysOnTop } from '@renderer/hooks/useWindowAlwaysOnTop'
 import {
   GLOBAL_SYSTEM_LOG_BUFFER_MB_KEY,
   GLOBAL_MONO_FONT_SIZE_KEY,
@@ -73,6 +74,7 @@ const toRow = (entry: SystemLogEntry): LogRow => {
 
 const SystemLogWindow = (): JSX.Element => {
   const { t } = useTranslation()
+  const { alwaysOnTop, setWindowAlwaysOnTop } = useWindowAlwaysOnTop()
   const [monoFontSize, setMonoFontSize] = useState<number>(getGlobalMonoFontSizePreference)
   const [renderBufferLimitMb, setRenderBufferLimitMb] = useState<number>(getGlobalSystemLogBufferSizePreference)
   const [paused, setPaused] = useState(false)
@@ -311,6 +313,16 @@ const SystemLogWindow = (): JSX.Element => {
           <FormControlLabel
             control={<Checkbox checked={autoScroll} onChange={(e) => setAutoScroll(e.target.checked)} size="small" />}
             label={t('common.autoScroll')}
+          />
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={alwaysOnTop}
+                onChange={(e) => setWindowAlwaysOnTop(e.target.checked)}
+                size="small"
+              />
+            }
+            label={t('common.alwaysOnTop')}
           />
         </Toolbar>
       </AppBar>

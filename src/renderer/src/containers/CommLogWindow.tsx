@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { AppBar, Box, Button, Checkbox, Chip, FormControlLabel, TextField, Toolbar, Typography } from '@mui/material'
 import type { PacketStats, ServerCommPacket } from '@shared'
 import { onEvent } from '@renderer/events'
+import { useWindowAlwaysOnTop } from '@renderer/hooks/useWindowAlwaysOnTop'
 import {
   GLOBAL_COMM_BUFFER_MB_KEY,
   GLOBAL_MONO_FONT_SIZE_KEY,
@@ -251,6 +252,7 @@ const buildEntry = (packet: ServerCommPacket): CommLogEntry => {
 
 const CommLogWindow = (): JSX.Element => {
   const { t } = useTranslation()
+  const { alwaysOnTop, setWindowAlwaysOnTop } = useWindowAlwaysOnTop()
   const [monoFontSize, setMonoFontSize] = useState<number>(getGlobalMonoFontSizePreference)
   const [renderBufferLimitMb, setRenderBufferLimitMb] = useState<number>(getGlobalCommBufferSizePreference)
   const [paused, setPaused] = useState(false)
@@ -533,6 +535,16 @@ const CommLogWindow = (): JSX.Element => {
           <FormControlLabel
             control={<Checkbox checked={autoScroll} onChange={(e) => setAutoScroll(e.target.checked)} size="small" />}
             label={t('common.autoScroll')}
+          />
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={alwaysOnTop}
+                onChange={(e) => setWindowAlwaysOnTop(e.target.checked)}
+                size="small"
+              />
+            }
+            label={t('common.alwaysOnTop')}
           />
         </Toolbar>
       </AppBar>

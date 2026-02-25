@@ -205,6 +205,17 @@ export const initIpc: InitIpcFn = (app, _state, server, logger) => {
     win.__modbuxAllowClose = true
     win.close()
   })
+  ipcHandle('set_window_always_on_top', (event, alwaysOnTop: boolean) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win || win.isDestroyed()) return false
+    win.setAlwaysOnTop(Boolean(alwaysOnTop))
+    return win.isAlwaysOnTop()
+  })
+  ipcHandle('get_window_always_on_top', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win || win.isDestroyed()) return false
+    return win.isAlwaysOnTop()
+  })
 
   ipcHandle('list_serial_ports', async () => {
     try {

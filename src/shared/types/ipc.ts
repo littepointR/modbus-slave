@@ -95,7 +95,9 @@ export const IPC_CHANNELS = [
   'export_server_data',
   'import_server_data',
   'create_excel_template',
-  'confirm_window_close'
+  'confirm_window_close',
+  'set_window_always_on_top',
+  'get_window_always_on_top'
 ] as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[number]
@@ -414,6 +416,18 @@ export interface IpcHandlerSpec {
   ['confirm_window_close']: {
     args: []
     return: void
+  }
+
+  /** Set current window always-on-top state */
+  ['set_window_always_on_top']: {
+    args: [boolean]
+    return: boolean
+  }
+
+  /** Get current window always-on-top state */
+  ['get_window_always_on_top']: {
+    args: []
+    return: boolean
   }
 }
 

@@ -92,6 +92,7 @@ import {
 } from './register-plot.helpers'
 import { buildWorkspaceTabSettingsSnapshot } from './server-workspace.helpers'
 import { getWorkspaceDirtyState } from './server-unsaved-guard.helpers'
+import { useWindowAlwaysOnTop } from '@renderer/hooks/useWindowAlwaysOnTop'
 
 // =============================================================================
 // TYPES
@@ -289,6 +290,23 @@ interface DisplayFormatEditMenuState {
   mouseX: number
   mouseY: number
 }
+
+interface TreeContextMenuState {
+  mouseX: number
+  mouseY: number
+  target: 'connection' | 'slave'
+  connectionId: string
+  slaveId?: string
+}
+
+interface ActionConfirmDialogState {
+  open: boolean
+  title: string
+  message: string
+  confirmLabel: string
+}
+
+type AddressDisplayMode = 'protocol_hex' | 'protocol_dec' | 'plc'
 
 // =============================================================================
 // CONSTANTS
@@ -498,7 +516,9 @@ const getRegisterTypeIcon = (type: string) => {
   return icons[type] || <CircleIcon sx={{ fontSize: 12 }} />
 }
 
-const formatAddress = (address: number): string => {
+const formatAddress = (address: number, mode: AddressDisplayMode = 'protocol_hex'): string => {
+  if (mode === 'protocol_dec') return String(address)
+  if (mode === 'plc') return String(address + 1)
   return `0x${address.toString(16).toUpperCase().padStart(4, '0')}`
 }
 
@@ -1766,6 +1786,7 @@ interface TreeNodeProps {
   onDoubleClick?: () => void
   isSelected?: boolean
   onSelect?: () => void
+  onContextMenu?: (event: ReactMouseEvent<HTMLDivElement>) => void
   level?: number
   children?: React.ReactNode
   hasChildren?: boolean
@@ -1779,6 +1800,7 @@ const TreeNode = ({
   onDoubleClick,
   isSelected,
   onSelect,
+  onContextMenu,
   level = 0,
   children,
   hasChildren
@@ -1799,6 +1821,7 @@ const TreeNode = ({
         }}
         onClick={onSelect}
         onDoubleClick={onDoubleClick}
+        onContextMenu={onContextMenu}
       >
         <IconButton
           size="small"
@@ -1890,6 +1913,7 @@ const EditableCell = ({ value, onChange, placeholder }: EditableCellProps) => {
 const Server = (): JSX.Element => {
   const { t } = useTranslation()
   const { enqueueSnackbar } = useSnackbar()
+  const { alwaysOnTop, setWindowAlwaysOnTop } = useWindowAlwaysOnTop()
   const [connections, setConnections] = useState<Connection[]>([])
   const [expandedConnections, setExpandedConnections] = useState<Set<string>>(new Set())
   const [expandedSlaves, setExpandedSlaves] = useState<Set<string>>(new Set())
@@ -1907,6 +1931,10 @@ const Server = (): JSX.Element => {
   const [workspaceMenuAnchorEl, setWorkspaceMenuAnchorEl] = useState<null | HTMLElement>(null)
   const [connectionMenuAnchorEl, setConnectionMenuAnchorEl] = useState<null | HTMLElement>(null)
   const [toolsMenuAnchorEl, setToolsMenuAnchorEl] = useState<null | HTMLElement>(null)
+  const [treeContextMenu, setTreeContextMenu] = useState<TreeContextMenuState | null>(null)
+  const [slaveAddressDisplayModes, setSlaveAddressDisplayModes] = useState<
+    Record<string, AddressDisplayMode>
+  >({})
   const [globalEncoding, setGlobalEncoding] = useState<string>(getGlobalStringEncodingPreference)
   const [scriptsByConnection, setScriptsByConnection] = useState<Record<string, ScriptDefinition[]>>(
     {}
@@ -1920,6 +1948,13 @@ const Server = (): JSX.Element => {
   const unsavedConfirmResolverRef = useRef<((confirmed: boolean) => void) | null>(null)
   const unsavedConfirmPromiseRef = useRef<Promise<boolean> | null>(null)
   const [unsavedConfirmOpen, setUnsavedConfirmOpen] = useState(false)
+  const [actionConfirmDialog, setActionConfirmDialog] = useState<ActionConfirmDialogState>({
+    open: false,
+    title: '',
+    message: '',
+    confirmLabel: ''
+  })
+  const actionConfirmRef = useRef<(() => Promise<void> | void) | null>(null)
 
   const [newConnectionOpen, setNewConnectionOpen] = useState(false)
   const [newSlaveOpen, setNewSlaveOpen] = useState(false)
@@ -2926,6 +2961,14 @@ const Server = (): JSX.Element => {
     setEditConnectionOpen(true)
   }
 
+  const handleEditConnectionById = (connectionId: string): void => {
+    const conn = getConnectionById(connectionId)
+    if (!conn) return
+    setSelectedNodeId(connectionId)
+    setEditingConnection(conn)
+    setEditConnectionOpen(true)
+  }
+
   const handleSaveEditedConnection = async (connection: Connection) => {
     setConnections(connections.map((c) => (c.id === connection.id ? connection : c)))
     setEditConnectionOpen(false)
@@ -2948,6 +2991,15 @@ const Server = (): JSX.Element => {
     if (!slave || !conn) return
     setEditingSlave(slave)
     setEditingSlaveConnectionId(conn.id)
+    setEditSlaveOpen(true)
+  }
+
+  const handleEditSlaveById = (connectionId: string, slaveId: string): void => {
+    const slave = getSlaveById(connectionId, slaveId)
+    if (!slave) return
+    setSelectedNodeId(`${connectionId}/${slaveId}`)
+    setEditingSlave(slave)
+    setEditingSlaveConnectionId(connectionId)
     setEditSlaveOpen(true)
   }
 
@@ -3001,6 +3053,208 @@ const Server = (): JSX.Element => {
       activeTabId
     }
   }
+
+  const handleDeleteConnectionById = async (connectionId: string): Promise<void> => {
+    const connection = getConnectionById(connectionId)
+    if (!connection) return
+    requestActionConfirmation(
+      {
+        title: t('server.toolbar.deleteConnection'),
+        message: `Delete connection "${connection.alias}"?`,
+        confirmLabel: t('server.toolbar.deleteConnection')
+      },
+      async () => {
+        if (connection.isOpen) {
+          await handleCloseConnectionById(connectionId)
+        }
+
+        setConnections((prev) => prev.filter((item) => item.id !== connectionId))
+        setScriptsByConnection((prev) => {
+          const next = { ...prev }
+          delete next[connectionId]
+          return next
+        })
+        setOpenTabs((prev) => prev.filter((tab) => tab.connectionId !== connectionId))
+        setExpandedConnections((prev) => {
+          const next = new Set(prev)
+          next.delete(connectionId)
+          return next
+        })
+        setSelectedNodeId((prev) => {
+          if (!prev) return prev
+          return prev.startsWith(`${connectionId}/`) || prev === connectionId ? null : prev
+        })
+      }
+    )
+  }
+
+  const handleDeleteSlaveById = async (connectionId: string, slaveId: string): Promise<void> => {
+    const connection = getConnectionById(connectionId)
+    const slave = getSlaveById(connectionId, slaveId)
+    if (!connection || !slave) return
+    requestActionConfirmation(
+      {
+        title: t('server.toolbar.deleteSlave'),
+        message: `Delete slave "${slave.alias}" (ID:${slave.slaveId})?`,
+        confirmLabel: t('server.toolbar.deleteSlave')
+      },
+      async () => {
+        const nextConnection: Connection = {
+          ...connection,
+          slaves: connection.slaves.filter((item) => item.id !== slaveId)
+        }
+
+        setConnections((prev) =>
+          prev.map((item) => (item.id === connectionId ? nextConnection : item))
+        )
+        setOpenTabs((prev) =>
+          prev.filter((tab) => !(tab.connectionId === connectionId && tab.slaveId === slaveId))
+        )
+        setExpandedSlaves((prev) => {
+          const next = new Set(prev)
+          next.delete(slaveId)
+          return next
+        })
+        setSelectedNodeId((prev) => {
+          if (!prev) return prev
+          return prev.startsWith(`${connectionId}/${slaveId}`) ? connectionId : prev
+        })
+
+        if (connection.isOpen) {
+          try {
+            await window.api.resetServer(connectionId)
+            await syncConnectionToBackend(nextConnection)
+          } catch (error) {
+            console.error('Failed to sync slave deletion to backend:', error)
+            showUserError('Failed to sync slave deletion to backend.')
+          }
+        }
+      }
+    )
+  }
+
+  const handleCopySlaveById = (connectionId: string, slaveId: string): void => {
+    const connection = getConnectionById(connectionId)
+    const slave = getSlaveById(connectionId, slaveId)
+    if (!connection || !slave) return
+
+    const copiedSlave: Slave = {
+      ...slave,
+      id: uuidv4(),
+      alias: `${slave.alias} Copy`,
+      registerGroups: slave.registerGroups.map((group) => ({
+        ...group,
+        id: uuidv4(),
+        registers: group.registers.map((reg) => ({ ...reg }))
+      }))
+    }
+
+    const usedUnitIds = new Set(connection.slaves.map((item) => item.slaveId))
+    let nextUnitId = copiedSlave.slaveId
+    while (usedUnitIds.has(nextUnitId) && nextUnitId < 255) {
+      nextUnitId += 1
+    }
+    if (usedUnitIds.has(nextUnitId)) {
+      showUserError('No available slave ID for copy.')
+      return
+    }
+    copiedSlave.slaveId = nextUnitId
+
+    setConnections((prev) =>
+      prev.map((item) =>
+        item.id === connectionId ? { ...item, slaves: [...item.slaves, copiedSlave] } : item
+      )
+    )
+    setExpandedSlaves((prev) => new Set([...prev, copiedSlave.id]))
+
+    if (connection.isOpen) {
+      void syncSlaveToBackend(connectionId, copiedSlave).catch((error) => {
+        console.error('Failed to sync copied slave to backend:', error)
+        showUserError('Failed to sync copied slave data to backend.')
+      })
+    }
+  }
+
+  const handleExportSlaveById = async (connectionId: string, slaveId: string): Promise<void> => {
+    const slave = getSlaveById(connectionId, slaveId)
+    if (!slave) return
+    const payload = JSON.stringify(slave, null, 2)
+    const blob = new Blob([payload], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `${slave.alias.replace(/\s+/g, '_') || 'slave'}-${slave.slaveId}.json`
+    document.body.appendChild(anchor)
+    anchor.click()
+    document.body.removeChild(anchor)
+    URL.revokeObjectURL(url)
+  }
+
+  const handleImportSlaveById = async (connectionId: string, slaveId: string): Promise<void> => {
+    const connection = getConnectionById(connectionId)
+    const slave = getSlaveById(connectionId, slaveId)
+    if (!connection || !slave) return
+
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.json,application/json'
+    input.onchange = () => {
+      const file = input.files?.[0]
+      if (!file) return
+      const reader = new FileReader()
+      reader.onload = () => {
+        try {
+          const parsed = JSON.parse(String(reader.result)) as Slave
+          if (!Array.isArray(parsed.registerGroups)) {
+            showUserError('Invalid slave data file.')
+            return
+          }
+          const importedSlave: Slave = {
+            ...slave,
+            registerGroups: parsed.registerGroups.map((group) => ({
+              ...group,
+              id: group.id || uuidv4(),
+              registers: Array.isArray(group.registers)
+                ? group.registers.map((reg) => ({ ...reg }))
+                : []
+            }))
+          }
+          setConnections((prev) =>
+            prev.map((item) =>
+              item.id === connectionId
+                ? {
+                    ...item,
+                    slaves: item.slaves.map((entry) => (entry.id === slaveId ? importedSlave : entry))
+                  }
+                : item
+            )
+          )
+
+          if (connection.isOpen) {
+            void (async () => {
+              try {
+                await window.api.resetServer(connectionId)
+                await syncConnectionToBackend({
+                  ...connection,
+                  slaves: connection.slaves.map((entry) =>
+                    entry.id === slaveId ? importedSlave : entry
+                  )
+                })
+              } catch (error) {
+                console.error('Failed to sync imported slave data:', error)
+                showUserError('Failed to sync imported slave data to backend.')
+              }
+            })()
+          }
+        } catch (error) {
+          console.error('Failed to import slave data:', error)
+          showUserError('Invalid slave data file.')
+        }
+      }
+      reader.readAsText(file)
+    }
+    input.click()
+  }
   const serializeWorkspaceSnapshot = (workspace: PersistedWorkspaceSnapshot): string =>
     JSON.stringify(workspace)
   const workspaceCurrentFingerprint = useMemo(
@@ -3031,6 +3285,26 @@ const Server = (): JSX.Element => {
     unsavedConfirmResolverRef.current = null
     unsavedConfirmPromiseRef.current = null
     resolver?.(confirmed)
+  }
+
+  const requestActionConfirmation = (
+    options: Omit<ActionConfirmDialogState, 'open'>,
+    action: () => Promise<void> | void
+  ): void => {
+    actionConfirmRef.current = action
+    setActionConfirmDialog({ ...options, open: true })
+  }
+
+  const closeActionConfirmation = (): void => {
+    setActionConfirmDialog((prev) => ({ ...prev, open: false }))
+    actionConfirmRef.current = null
+  }
+
+  const confirmAction = async (): Promise<void> => {
+    const action = actionConfirmRef.current
+    closeActionConfirmation()
+    if (!action) return
+    await action()
   }
 
   useEffect(() => {
@@ -3344,6 +3618,19 @@ const Server = (): JSX.Element => {
     setToolsMenuAnchorEl(null)
   }
 
+  const closeTreeContextMenu = (): void => {
+    setTreeContextMenu(null)
+  }
+
+  const openScriptEditor = (connectionId: string): void => {
+    const targetConn = connections.find((conn) => conn.id === connectionId)
+    sendEvent('open_script_editor_window', {
+      connectionId,
+      connectionAlias: targetConn?.alias || 'Connection',
+      scripts: scriptsByConnection[connectionId] ?? []
+    })
+  }
+
   const handleSelectRecentWorkspace = (entry: RecentWorkspaceEntry): void => {
     void (async () => {
       const shouldContinue = await requestUnsavedChangesConfirmation()
@@ -3361,10 +3648,13 @@ const Server = (): JSX.Element => {
     })()
   }
   
+  const getConnectionById = (connectionId: string): Connection | null =>
+    connections.find((c) => c.id === connectionId) || null
+
   const getSelectedConnection = () => {
     if (!selectedNodeId) return null
     const connectionId = selectedNodeId.split('/')[0]
-    return connections.find((c) => c.id === connectionId) || null
+    return getConnectionById(connectionId)
   }
 
   const getSelectedSlave = () => {
@@ -3377,8 +3667,24 @@ const Server = (): JSX.Element => {
     return conn?.slaves.find((s) => s.id === slaveId) || null
   }
 
-  const handleOpenConnection = async () => {
-    const conn = getSelectedConnection()
+  const getSlaveById = (connectionId: string, slaveId: string): Slave | null => {
+    const conn = getConnectionById(connectionId)
+    if (!conn) return null
+    return conn.slaves.find((s) => s.id === slaveId) || null
+  }
+
+  const getAddressDisplayModeForSlave = (slave: Slave | null): AddressDisplayMode => {
+    if (!slave) return 'protocol_hex'
+    if (slaveAddressDisplayModes[slave.id]) return slaveAddressDisplayModes[slave.id]
+    return slave.addressType === 'plc' ? 'plc' : 'protocol_hex'
+  }
+
+  const setAddressDisplayModeForSlave = (slaveId: string, mode: AddressDisplayMode): void => {
+    setSlaveAddressDisplayModes((prev) => ({ ...prev, [slaveId]: mode }))
+  }
+
+  const handleOpenConnectionById = async (connectionId: string) => {
+    const conn = getConnectionById(connectionId)
     if (!conn) return
     try {
       const params: CreateServerParams = {
@@ -3397,6 +3703,12 @@ const Server = (): JSX.Element => {
       }
       showUserError('Failed to open connection.')
     }
+  }
+
+  const handleOpenConnection = async () => {
+    const conn = getSelectedConnection()
+    if (!conn) return
+    await handleOpenConnectionById(conn.id)
   }
 
   const handleCloseWorkspace = async (): Promise<void> => {
@@ -3440,8 +3752,8 @@ const Server = (): JSX.Element => {
     markLastWorkspaceId(null)
   }
 
-  const handleCloseConnection = async () => {
-    const conn = getSelectedConnection()
+  const handleCloseConnectionById = async (connectionId: string) => {
+    const conn = getConnectionById(connectionId)
     if (!conn) return
     try {
       await window.api.deleteServer(conn.id)
@@ -3450,6 +3762,12 @@ const Server = (): JSX.Element => {
       console.error('Failed to close connection:', error)
       showUserError('Failed to close connection.')
     }
+  }
+
+  const handleCloseConnection = async () => {
+    const conn = getSelectedConnection()
+    if (!conn) return
+    await handleCloseConnectionById(conn.id)
   }
 
   useEffect(() => {
@@ -3556,6 +3874,7 @@ const Server = (): JSX.Element => {
     const allAddresses = new Set(group.registers.map((reg) => reg.address))
     const typedSpanHints = buildTypedSpanHints(allAddresses, tab.typedInterpretation)
     const defaultInterpretation = getDefaultTypedInterpretation(group.type)
+    const addressDisplayMode = getAddressDisplayModeForSlave(slave)
 
     const seriesByAddress = new Map<number, RegisterPlotWindowInit['series'][number]>()
     selectedRegisters
@@ -3574,7 +3893,7 @@ const Server = (): JSX.Element => {
         const colorIndex = seriesByAddress.size % PLOT_SERIES_COLORS.length
         seriesByAddress.set(startAddress, {
           address: startAddress,
-          label: sourceRegister.variableName || formatAddress(startAddress),
+          label: sourceRegister.variableName || formatAddress(startAddress, addressDisplayMode),
           color: PLOT_SERIES_COLORS[colorIndex],
           interpretation
         })
@@ -3676,6 +3995,17 @@ const Server = (): JSX.Element => {
                     {isWorkspaceDirty ? '*' : ''}
                   </Typography>
                 ) : null}
+                <FormControlLabel
+                  sx={{ m: 0 }}
+                  control={
+                    <Switch
+                      size="small"
+                      checked={alwaysOnTop}
+                      onChange={(event) => setWindowAlwaysOnTop(event.target.checked)}
+                    />
+                  }
+                  label={t('common.alwaysOnTop')}
+                />
                 <SettingsMenu />
               </Box>
               <Menu
@@ -3872,17 +4202,210 @@ const Server = (): JSX.Element => {
                   disabled={!scriptTargetConnectionId}
                   onClick={() => {
                     if (!scriptTargetConnectionId) return
-                    const targetConn = connections.find((conn) => conn.id === scriptTargetConnectionId)
-                    sendEvent('open_script_editor_window', {
-                      connectionId: scriptTargetConnectionId,
-                      connectionAlias: targetConn?.alias || 'Connection',
-                      scripts: scriptsByConnection[scriptTargetConnectionId] ?? []
-                    })
+                    openScriptEditor(scriptTargetConnectionId)
                     closeTitleMenus()
                   }}
                 >
                   <Typography variant="body2">{t('server.toolbar.editScript')}</Typography>
                 </MenuItem>
+              </Menu>
+              <Menu
+                open={Boolean(treeContextMenu)}
+                onClose={closeTreeContextMenu}
+                anchorReference="anchorPosition"
+                anchorPosition={
+                  treeContextMenu
+                    ? { top: treeContextMenu.mouseY, left: treeContextMenu.mouseX }
+                    : undefined
+                }
+              >
+                {treeContextMenu?.target === 'connection' ? (
+                  (() => {
+                    const contextConnection = getConnectionById(treeContextMenu.connectionId)
+                    const isContextConnectionOpen = Boolean(contextConnection?.isOpen)
+                    return (
+                      <>
+                        <MenuItem
+                          disabled={!contextConnection || isContextConnectionOpen}
+                          onClick={() => {
+                            if (!contextConnection) return
+                            void handleOpenConnectionById(contextConnection.id)
+                            closeTreeContextMenu()
+                          }}
+                        >
+                          <Typography variant="body2">{t('common.connect')}</Typography>
+                        </MenuItem>
+                        <MenuItem
+                          disabled={!contextConnection || !isContextConnectionOpen}
+                          onClick={() => {
+                            if (!contextConnection) return
+                            void handleCloseConnectionById(contextConnection.id)
+                            closeTreeContextMenu()
+                          }}
+                        >
+                          <Typography variant="body2">{t('common.disconnect')}</Typography>
+                        </MenuItem>
+                        <MenuItem
+                          disabled={!contextConnection}
+                          onClick={() => {
+                            if (!contextConnection) return
+                            handleEditConnectionById(contextConnection.id)
+                            closeTreeContextMenu()
+                          }}
+                        >
+                          <Typography variant="body2">{t('server.toolbar.editConnection')}</Typography>
+                        </MenuItem>
+                        <MenuItem
+                          disabled={!contextConnection}
+                          onClick={() => {
+                            if (!contextConnection) return
+                            void handleDeleteConnectionById(contextConnection.id)
+                            closeTreeContextMenu()
+                          }}
+                        >
+                          <Typography variant="body2">{t('server.toolbar.deleteConnection')}</Typography>
+                        </MenuItem>
+                        <Divider />
+                        <MenuItem
+                          disabled={!contextConnection}
+                          onClick={() => {
+                            if (!contextConnection) return
+                            setSelectedConnectionForSlave(contextConnection.id)
+                            setNewSlaveOpen(true)
+                            closeTreeContextMenu()
+                          }}
+                        >
+                          <Typography variant="body2">{t('server.toolbar.newSlave')}</Typography>
+                        </MenuItem>
+                        <MenuItem
+                          disabled={!contextConnection}
+                          onClick={() => {
+                            sendEvent('open_comm_log_window')
+                            closeTreeContextMenu()
+                          }}
+                        >
+                          <Typography variant="body2">{t('server.toolbar.commDetails')}</Typography>
+                        </MenuItem>
+                      </>
+                    )
+                  })()
+                ) : treeContextMenu?.target === 'slave' ? (
+                  (() => {
+                    const contextConnection = treeContextMenu
+                      ? getConnectionById(treeContextMenu.connectionId)
+                      : null
+                    const contextSlave =
+                      treeContextMenu && treeContextMenu.slaveId
+                        ? getSlaveById(treeContextMenu.connectionId, treeContextMenu.slaveId)
+                        : null
+                    const addressMode = getAddressDisplayModeForSlave(contextSlave)
+                    return (
+                      <>
+                        <MenuItem
+                          disabled={!contextConnection || !contextSlave}
+                          onClick={() => {
+                            if (!contextConnection || !contextSlave) return
+                            handleEditSlaveById(contextConnection.id, contextSlave.id)
+                            closeTreeContextMenu()
+                          }}
+                        >
+                          <Typography variant="body2">{t('server.toolbar.editSlave')}</Typography>
+                        </MenuItem>
+                        <MenuItem
+                          disabled={!contextConnection || !contextSlave}
+                          onClick={() => {
+                            if (!contextConnection || !contextSlave) return
+                            handleCopySlaveById(contextConnection.id, contextSlave.id)
+                            closeTreeContextMenu()
+                          }}
+                        >
+                          <Typography variant="body2">{t('server.toolbar.copySlave')}</Typography>
+                        </MenuItem>
+                        <MenuItem
+                          disabled={!contextConnection || !contextSlave}
+                          onClick={() => {
+                            if (!contextConnection || !contextSlave) return
+                            void handleExportSlaveById(contextConnection.id, contextSlave.id)
+                            closeTreeContextMenu()
+                          }}
+                        >
+                          <Typography variant="body2">{t('server.toolbar.exportSlaveData')}</Typography>
+                        </MenuItem>
+                        <MenuItem
+                          disabled={!contextConnection || !contextSlave}
+                          onClick={() => {
+                            if (!contextConnection || !contextSlave) return
+                            void handleImportSlaveById(contextConnection.id, contextSlave.id)
+                            closeTreeContextMenu()
+                          }}
+                        >
+                          <Typography variant="body2">{t('server.toolbar.importSlaveData')}</Typography>
+                        </MenuItem>
+                        <MenuItem
+                          disabled={!contextConnection || !contextSlave}
+                          onClick={() => {
+                            if (!contextConnection || !contextSlave) return
+                            void handleDeleteSlaveById(contextConnection.id, contextSlave.id)
+                            closeTreeContextMenu()
+                          }}
+                        >
+                          <Typography variant="body2">{t('server.toolbar.deleteSlave')}</Typography>
+                        </MenuItem>
+                        <Divider />
+                        <MenuItem
+                          disabled={!contextConnection}
+                          onClick={() => {
+                            if (!contextConnection) return
+                            openScriptEditor(contextConnection.id)
+                            closeTreeContextMenu()
+                          }}
+                        >
+                          <Typography variant="body2">{t('server.toolbar.editScript')}</Typography>
+                        </MenuItem>
+                        <Divider />
+                        <MenuItem
+                          disabled={!contextSlave}
+                          selected={addressMode === 'protocol_hex'}
+                          onClick={() => {
+                            if (!contextSlave) return
+                            setAddressDisplayModeForSlave(contextSlave.id, 'protocol_hex')
+                            closeTreeContextMenu()
+                          }}
+                        >
+                          <Typography variant="body2">
+                            {t('server.toolbar.addressModeProtocolHex')}
+                          </Typography>
+                        </MenuItem>
+                        <MenuItem
+                          disabled={!contextSlave}
+                          selected={addressMode === 'protocol_dec'}
+                          onClick={() => {
+                            if (!contextSlave) return
+                            setAddressDisplayModeForSlave(contextSlave.id, 'protocol_dec')
+                            closeTreeContextMenu()
+                          }}
+                        >
+                          <Typography variant="body2">
+                            {t('server.toolbar.addressModeProtocolDec')}
+                          </Typography>
+                        </MenuItem>
+                        <MenuItem
+                          disabled={!contextSlave}
+                          selected={addressMode === 'plc'}
+                          onClick={() => {
+                            if (!contextSlave) return
+                            setAddressDisplayModeForSlave(contextSlave.id, 'plc')
+                            closeTreeContextMenu()
+                          }}
+                        >
+                          <Typography variant="body2">
+                            {t('server.toolbar.addressModePlc')}
+                          </Typography>
+                        </MenuItem>
+                      </>
+                    )
+                  })()
+                ) : null}
               </Menu>
             </Toolbar>
           </AppBar>
@@ -3924,6 +4447,16 @@ const Server = (): JSX.Element => {
                   onToggle={() => toggleConnection(conn.id)}
                   onDoubleClick={() => toggleConnection(conn.id)}
                   onSelect={() => setSelectedNodeId(conn.id)}
+                  onContextMenu={(event) => {
+                    event.preventDefault()
+                    setSelectedNodeId(conn.id)
+                    setTreeContextMenu({
+                      mouseX: event.clientX + 2,
+                      mouseY: event.clientY - 6,
+                      target: 'connection',
+                      connectionId: conn.id
+                    })
+                  }}
                   isSelected={selectedNodeId === conn.id}
                   hasChildren={conn.slaves.length > 0}
                 >
@@ -3936,6 +4469,17 @@ const Server = (): JSX.Element => {
                         onToggle={() => toggleSlave(slave.id)}
                         onDoubleClick={() => toggleSlave(slave.id)}
                         onSelect={() => setSelectedNodeId(`${conn.id}/${slave.id}`)}
+                        onContextMenu={(event) => {
+                          event.preventDefault()
+                          setSelectedNodeId(`${conn.id}/${slave.id}`)
+                          setTreeContextMenu({
+                            mouseX: event.clientX + 2,
+                            mouseY: event.clientY - 6,
+                            target: 'slave',
+                            connectionId: conn.id,
+                            slaveId: slave.id
+                          })
+                        }}
                         isSelected={selectedNodeId === `${conn.id}/${slave.id}`}
                         hasChildren={slave.registerGroups.length > 0}
                         level={1}
@@ -4052,6 +4596,9 @@ const Server = (): JSX.Element => {
                 const slave = conn?.slaves.find((s) => s.id === tab.slaveId)
                 const group = slave?.registerGroups.find((g) => g.id === tab.registerGroupId)
                 if (!group) return null
+                const addressDisplayMode = getAddressDisplayModeForSlave(slave || null)
+                const formatAddressForActiveSlave = (address: number): string =>
+                  formatAddress(address, addressDisplayMode)
 
                 const selectedRegisters = group.registers.filter((r) =>
                   tab.selectedAddresses.has(r.address)
@@ -4147,7 +4694,7 @@ const Server = (): JSX.Element => {
                     if (column === 'display') {
                       return (tab.registerDisplayFormat[register.address] || 'dec').toUpperCase()
                     }
-                    if (column === 'address') return formatAddress(register.address)
+                    if (column === 'address') return formatAddressForActiveSlave(register.address)
                     if (column === 'variable') return register.variableName || 'Double-click to edit'
                     if (column === 'value') {
                       if (isCoilGroup) return register.value !== 0 ? 'ON' : 'OFF'
@@ -4220,7 +4767,7 @@ const Server = (): JSX.Element => {
                               size="small"
                             />
                             <Chip
-                              label={`Start ${formatAddress(group.startAddress)}`}
+                              label={`Start ${formatAddressForActiveSlave(group.startAddress)}`}
                               variant="outlined"
                               size="small"
                             />
@@ -4648,7 +5195,7 @@ const Server = (): JSX.Element => {
                                             borderColor: 'divider'
                                           }}
                                         >
-                                          {formatAddress(register.address)}
+                                          {formatAddressForActiveSlave(register.address)}
                                         </TableCell>
                                         <TableCell
                                           sx={{
@@ -4897,10 +5444,10 @@ const Server = (): JSX.Element => {
                                                 <LinkIcon sx={{ fontSize: 12 }} />
                                                 <Typography variant="caption">
                                                   {effectiveTypedSpanHint.index === 0
-                                                    ? `${formatAddress(
+                                                    ? `${formatAddressForActiveSlave(
                                                         effectiveTypedSpanHint.startAddress
                                                       )} x${effectiveTypedSpanHint.span}`
-                                                    : `↳ ${formatAddress(
+                                                    : `↳ ${formatAddressForActiveSlave(
                                                         effectiveTypedSpanHint.startAddress
                                                       )}`}
                                                 </Typography>
@@ -5380,7 +5927,7 @@ const Server = (): JSX.Element => {
                                         return (
                                           <TableRow key={reg.address}>
                                             <TableCell sx={{ fontFamily: MONO_FONT_FAMILY, fontWeight: 700 }}>
-                                              {formatAddress(reg.address)}
+                                              {formatAddressForActiveSlave(reg.address)}
                                             </TableCell>
                                             {isCoilGroup ? (
                                               <>
@@ -5568,7 +6115,7 @@ const Server = (): JSX.Element => {
                                             return (
                                               <TableRow key={`coil-long-${idx}`}>
                                                 <TableCell sx={{ fontFamily: MONO_FONT_FAMILY }}>
-                                                  {formatAddress(groupItem.startBit)} - {formatAddress(groupItem.endBit)}
+                                                  {formatAddressForActiveSlave(groupItem.startBit)} - {formatAddressForActiveSlave(groupItem.endBit)}
                                                 </TableCell>
                                                 {(['ABCD', 'CDAB', 'BADC', 'DCBA'] as const).map((order) => {
                                                   const value = registersToUint32(pair, order)
@@ -5668,7 +6215,7 @@ const Server = (): JSX.Element => {
                                         : pagedLongGroups.map((pair, idx) => (
                                             <TableRow key={`long-${idx}`}>
                                               <TableCell sx={{ fontFamily: MONO_FONT_FAMILY }}>
-                                                {formatAddress(pair[0].address)} - {formatAddress(pair[1].address)}
+                                                {formatAddressForActiveSlave(pair[0].address)} - {formatAddressForActiveSlave(pair[1].address)}
                                               </TableCell>
                                               {(['ABCD', 'CDAB', 'BADC', 'DCBA'] as const).map((order) => {
                                                 const value = registersToUint32(pair, order)
@@ -5769,7 +6316,7 @@ const Server = (): JSX.Element => {
                                               return (
                                                 <TableRow key={`coil-float-${idx}`}>
                                                   <TableCell sx={{ fontFamily: MONO_FONT_FAMILY }}>
-                                                    {formatAddress(groupItem.startBit)} - {formatAddress(groupItem.endBit)}
+                                                    {formatAddressForActiveSlave(groupItem.startBit)} - {formatAddressForActiveSlave(groupItem.endBit)}
                                                   </TableCell>
                                                   {(['ABCD', 'CDAB', 'BADC', 'DCBA'] as const).map((order) => {
                                                     const value = registersToFloat32(pair, order)
@@ -5864,7 +6411,7 @@ const Server = (): JSX.Element => {
                                           : pagedFloatGroups.map((pair, idx) => (
                                               <TableRow key={`float-${idx}`}>
                                                 <TableCell sx={{ fontFamily: MONO_FONT_FAMILY }}>
-                                                  {formatAddress(pair[0].address)} - {formatAddress(pair[1].address)}
+                                                  {formatAddressForActiveSlave(pair[0].address)} - {formatAddressForActiveSlave(pair[1].address)}
                                                 </TableCell>
                                                 {(['ABCD', 'CDAB', 'BADC', 'DCBA'] as const).map((order) => {
                                                   const value = registersToFloat32(pair, order)
@@ -5968,7 +6515,7 @@ const Server = (): JSX.Element => {
                                                 return (
                                                   <TableRow key={`coil-double-${idx}`}>
                                                     <TableCell sx={{ fontFamily: MONO_FONT_FAMILY }}>
-                                                      {formatAddress(groupItem.startBit)} - {formatAddress(groupItem.endBit)}
+                                                      {formatAddressForActiveSlave(groupItem.startBit)} - {formatAddressForActiveSlave(groupItem.endBit)}
                                                     </TableCell>
                                                     {(['ABCDEFGH', 'GHEFCDAB', 'BADCFEHG', 'HGFEDCBA'] as const).map((order) => {
                                                       const value = registersToFloat64(quad, order)
@@ -6063,7 +6610,7 @@ const Server = (): JSX.Element => {
                                             : pagedDoubleGroups.map((quad, idx) => (
                                                 <TableRow key={`double-${idx}`}>
                                                   <TableCell sx={{ fontFamily: MONO_FONT_FAMILY }}>
-                                                    {formatAddress(quad[0].address)} - {formatAddress(quad[3].address)}
+                                                    {formatAddressForActiveSlave(quad[0].address)} - {formatAddressForActiveSlave(quad[3].address)}
                                                   </TableCell>
                                                   {(['ABCDEFGH', 'GHEFCDAB', 'BADCFEHG', 'HGFEDCBA'] as const).map((order) => {
                                                     const value = registersToFloat64(quad, order)
@@ -6158,7 +6705,7 @@ const Server = (): JSX.Element => {
                                           : pagedPanelRegisters.map((reg) => (
                                                 <TableRow key={reg.address}>
                                                   <TableCell sx={{ fontFamily: MONO_FONT_FAMILY, fontWeight: 700 }}>
-                                                    {formatAddress(reg.address)}
+                                                    {formatAddressForActiveSlave(reg.address)}
                                                   </TableCell>
                                                   <TableCell sx={{ fontFamily: MONO_FONT_FAMILY }}>
                                                     {String.fromCharCode(
@@ -6455,6 +7002,23 @@ const Server = (): JSX.Element => {
             variant="contained"
           >
             {t('common.close')}
+          </Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog
+        open={actionConfirmDialog.open}
+        onClose={closeActionConfirmation}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>{actionConfirmDialog.title}</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">{actionConfirmDialog.message}</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeActionConfirmation}>{t('common.cancel')}</Button>
+          <Button onClick={() => void confirmAction()} color="error" variant="contained">
+            {actionConfirmDialog.confirmLabel}
           </Button>
         </DialogActions>
       </Dialog>

@@ -13,6 +13,7 @@ import type { RegisterPlotData, RegisterPlotWindowInit } from '@shared'
 import { onEvent } from '@renderer/events'
 import { decodePlotValue, getWordSpanForInterpretation } from './register-plot.helpers'
 import { useTranslation } from 'react-i18next'
+import { useWindowAlwaysOnTop } from '@renderer/hooks/useWindowAlwaysOnTop'
 
 interface PlotSample extends RegisterPlotData {}
 
@@ -20,6 +21,7 @@ const STROKE_PATTERNS = ['', '6 4', '2 3', '10 4', '4 2 1 2']
 
 const RegisterPlotWindow = (): JSX.Element => {
   const { t } = useTranslation()
+  const { alwaysOnTop, setWindowAlwaysOnTop } = useWindowAlwaysOnTop()
   const [config, setConfig] = useState<RegisterPlotWindowInit | null>(null)
   const [samples, setSamples] = useState<PlotSample[]>([])
   const [paused, setPaused] = useState(false)
@@ -179,6 +181,17 @@ const RegisterPlotWindow = (): JSX.Element => {
                 />
               }
               label={t('common.autoScaleY')}
+            />
+            <FormControlLabel
+              sx={{ mr: 0 }}
+              control={
+                <Checkbox
+                  size="small"
+                  checked={alwaysOnTop}
+                  onChange={(e) => setWindowAlwaysOnTop(e.target.checked)}
+                />
+              }
+              label={t('common.alwaysOnTop')}
             />
             <TextField
               size="small"
