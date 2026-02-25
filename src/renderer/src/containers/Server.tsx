@@ -3065,7 +3065,8 @@ const Server = (): JSX.Element => {
       },
       async () => {
         if (connection.isOpen) {
-          await handleCloseConnectionById(connectionId)
+          const closeOk = await handleCloseConnectionById(connectionId)
+          if (!closeOk) return
         }
 
         setConnections((prev) => prev.filter((item) => item.id !== connectionId))
@@ -3752,15 +3753,17 @@ const Server = (): JSX.Element => {
     markLastWorkspaceId(null)
   }
 
-  const handleCloseConnectionById = async (connectionId: string) => {
+  const handleCloseConnectionById = async (connectionId: string): Promise<boolean> => {
     const conn = getConnectionById(connectionId)
-    if (!conn) return
+    if (!conn) return false
     try {
       await window.api.deleteServer(conn.id)
       setConnections((prev) => prev.map((c) => (c.id === conn.id ? { ...c, isOpen: false } : c)))
+      return true
     } catch (error) {
       console.error('Failed to close connection:', error)
       showUserError('Failed to close connection.')
+      return false
     }
   }
 
