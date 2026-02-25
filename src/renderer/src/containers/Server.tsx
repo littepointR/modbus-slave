@@ -91,7 +91,7 @@ import {
   getWordSpanForInterpretation
 } from './register-plot.helpers'
 import { buildWorkspaceTabSettingsSnapshot } from './server-workspace.helpers'
-import { confirmUnsavedWorkspaceChanges, getWorkspaceDirtyState } from './server-unsaved-guard.helpers'
+import { getWorkspaceDirtyState } from './server-unsaved-guard.helpers'
 
 // =============================================================================
 // TYPES
@@ -1918,6 +1918,9 @@ const Server = (): JSX.Element => {
   const pendingMarkWorkspaceSavedRef = useRef(false)
   const workspaceInitialFingerprintRef = useRef<string | null>(null)
   const connectionsRef = useRef<Connection[]>([])
+  const unsavedConfirmResolverRef = useRef<((confirmed: boolean) => void) | null>(null)
+  const unsavedConfirmPromiseRef = useRef<Promise<boolean> | null>(null)
+  const [unsavedConfirmOpen, setUnsavedConfirmOpen] = useState(false)
 
   const [newConnectionOpen, setNewConnectionOpen] = useState(false)
   const [newSlaveOpen, setNewSlaveOpen] = useState(false)
@@ -2103,13 +2106,6 @@ const Server = (): JSX.Element => {
       await syncSlaveToBackend(connection.id, slave)
     }
   }
-
-  useEffect(() => {
-    void window.api.startCommMonitor()
-    return () => {
-      void window.api.stopCommMonitor()
-    }
-  }, [])
 
   useEffect(() => {
     const offPlotClose = onEvent('register_plot_window_closed', (chartId) => {
@@ -3018,6 +3014,26 @@ const Server = (): JSX.Element => {
     workspaceInitialFingerprintRef.current
   )
 
+  const requestUnsavedChangesConfirmation = (): Promise<boolean> => {
+    if (!isWorkspaceDirty) return Promise.resolve(true)
+    if (unsavedConfirmPromiseRef.current) return unsavedConfirmPromiseRef.current
+
+    const promise = new Promise<boolean>((resolve) => {
+      unsavedConfirmResolverRef.current = resolve
+      setUnsavedConfirmOpen(true)
+    })
+    unsavedConfirmPromiseRef.current = promise
+    return promise
+  }
+
+  const resolveUnsavedChangesConfirmation = (confirmed: boolean): void => {
+    setUnsavedConfirmOpen(false)
+    const resolver = unsavedConfirmResolverRef.current
+    unsavedConfirmResolverRef.current = null
+    unsavedConfirmPromiseRef.current = null
+    resolver?.(confirmed)
+  }
+
   useEffect(() => {
     if (workspaceInitialFingerprintRef.current === null) {
       workspaceInitialFingerprintRef.current = workspaceCurrentFingerprint
@@ -3306,9 +3322,7 @@ const Server = (): JSX.Element => {
   }
 
   const handleOpenWorkspace = async () => {
-    const shouldContinue = confirmUnsavedWorkspaceChanges(isWorkspaceDirty, () =>
-      window.confirm(t('server.dialog.unsavedChangesOnClose'))
-    )
+    const shouldContinue = await requestUnsavedChangesConfirmation()
     if (!shouldContinue) return
 
     try {
@@ -3335,23 +3349,22 @@ const Server = (): JSX.Element => {
   }
 
   const handleSelectRecentWorkspace = (entry: RecentWorkspaceEntry): void => {
-    const shouldContinue = confirmUnsavedWorkspaceChanges(isWorkspaceDirty, () =>
-      window.confirm(t('server.dialog.unsavedChangesOnClose'))
-    )
-    if (!shouldContinue) return
+    void (async () => {
+      const shouldContinue = await requestUnsavedChangesConfirmation()
+      if (!shouldContinue) return
 
-    void openWorkspaceByPath(entry.path, {
-      fallbackName: entry.name,
-      removeOnError: true,
-      setAsLast: true
-    }).then((ok) => {
+      const ok = await openWorkspaceByPath(entry.path, {
+        fallbackName: entry.name,
+        removeOnError: true,
+        setAsLast: true
+      })
       if (!ok) {
         showUserError('Workspace file is invalid or no longer exists.')
       }
       closeTitleMenus()
-    })
+    })()
   }
-
+  
   const getSelectedConnection = () => {
     if (!selectedNodeId) return null
     const connectionId = selectedNodeId.split('/')[0]
@@ -3391,9 +3404,7 @@ const Server = (): JSX.Element => {
   }
 
   const handleCloseWorkspace = async (): Promise<void> => {
-    const shouldContinue = confirmUnsavedWorkspaceChanges(isWorkspaceDirty, () =>
-      window.confirm(t('server.dialog.unsavedChangesOnClose'))
-    )
+    const shouldContinue = await requestUnsavedChangesConfirmation()
     if (!shouldContinue) return
 
     const activeConnections = connectionsRef.current
@@ -3525,15 +3536,16 @@ const Server = (): JSX.Element => {
   }, [selectedNodeId, connections, handleOpenConnection, handleCloseConnection])
 
   useEffect(() => {
-    const onBeforeUnload = (event: BeforeUnloadEvent): void => {
-      if (!isWorkspaceDirty) return
-      event.preventDefault()
-      event.returnValue = ''
-    }
+    const offCloseRequest = onEvent('request_window_close', () => {
+      void (async () => {
+        const shouldClose = await requestUnsavedChangesConfirmation()
+        if (!shouldClose) return
+        await window.api.confirmWindowClose()
+      })()
+    })
 
-    window.addEventListener('beforeunload', onBeforeUnload)
     return () => {
-      window.removeEventListener('beforeunload', onBeforeUnload)
+      offCloseRequest()
     }
   }, [isWorkspaceDirty])
 
@@ -6428,6 +6440,29 @@ const Server = (): JSX.Element => {
         onConfirm={handleSaveEditedSlave}
         initialSlave={editingSlave}
       />
+      <Dialog
+        open={unsavedConfirmOpen}
+        onClose={() => resolveUnsavedChangesConfirmation(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>{t('server.dialog.unsavedChangesTitle')}</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">{t('server.dialog.unsavedChangesOnClose')}</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => resolveUnsavedChangesConfirmation(false)}>
+            {t('common.cancel')}
+          </Button>
+          <Button
+            onClick={() => resolveUnsavedChangesConfirmation(true)}
+            color="error"
+            variant="contained"
+          >
+            {t('common.close')}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   )
 }

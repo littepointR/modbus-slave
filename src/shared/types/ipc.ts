@@ -78,6 +78,7 @@ export const IPC_CHANNELS = [
   'stop_comm_monitor',
   'clear_comm_monitor',
   'export_comm_log',
+  'get_comm_packets',
   'get_comm_stats',
   'read_text_file',
   'write_text_file',
@@ -93,7 +94,8 @@ export const IPC_CHANNELS = [
   'get_system_log_buffer_limit_mb',
   'export_server_data',
   'import_server_data',
-  'create_excel_template'
+  'create_excel_template',
+  'confirm_window_close'
 ] as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[number]
@@ -306,6 +308,12 @@ export interface IpcHandlerSpec {
     return: void
   }
 
+  /** Get latest communication monitor packets */
+  ['get_comm_packets']: {
+    args: [number?]
+    return: ServerCommPacket[]
+  }
+
   /** Get communication statistics */
   ['get_comm_stats']: {
     args: []
@@ -400,6 +408,12 @@ export interface IpcHandlerSpec {
   ['create_excel_template']: {
     args: [CreateExcelTemplateParams]
     return: CreateExcelTemplateResult
+  }
+
+  /** Confirm and proceed window close from renderer */
+  ['confirm_window_close']: {
+    args: []
+    return: void
   }
 }
 
@@ -538,7 +552,8 @@ export const IPC_EVENTS = [
   'script_editor_run_once',
   'script_editor_window_closed',
   'system_log_entry',
-  'system_log_clear'
+  'system_log_clear',
+  'request_window_close'
 ] as const
 
 export type IpcEvent = (typeof IPC_EVENTS)[number]
@@ -571,6 +586,7 @@ export interface IpcEventPayloadMap {
   ['script_editor_window_closed']: [string]
   ['system_log_entry']: [SystemLogEntry]
   ['system_log_clear']: [void]
+  ['request_window_close']: []
 }
 
 export interface BackendMessage {

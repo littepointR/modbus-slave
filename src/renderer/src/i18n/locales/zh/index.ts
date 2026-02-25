@@ -218,6 +218,7 @@ export default {
       startAddress: '起始地址',
       count: '数量',
       addGroup: '添加寄存器组',
+      unsavedChangesTitle: '未保存修改',
       unsavedChangesOnClose: '当前工作空间有未保存修改，继续将丢失这些修改，是否继续？'
     },
     connection: {

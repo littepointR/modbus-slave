@@ -1,7 +1,7 @@
 import { AppState } from './state'
 import { IpcHandlerMap, IpcEvent, IpcEventPayloadMap } from '@shared'
 import { ModbusServer } from './modules/mobusServer'
-import { IpcMainEvent, IpcMainInvokeEvent, dialog, ipcMain } from 'electron'
+import { BrowserWindow, IpcMainEvent, IpcMainInvokeEvent, dialog, ipcMain } from 'electron'
 import { defaultClientState, type ClientState } from '@shared'
 import type { SystemLogger } from './modules/systemLogger'
 
@@ -118,6 +118,14 @@ export const initIpc: InitIpcFn = (app, _state, server, logger) => {
   ipcHandle('export_comm_log', (_, filepath: string) =>
     server.getTrafficMonitor().exportToFile(filepath)
   )
+  ipcHandle('get_comm_packets', (_, limit?: number) => {
+    const packets = server.getTrafficMonitor().getPackets()
+    if (!Number.isFinite(limit)) return packets
+    const normalized = Math.max(0, Math.floor(limit as number))
+    if (normalized === 0) return []
+    if (packets.length <= normalized) return packets
+    return packets.slice(-normalized)
+  })
   ipcHandle('get_comm_stats', () => server.getTrafficMonitor().getStats())
   ipcHandle('read_text_file', async (_, absolutePath: string) => {
     const fs = await import('fs/promises')
@@ -189,6 +197,14 @@ export const initIpc: InitIpcFn = (app, _state, server, logger) => {
   })
 
   ipcHandle('get_app_version', () => app.getVersion())
+  ipcHandle('confirm_window_close', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender) as
+      | (BrowserWindow & { __modbuxAllowClose?: boolean })
+      | null
+    if (!win || win.isDestroyed()) return
+    win.__modbuxAllowClose = true
+    win.close()
+  })
 
   ipcHandle('list_serial_ports', async () => {
     try {

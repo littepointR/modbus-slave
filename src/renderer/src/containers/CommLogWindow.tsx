@@ -15,6 +15,7 @@ import {
 const MONO_FONT_FAMILY = 'var(--modbux-mono-font, "Iosevka", "Cascadia Mono", "Consolas", monospace)'
 const MONO_FONT_SIZE = 'var(--modbux-mono-font-size, 13px)'
 const OVERSCAN = 12
+const WINDOW_TITLEBAR_PADDING_TOP = 'calc(env(titlebar-area-height, 0px) + 10px)'
 
 interface CommLogEntry {
   id: number
@@ -316,6 +317,23 @@ const CommLogWindow = (): JSX.Element => {
   )
 
   useEffect(() => {
+    window.api
+      .getCommPackets(10000)
+      .then((packets) => {
+        if (!Array.isArray(packets) || packets.length === 0) return
+        const mapped = packets.map(buildEntry)
+        entriesRef.current = mapped
+        maxLineCharsRef.current = mapped.reduce((max, entry) => Math.max(max, entry.line.length), 0)
+        bufferBytesRef.current = mapped.reduce((sum, entry) => sum + entry.sizeBytes, 0)
+        trimEntriesToLimit()
+        filterDirtyRef.current = true
+        rebuildFilteredIndices()
+        setRenderVersion((v) => v + 1)
+      })
+      .catch(() => undefined)
+  }, [rebuildFilteredIndices, trimEntriesToLimit])
+
+  useEffect(() => {
     const packetUnlisten = onEvent('comm_packet', (packet) => {
       if (paused) return
       pendingRef.current.push(packet)
@@ -462,9 +480,27 @@ const CommLogWindow = (): JSX.Element => {
   const contentWidth = Math.max(viewportWidth, Math.ceil(maxLineCharsRef.current * monoFontSize * 0.62) + 24)
 
   return (
-    <Box sx={{ height: '100vh', width: '100vw', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      <AppBar position="static" elevation={0} sx={{ bgcolor: 'background.paper', borderBottom: 1, borderColor: 'divider' }}>
-        <Toolbar variant="dense" sx={{ gap: 1, flexWrap: 'wrap' }}>
+    <Box
+      sx={{
+        height: '100vh',
+        width: '100vw',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+        pt: WINDOW_TITLEBAR_PADDING_TOP
+      }}
+    >
+      <AppBar
+        position="static"
+        elevation={0}
+        sx={{
+          bgcolor: 'background.paper',
+          borderBottom: 1,
+          borderColor: 'divider',
+          boxShadow: '0 6px 18px rgba(15,23,42,0.1)'
+        }}
+      >
+        <Toolbar variant="dense" sx={{ gap: 1, flexWrap: 'wrap', py: 0.4 }}>
           <Typography variant="h6" sx={{ fontSize: '1rem', mr: 1 }}>
             {t('server.toolbar.commDetails')}
           </Typography>

@@ -218,6 +218,7 @@ export default {
       startAddress: 'Start Address',
       count: 'Count',
       addGroup: 'Add Register Group',
+      unsavedChangesTitle: 'Unsaved Changes',
       unsavedChangesOnClose:
         'You have unsaved workspace changes. Continue and discard these changes?'
     },

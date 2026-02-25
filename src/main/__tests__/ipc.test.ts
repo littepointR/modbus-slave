@@ -59,5 +59,6 @@ describe('initIpc', () => {
     expect(channels).toContain('update_connection_config')
     expect(channels).toContain('update_register_config')
     expect(channels).toContain('stop_scanning_unit_ids')
+    expect(channels).toContain('get_comm_packets')
   })
 })
