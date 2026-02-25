@@ -97,6 +97,34 @@ e2e/              # Playwright E2E tests
   - Coil bit values are strictly `0/1`.
   - For coil conversion views (`Long/Float/Double`), conversions must respect `8 bits = 1 byte`.
 - User operation failures (invalid input / invalid workspace / open-close connection errors / invalid batch operations) should show via `notistack` snackbar.
+- Connection/slave tree supports right-click context menu actions; avoid regressions where menu target fallback causes flicker or wrong menu type.
+- Delete flows must use in-app MUI confirmation dialog (do not use native `window.confirm`).
+
+## Window/IPC Guardrails
+
+- Main process close handling uses renderer-confirmed close bridge:
+  - `request_window_close` event from main to renderer
+  - renderer must call either `confirm_window_close` (proceed) or `reject_window_close` (cancel)
+- Do not reintroduce time-based force-close that can bypass unsaved-work confirmation.
+- Keep `set_window_always_on_top` / `get_window_always_on_top` IPC behavior consistent across tool windows.
+
+## React StrictMode Notes
+
+- Renderer runs under `React.StrictMode` in development.
+- Any startup `useEffect` with side effects (auto-load workspace, auto-fetch, logging) must be idempotent or explicitly guarded against double invocation.
+- Prefer per-window/session guard refs/flags for one-time restore logic to prevent duplicated actions/logs in dev.
+
+## Tool Window Layout Notes
+
+- Tool windows (Comm Log / System Log / Plot / Script Editor) should keep top controls in structured rows:
+  - row 1: title + status chips/summary + toggles (auto-scroll/always-on-top)
+  - row 2: primary inputs (filters/ranges) + action buttons
+- Keep `WINDOW_TITLEBAR_PADDING_TOP` for custom titlebar overlay builds so controls do not collide with draggable title regions.
+
+## Communication Log Notes
+
+- Comm detail data should be buffered even when the detail window has not been opened yet.
+- On window mount, reconcile snapshot (`get_comm_packets`) and queued live packets by packet id to avoid startup duplicates.
 
 ## React Patterns
 
