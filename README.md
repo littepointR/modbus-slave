@@ -1,4 +1,4 @@
-# Modbux
+# Modbus Slave
 
 > by [ploxc](https://github.com/ploxc)
 
@@ -6,15 +6,15 @@
 
 ## A Modbus Client & Server Simulation Tool
 
-**Modbux is the tool I desperately needed four years ago.** It handles both Modbus TCP and RTU, lets you assign datatypes to registers, scan for addresses and data, simulate servers for testing, and actually _understand_ what you're reading, all in one app.
+**Modbus Slave is the tool I desperately needed four years ago.** It handles both Modbus TCP and RTU, lets you assign datatypes to registers, scan for addresses and data, simulate servers for testing, and actually _understand_ what you're reading, all in one app.
 
 ## Download
 
-**[Download the latest release](https://github.com/ploxc/modbux/releases/latest)**
+**[Download the latest release](https://github.com/ploxc/modbus-slave/releases/latest)**
 
 Available for Windows and macOS
 
-**[Read the documentation](https://github.com/ploxc/modbux/wiki)**
+**[Read the documentation](https://github.com/ploxc/modbus-slave/wiki)**
 
 ## Features
 
@@ -47,7 +47,7 @@ Available for Windows and macOS
 
 ## UI
 
-![Modbux Client UI](./resources/modbux-client.png)
+![Modbus Slave Client UI](./resources/modbus-slave-client.png)
 
 ## Why This Exists
 
@@ -79,13 +79,13 @@ I use it every single day now. The idea of writing Modbus code and just _hoping_
 
 Built with Electron, React, and Material-UI. Open source because this industry needs better tools.
 
-## Why "Modbux"?
+## Why "Modbus Slave"?
 
-It's a typo I always made, _modbux_ instead of _modbus_. But it fits: it's your user experience (UX) working with Modbus. The typo became the brand.
+It's a typo I always made, _modbus-slave_ instead of _modbus_. But it fits: it's your user experience (UX) working with Modbus. The typo became the brand.
 
 ## Pro Tip: Let AI Do the Boring Stuff
 
-Saved configs are JSON. Show Claude or ChatGPT a few example registers, paste your device documentation, ask it to complete the mapping. Load it back into Modbux, done. Welcome to 2025.
+Saved configs are JSON. Show Claude or ChatGPT a few example registers, paste your device documentation, ask it to complete the mapping. Load it back into Modbus Slave, done. Welcome to 2025.
 
 ## Installation
 
@@ -104,7 +104,7 @@ Download the `.dmg` file from releases.
 
 ## Build It Yourself
 
-Modbux is an Electron application built with React, TypeScript, and Material-UI.
+Modbus Slave is an Electron application built with React, TypeScript, and Material-UI.
 
 ### Prerequisites
 
@@ -116,8 +116,8 @@ Modbux is an Electron application built with React, TypeScript, and Material-UI.
 **Clone and install dependencies:**
 
 ```bash
-git clone https://github.com/ploxc/modbux.git
-cd modbux
+git clone https://github.com/ploxc/modbus-slave.git
+cd modbus-slave
 yarn
 ```
 
@@ -166,7 +166,7 @@ yarn build:linux
 
 ## Contributing
 
-Found a bug? Have a feature request? **Please open an issue!** Modbux was born from real-world frustrations, and your feedback helps make it better for everyone in the industry.
+Found a bug? Have a feature request? **Please open an issue!** Modbus Slave was born from real-world frustrations, and your feedback helps make it better for everyone in the industry.
 
 Feel free to contribute—whether it's reporting issues, suggesting features, or submitting pull requests. Let's build the Modbus tool we all wish we'd had from day one.
 

@@ -1,4 +1,9 @@
-import { _electron as electron, expect, type ElectronApplication, type Page } from '@playwright/test'
+import {
+  _electron as electron,
+  expect,
+  type ElectronApplication,
+  type Page
+} from '@playwright/test'
 import { resolve } from 'path'
 import net from 'net'
 
@@ -17,7 +22,7 @@ export const launchMainWindow = async (): Promise<{ app: ElectronApplication; pa
     const windows = app.windows()
     for (const win of windows) {
       const title = await win.title()
-      if (title === 'Modbux') {
+      if (title === 'Modbus Slave Emulator') {
         await win.waitForLoadState('domcontentloaded')
         await win.waitForTimeout(500)
         return { app, page: win }
@@ -27,11 +32,18 @@ export const launchMainWindow = async (): Promise<{ app: ElectronApplication; pa
   }
 
   await app.close()
-  throw new Error('Main Modbux window not found')
+  throw new Error('Main Modbus Slave window not found')
 }
 
 export const closeApp = async (app: ElectronApplication | undefined): Promise<void> => {
-  await app?.close()
+  if (!app) return
+  await app.evaluate((ctx) => {
+    const wins = ctx.BrowserWindow.getAllWindows()
+    wins.forEach((w: any) => {
+      w.__modbusSlaveAllowClose = true
+    })
+  })
+  await app.close()
 }
 
 export const sendReadHoldingRegisters = async (

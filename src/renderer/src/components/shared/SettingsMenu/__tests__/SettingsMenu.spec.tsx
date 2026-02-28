@@ -45,8 +45,22 @@ vi.mock('@renderer/theme/theme-settings', () => ({
   })
 }))
 
+vi.mock('@renderer/settings/global-preferences', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@renderer/settings/global-preferences')>()
+  return {
+    ...actual,
+    GLOBAL_PREFERENCE_CHANGE_EVENT: 'mock-event',
+    getGlobalMonoFontPreference: () => 'Iosevka',
+    getGlobalMonoFontSizePreference: () => 13,
+    getGlobalCommBufferSizePreference: () => 50,
+    getGlobalSystemLogBufferSizePreference: () => 20,
+    getGlobalStringEncodingPreference: () => 'UTF-8'
+  }
+})
+
 vi.mock('@renderer/context/root.zustand', () => ({
-  useRootZustand: (selector: (state: { version: string }) => string) => selector({ version: '2.1.0' })
+  useRootZustand: (selector: (state: { version: string }) => string) =>
+    selector({ version: '2.1.0' })
 }))
 
 describe('SettingsMenu', () => {

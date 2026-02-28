@@ -16,13 +16,13 @@ const CLIENT_CONFIG_MIGRATIONS: Record<number, Migration<RegisterMapConfig>> = {
 
 /**
  * Migrate client config from v1 to v2.
- * - Adds version and modbuxVersion fields
+ * - Adds version and modbusSlaveVersion fields
  */
 function migrateClientV1toV2(v1Config: unknown): RegisterMapConfig {
   const config = v1Config as V1ClientConfig
   return {
     version: 2,
-    modbuxVersion: '1.5.0',
+    modbusSlaveVersion: '1.5.0',
     name: config.name,
     registerMapping: config.registerMapping ?? (v1Config as RegisterMapping)
   }

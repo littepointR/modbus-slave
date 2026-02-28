@@ -1,6 +1,6 @@
-# Modbux (Gemini Instructional Context)
+# Modbus Slave (Gemini Instructional Context)
 
-Modbux is a professional Modbus Client/Server simulation tool built with Electron, React, and TypeScript. It is currently undergoing a strategic shift (v2.0) to focus primarily on being a high-performance, professional-grade **Modbus Slave (Server) Emulator**.
+Modbus Slave is a professional Modbus Client/Server simulation tool built with Electron, React, and TypeScript. It is currently undergoing a strategic shift (v2.0) to focus primarily on being a high-performance, professional-grade **Modbus Slave (Server) Emulator**.
 
 ## Core Mandates & Vision
 - **Server-First:** Prioritize Modbus Slave simulation features (Multi-Slave, Traffic Monitoring, Easing Functions).

@@ -130,7 +130,7 @@ export default {
       save: 'Save configuration',
       saveTooltip: 'save datatype, scaling and comment configuration to json file',
       load: 'Load configuration',
-      loadTooltip: 'load a modbux client configuration file',
+      loadTooltip: 'load a modbus-slave client configuration file',
       clear: 'Clear configuration',
       clearTooltip: 'clear datatype, scaling and comment configuration'
     },
@@ -374,7 +374,7 @@ export default {
     invalidConfig: 'Invalid Config',
     invalidJson: 'INVALID JSON: {{message}}',
     futureVersion:
-      'This config was created with a newer version of Modbux. Some features may not work correctly.',
+      'This config was created with a newer version of Modbus Slave. Some features may not work correctly.',
     mixedEndianness:
       'Warning: Config had mixed byte order settings. Now using {{endian}} globally. Please verify.'
   },

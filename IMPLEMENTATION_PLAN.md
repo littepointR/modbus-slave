@@ -1,10 +1,10 @@
-# Modbux Server - 专业 Modbus 从机仿真器
+# Modbus Slave Server - 专业 Modbus 从机仿真器
 
 ## 项目概述
 
 基于对 Redisant Modbus Slave Emulator (MSE) 的深度分析，制定本实现计划。**本版本专注从机(Server)功能，移除主机(Client)功能**，目标是实现一个功能完整、专业级的 Modbus 从机仿真工具，具备多从站仿真、通信监视、数据转换、实时绘图、缓动函数等高级功能。
 
-**工作区:** `/Users/suyue/work/modbux/.worktrees/redisant-replication`  
+**工作区:** `/Users/suyue/work/modbus-slave/.worktrees/redisant-replication`  
 **分支:** `feature/redisant-replication`  
 **基础版本:** v1.6.0  
 **定位:** 专注 Modbus Server/Slave 仿真
@@ -13,9 +13,9 @@
 
 ## 一、功能差距分析
 
-### 当前 Modbux vs Redisant MSE (从机功能对比)
+### 当前 Modbus Slave vs Redisant MSE (从机功能对比)
 
-| 功能模块 | Redisant MSE | Modbux 当前 | 差距等级 |
+| 功能模块 | Redisant MSE | Modbus Slave 当前 | 差距等级 |
 |---------|-------------|------------|---------|
 | **协议支持** | 6种 (RTU/ASCII/TCP/UDP/RTUoverTCP/RTUoverUDP) | 2种 (RTU/TCP) | ⭐⭐⭐ 高 |
 | **多从站仿真** | 一端口多Slave ID | ❌ 单Server | ⭐⭐⭐ 高 |
@@ -637,7 +637,7 @@ yarn add xlsx @mui/x-tree-view
 - [ ] Excel 导入导出数据一致
 
 ### E2E 测试
-- [ ] 完整链路: 外部 Client ↔ Modbux Server (多从站)
+- [ ] 完整链路: 外部 Client ↔ Modbus Slave Server (多从站)
 - [ ] 通信监视实时显示
 - [ ] 图表实时更新
 - [ ] 树形导航交互

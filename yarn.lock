@@ -6316,9 +6316,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"modbux@workspace:.":
+"modbus-slave@workspace:.":
   version: 0.0.0-use.local
-  resolution: "modbux@workspace:."
+  resolution: "modbus-slave@workspace:."
   dependencies:
     "@ant-design/icons": "npm:^5.6.1"
     "@electron-toolkit/eslint-config-prettier": "npm:^2.0.0"

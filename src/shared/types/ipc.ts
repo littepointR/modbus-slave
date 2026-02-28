@@ -464,6 +464,7 @@ export interface ImportServerDataResult {
   importedCount: number
   errors: Array<{ row: number; message: string }>
   warnings: string[]
+  data?: unknown
 }
 
 export interface CreateExcelTemplateParams {

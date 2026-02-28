@@ -13,8 +13,8 @@ import {
   getGlobalMonoFontSizePreference
 } from '@renderer/settings/global-preferences'
 
-const MONO_FONT_FAMILY = 'var(--modbux-mono-font, "Iosevka", "Cascadia Mono", "Consolas", monospace)'
-const MONO_FONT_SIZE = 'var(--modbux-mono-font-size, 13px)'
+const MONO_FONT_FAMILY = 'var(--modbus-slave-mono-font, "Iosevka", "Cascadia Mono", "Consolas", monospace)'
+const MONO_FONT_SIZE = 'var(--modbus-slave-mono-font-size, 13px)'
 const OVERSCAN = 12
 const WINDOW_TITLEBAR_PADDING_TOP = 'calc(env(titlebar-area-height, 0px) + 10px)'
 

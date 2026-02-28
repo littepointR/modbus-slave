@@ -29,7 +29,7 @@ test.afterAll(async () => {
 
 test.describe.serial('Server Smoke And Comm E2E', () => {
   test('app launches and shows server toolbar', async () => {
-    expect(await page.title()).toBe('Modbux')
+    expect(await page.title()).toBe('Modbus Slave Emulator')
     await expect(page.getByRole('button', { name: /连接|Connection/ })).toBeVisible()
     await expect(page.getByRole('button', { name: /工作空间|Workspace/ })).toBeVisible()
     await expect(page.getByText('Connections', { exact: true })).toBeVisible()
@@ -43,7 +43,7 @@ test.describe.serial('Server Smoke And Comm E2E', () => {
     await themeModeCombobox.click()
     await page.getByRole('option', { name: /Light|亮色/ }).click()
     await expect(
-      page.evaluate(() => localStorage.getItem('modbux.theme.mode'))
+      page.evaluate(() => localStorage.getItem('modbus-slave.theme.mode'))
     ).resolves.toBe('light')
 
     const colorPickerToggle = page.getByLabel('toggle-theme-color-picker')
@@ -52,13 +52,13 @@ test.describe.serial('Server Smoke And Comm E2E', () => {
     }
     await page.getByLabel(/Blue|蓝色/).click()
     await expect(
-      page.evaluate(() => localStorage.getItem('modbux.theme.color'))
+      page.evaluate(() => localStorage.getItem('modbus-slave.theme.color'))
     ).resolves.toBe('blue')
 
     await themeModeCombobox.click()
     await page.getByRole('option', { name: /Auto|自动/ }).click()
     await expect(
-      page.evaluate(() => localStorage.getItem('modbux.theme.mode'))
+      page.evaluate(() => localStorage.getItem('modbus-slave.theme.mode'))
     ).resolves.toBe('system')
 
     await page.keyboard.press('Escape')

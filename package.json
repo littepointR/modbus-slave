@@ -1,5 +1,5 @@
 {
-  "name": "modbux",
+  "name": "modbus-slave",
   "version": "2.1.0",
   "description": "A Modbus Client/Server tool",
   "main": "./out/main/index.js",
@@ -8,13 +8,13 @@
     "email": "deketelaerejens@gmail.com"
   },
   "license": "MIT",
-  "homepage": "https://github.com/ploxc/modbux",
+  "homepage": "https://github.com/ploxc/modbus-slave",
   "repository": {
     "type": "git",
-    "url": "https://github.com/ploxc/modbux.git"
+    "url": "https://github.com/ploxc/modbus-slave.git"
   },
   "bugs": {
-    "url": "https://github.com/ploxc/modbux/issues"
+    "url": "https://github.com/ploxc/modbus-slave/issues"
   },
   "scripts": {
     "format": "prettier --write .",
@@ -33,7 +33,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "electron-vite build && playwright test",
-    "cli": "node ./scripts/modbux-cli.mjs",
+    "cli": "node ./scripts/modbus-slave-cli.mjs",
     "checkup": "yarn lint && yarn typecheck && yarn test && yarn test:e2e"
   },
   "dependencies": {

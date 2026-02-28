@@ -51,7 +51,7 @@ describe('initIpc', () => {
         getMaxBufferBytes: vi.fn().mockReturnValue(100 * 1024 * 1024)
       }),
       getServerData: vi.fn().mockReturnValue(new Map())
-    } as unknown as import('../modules/mobusServer').ModbusServer
+    } as unknown as import('../modules/modbusServer').ModbusServer
 
     initIpc(app, state, server)
 

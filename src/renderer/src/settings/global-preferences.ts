@@ -1,10 +1,10 @@
-export const GLOBAL_MONO_FONT_KEY = 'modbux.global.monoFont'
-export const GLOBAL_MONO_FONT_SIZE_KEY = 'modbux.global.monoFontSize'
-export const GLOBAL_STRING_ENCODING_KEY = 'modbux.global.stringEncoding'
-export const GLOBAL_COMM_BUFFER_MB_KEY = 'modbux.global.commBufferMb'
-export const GLOBAL_SYSTEM_LOG_BUFFER_MB_KEY = 'modbux.global.systemLogBufferMb'
-export const GLOBAL_LEGACY_LOG_BUFFER_MB_KEY = 'modbux.global.logBufferMb'
-export const GLOBAL_PREFERENCE_CHANGE_EVENT = 'modbux-global-preference-change'
+export const GLOBAL_MONO_FONT_KEY = 'modbus-slave.global.monoFont'
+export const GLOBAL_MONO_FONT_SIZE_KEY = 'modbus-slave.global.monoFontSize'
+export const GLOBAL_STRING_ENCODING_KEY = 'modbus-slave.global.stringEncoding'
+export const GLOBAL_COMM_BUFFER_MB_KEY = 'modbus-slave.global.commBufferMb'
+export const GLOBAL_SYSTEM_LOG_BUFFER_MB_KEY = 'modbus-slave.global.systemLogBufferMb'
+export const GLOBAL_LEGACY_LOG_BUFFER_MB_KEY = 'modbus-slave.global.logBufferMb'
+export const GLOBAL_PREFERENCE_CHANGE_EVENT = 'modbus-slave-global-preference-change'
 
 export interface GlobalPreferenceChangeDetail {
   key: string
@@ -70,7 +70,7 @@ export const getGlobalMonoFontFamily = (fontName: string): string => {
 }
 
 export const applyGlobalMonoFontPreference = (fontName: string): void => {
-  document.documentElement.style.setProperty('--modbux-mono-font', getGlobalMonoFontFamily(fontName))
+  document.documentElement.style.setProperty('--modbus-slave-mono-font', getGlobalMonoFontFamily(fontName))
 }
 
 export const setGlobalMonoFontPreference = (fontName: string): void => {
@@ -93,7 +93,7 @@ export const getGlobalMonoFontSizePreference = (): number => {
 }
 
 export const applyGlobalMonoFontSizePreference = (fontSize: number): void => {
-  document.documentElement.style.setProperty('--modbux-mono-font-size', `${clampMonoFontSize(fontSize)}px`)
+  document.documentElement.style.setProperty('--modbus-slave-mono-font-size', `${clampMonoFontSize(fontSize)}px`)
 }
 
 export const setGlobalMonoFontSizePreference = (fontSize: number): void => {

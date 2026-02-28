@@ -1,6 +1,6 @@
-# Modbux AGENTS.md
+# Modbus Slave AGENTS.md
 
-Coding guidelines for AI agents working on the Modbux Electron + React project.
+Coding guidelines for AI agents working on the Modbus Slave Electron + React project.
 
 ## Tech Stack
 

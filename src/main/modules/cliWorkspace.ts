@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid'
-import { ModbusServer } from './mobusServer'
+import { ModbusServer } from './modbusServer'
 import { CreateServerParams, RegisterParams, ServerConnectionConfig, UnitIdString } from '@shared'
 import type { SystemLogger } from './systemLogger'
 

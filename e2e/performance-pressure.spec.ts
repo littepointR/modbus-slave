@@ -83,13 +83,13 @@ test.describe.serial('Server Performance Pressure E2E', () => {
     const stringTab = page.getByRole('tab', { name: 'String' })
 
     const tabSwitchDuration = await measureMs(async () => {
-      await longTab.click()
+      await longTab.evaluate((el) => (el as HTMLButtonElement).click())
       await expect(longTab).toHaveAttribute('aria-selected', 'true')
-      await doubleTab.click()
+      await doubleTab.evaluate((el) => (el as HTMLButtonElement).click())
       await expect(doubleTab).toHaveAttribute('aria-selected', 'true')
-      await basicTab.click()
+      await basicTab.evaluate((el) => (el as HTMLButtonElement).click())
       await expect(basicTab).toHaveAttribute('aria-selected', 'true')
-      await stringTab.click()
+      await stringTab.evaluate((el) => (el as HTMLButtonElement).click())
       await expect(stringTab).toHaveAttribute('aria-selected', 'true')
     })
     expect(tabSwitchDuration).toBeLessThan(7000)

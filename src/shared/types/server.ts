@@ -113,7 +113,7 @@ export type ServerRegistersPerUnit = z.infer<typeof ServerRegistersPerUnitSchema
 // Final server config schema (v2 with metadata)
 export const ServerConfigSchema = z.object({
   version: z.number(),
-  modbuxVersion: z.string(),
+  modbusSlaveVersion: z.string(),
   name: z.string(),
   littleEndian: z.boolean(),
   serverRegistersPerUnit: ServerRegistersPerUnitSchema

@@ -5,7 +5,7 @@ import icon from '../../resources/icon.png?asset'
 import { initIpc, onIpcEvent } from './ipc'
 import { AppState } from './state'
 import os from 'os'
-import { ModbusServer } from './modules/mobusServer'
+import { ModbusServer } from './modules/modbusServer'
 import { Windows } from '@shared'
 import type {
   RegisterPlotData,
@@ -43,21 +43,21 @@ const lockWindowTitle = (window: BrowserWindow, title: string): void => {
 
 const attachCloseRequestBridge = (window: BrowserWindow): void => {
   const guardedWindow = window as BrowserWindow & {
-    __modbuxAllowClose?: boolean
-    __modbuxCloseRequestPending?: boolean
+    __modbusSlaveAllowClose?: boolean
+    __modbusSlaveCloseRequestPending?: boolean
   }
   window.on('close', (event) => {
-    if (guardedWindow.__modbuxAllowClose) {
-      guardedWindow.__modbuxCloseRequestPending = false
+    if (guardedWindow.__modbusSlaveAllowClose) {
+      guardedWindow.__modbusSlaveCloseRequestPending = false
       return
     }
     if (window.webContents.isDestroyed()) return
-    if (guardedWindow.__modbuxCloseRequestPending) {
-      guardedWindow.__modbuxAllowClose = true
+    if (guardedWindow.__modbusSlaveCloseRequestPending) {
+      guardedWindow.__modbusSlaveAllowClose = true
       return
     }
     event.preventDefault()
-    guardedWindow.__modbuxCloseRequestPending = true
+    guardedWindow.__modbusSlaveCloseRequestPending = true
     window.webContents.send('request_window_close')
   })
 }
@@ -137,8 +137,8 @@ function createWindow(): BrowserWindow {
   })
 
   windows.main.on('close', () => {
-    const mainWindow = windows.main as (BrowserWindow & { __modbuxAllowClose?: boolean }) | null
-    if (!mainWindow?.__modbuxAllowClose) return
+    const mainWindow = windows.main as (BrowserWindow & { __modbusSlaveAllowClose?: boolean }) | null
+    if (!mainWindow?.__modbusSlaveAllowClose) return
     windows.server?.close()
     windows.commLog?.close()
     windows.systemLog?.close()
@@ -191,8 +191,8 @@ onIpcEvent('open_server_window', () => {
   }
 
   windows.server.on('close', () => {
-    const serverWindow = windows.server as (BrowserWindow & { __modbuxAllowClose?: boolean }) | null
-    if (!serverWindow?.__modbuxAllowClose) return
+    const serverWindow = windows.server as (BrowserWindow & { __modbusSlaveAllowClose?: boolean }) | null
+    if (!serverWindow?.__modbusSlaveAllowClose) return
     windows.server = null
   })
   lockWindowTitle(windows.server, SERVER_WINDOW_TITLE)

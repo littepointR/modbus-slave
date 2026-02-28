@@ -130,7 +130,7 @@ export default {
       save: '保存配置',
       saveTooltip: '将数据类型、缩放因子和注释配置保存到 JSON 文件',
       load: '加载配置',
-      loadTooltip: '加载 modbux 客户端配置文件',
+      loadTooltip: '加载 modbus-slave 客户端配置文件',
       clear: '清除配置',
       clearTooltip: '清除数据类型、缩放因子和注释配置'
     },
@@ -371,7 +371,7 @@ export default {
     configMigrated: '配置已从旧格式更新',
     invalidConfig: '无效配置',
     invalidJson: '无效的 JSON: {{message}}',
-    futureVersion: '此配置是使用较新版本的 Modbux 创建的。某些功能可能无法正常工作。',
+    futureVersion: '此配置是使用较新版本的 Modbus Slave 创建的。某些功能可能无法正常工作。',
     mixedEndianness: '警告：配置具有混合的字节序设置。现已全局使用 {{endian}}。请验证。'
   },
 

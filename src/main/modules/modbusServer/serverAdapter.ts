@@ -664,7 +664,7 @@ export class RtuServerAdapter extends BaseServerAdapter {
           // Report Server ID (serial only).
           const serverId = 0x01
           const runIndicator = 0xff
-          const description = Buffer.from('MODBUX', 'ascii')
+          const description = Buffer.from('MODBUS-SLAVE', 'ascii')
           const byteCount = 2 + description.length
           response = Buffer.concat([
             Buffer.from([functionCode, byteCount, serverId, runIndicator]),
@@ -713,7 +713,7 @@ export class RtuServerAdapter extends BaseServerAdapter {
             break
           }
           const readDeviceIdCode = data[2] ?? 0x01
-          const vendor = Buffer.from('Modbux', 'ascii')
+          const vendor = Buffer.from('Modbus Slave', 'ascii')
           const product = Buffer.from('Server Emulator', 'ascii')
           const revision = Buffer.from('1.0', 'ascii')
 

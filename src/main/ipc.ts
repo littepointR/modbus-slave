@@ -1,6 +1,6 @@
 import { AppState } from './state'
 import { IpcHandlerMap, IpcEvent, IpcEventPayloadMap } from '@shared'
-import { ModbusServer } from './modules/mobusServer'
+import { ModbusServer } from './modules/modbusServer'
 import { BrowserWindow, IpcMainEvent, IpcMainInvokeEvent, dialog, ipcMain } from 'electron'
 import { defaultClientState, type ClientState } from '@shared'
 import type { SystemLogger } from './modules/systemLogger'
@@ -139,7 +139,7 @@ export const initIpc: InitIpcFn = (app, _state, server, logger) => {
     const result = await dialog.showOpenDialog({
       title: 'Open Workspace',
       properties: ['openFile'],
-      filters: [{ name: 'Modbux Workspace', extensions: ['json'] }]
+      filters: [{ name: 'Modbus Slave Workspace', extensions: ['json'] }]
     })
     if (result.canceled || result.filePaths.length === 0) return null
     return result.filePaths[0]
@@ -200,23 +200,23 @@ export const initIpc: InitIpcFn = (app, _state, server, logger) => {
   ipcHandle('confirm_window_close', (event) => {
     const win = BrowserWindow.fromWebContents(event.sender) as
       | (BrowserWindow & {
-          __modbuxAllowClose?: boolean
-          __modbuxCloseRequestPending?: boolean
+          __modbusSlaveAllowClose?: boolean
+          __modbusSlaveCloseRequestPending?: boolean
         })
       | null
     if (!win || win.isDestroyed()) return
-    win.__modbuxCloseRequestPending = false
-    win.__modbuxAllowClose = true
+    win.__modbusSlaveCloseRequestPending = false
+    win.__modbusSlaveAllowClose = true
     win.close()
   })
   ipcHandle('reject_window_close', (event) => {
     const win = BrowserWindow.fromWebContents(event.sender) as
       | (BrowserWindow & {
-          __modbuxCloseRequestPending?: boolean
+          __modbusSlaveCloseRequestPending?: boolean
         })
       | null
     if (!win || win.isDestroyed()) return
-    win.__modbuxCloseRequestPending = false
+    win.__modbusSlaveCloseRequestPending = false
   })
   ipcHandle('set_window_always_on_top', (event, alwaysOnTop: boolean) => {
     const win = BrowserWindow.fromWebContents(event.sender)
@@ -365,14 +365,29 @@ export const initIpc: InitIpcFn = (app, _state, server, logger) => {
 
   ipcHandle('import_server_data', async (_, params) => {
     const fs = await import('fs')
+    const { importFromExcel } = await import('../shared/utils/excel')
 
     try {
-      fs.readFileSync(params.filePath)
+      const buffer = fs.readFileSync(params.filePath)
+      const result = importFromExcel(buffer, {
+        defaultUnitId: params.unitId ? parseInt(params.unitId, 10) : 1
+      })
+
+      if (!result.success || !result.data) {
+        return {
+          success: false,
+          importedCount: 0,
+          errors: result.errors || [],
+          warnings: []
+        }
+      }
+
       return {
         success: true,
-        importedCount: 0,
+        importedCount: result.rowCount,
         errors: [],
-        warnings: ['Import not fully implemented yet']
+        warnings: [],
+        data: result.data
       }
     } catch (error) {
       return {

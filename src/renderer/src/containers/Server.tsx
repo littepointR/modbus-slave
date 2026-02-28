@@ -369,18 +369,18 @@ const MIN_TABLE_COLUMN_WIDTHS: Record<TableColumnKey, number> = {
   comments: 150
 }
 
-const SERVER_LAYOUT_STORAGE_KEY = 'modbux.server.layout.v1'
-const MONO_FONT_FAMILY = 'var(--modbux-mono-font, "Iosevka", "Cascadia Mono", "Consolas", monospace)'
-const MONO_FONT_SIZE = 'var(--modbux-mono-font-size, 13px)'
+const SERVER_LAYOUT_STORAGE_KEY = 'modbus-slave.server.layout.v1'
+const MONO_FONT_FAMILY = 'var(--modbus-slave-mono-font, "Iosevka", "Cascadia Mono", "Consolas", monospace)'
+const MONO_FONT_SIZE = 'var(--modbus-slave-mono-font-size, 13px)'
 const DEFAULT_LEFT_PANEL_WIDTH = 320
 const DEFAULT_BOTTOM_PANEL_HEIGHT = 300
 const MIN_LEFT_PANEL_WIDTH = 240
 const MIN_RIGHT_PANEL_WIDTH = 560
 const MIN_BOTTOM_PANEL_HEIGHT = 180
 const MIN_TOP_PANEL_HEIGHT = 220
-const DEFAULT_WORKSPACE_FILENAME_PREFIX = 'modbux_workspace'
-const RECENT_WORKSPACES_STORAGE_KEY = 'modbux.server.recentWorkspaces.v1'
-const LAST_WORKSPACE_ID_STORAGE_KEY = 'modbux.server.lastWorkspaceId.v1'
+const DEFAULT_WORKSPACE_FILENAME_PREFIX = 'modbus-slave_workspace'
+const RECENT_WORKSPACES_STORAGE_KEY = 'modbus-slave.server.recentWorkspaces.v1'
+const LAST_WORKSPACE_ID_STORAGE_KEY = 'modbus-slave.server.lastWorkspaceId.v1'
 const MAX_RECENT_WORKSPACES = 8
 const WINDOW_TITLEBAR_PADDING_TOP = 'calc(env(titlebar-area-height, 0px) + 6px)'
 const TOP_MENU_BUTTON_SX = {
@@ -2062,9 +2062,9 @@ const Server = (): JSX.Element => {
   }, [connections])
 
   useEffect(() => {
-    const globalWindow = window as Window & { __modbuxAutoRestoreTriggered?: boolean }
-    if (globalWindow.__modbuxAutoRestoreTriggered) return
-    globalWindow.__modbuxAutoRestoreTriggered = true
+    const globalWindow = window as Window & { __modbusSlaveAutoRestoreTriggered?: boolean }
+    if (globalWindow.__modbusSlaveAutoRestoreTriggered) return
+    globalWindow.__modbusSlaveAutoRestoreTriggered = true
 
     const recents = loadRecentWorkspacesFromStorage()
     setRecentWorkspaces(recents)
@@ -3573,7 +3573,7 @@ const Server = (): JSX.Element => {
           suggestedName: workspaceFilename || getDefaultWorkspaceFilename(),
           types: [
             {
-              description: 'Modbux Workspace',
+              description: 'Modbus Slave Workspace',
               accept: { 'application/json': ['.json'] }
             }
           ]

@@ -26,8 +26,8 @@ import {
   getGlobalSystemLogBufferSizePreference
 } from '@renderer/settings/global-preferences'
 
-const THEME_MODE_KEY = 'modbux.theme.mode'
-const THEME_COLOR_KEY = 'modbux.theme.color'
+const THEME_MODE_KEY = 'modbus-slave.theme.mode'
+const THEME_COLOR_KEY = 'modbus-slave.theme.color'
 
 interface ThemeSettingsContextValue {
   themeMode: ThemeModePreference

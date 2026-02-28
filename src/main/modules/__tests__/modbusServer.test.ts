@@ -12,7 +12,7 @@ const { adapterInstances } = vi.hoisted(() => ({
   }>
 }))
 
-import { ModbusServer, SERVER_DEVICE_FAILURE, ILLEGAL_DATA_ADDRESS } from '../mobusServer'
+import { ModbusServer, SERVER_DEVICE_FAILURE, ILLEGAL_DATA_ADDRESS } from '../modbusServer'
 import { createServerAdapter } from '../modbusServer/serverAdapter'
 
 // Mock serverAdapter to avoid ServerTCP instantiation issues
