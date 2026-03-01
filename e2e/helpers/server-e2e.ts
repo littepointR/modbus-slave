@@ -22,7 +22,8 @@ export const launchMainWindow = async (): Promise<{ app: ElectronApplication; pa
     const windows = app.windows()
     for (const win of windows) {
       const title = await win.title()
-      if (title === 'Modbus Slave Emulator') {
+      if (title.includes('Modbus Slave')) {
+
         await win.waitForLoadState('domcontentloaded')
         await win.waitForTimeout(500)
         return { app, page: win }
@@ -139,12 +140,45 @@ export const createConnectionViaDialog = async ({
 
 export const openAndCloseConnection = async (page: Page, alias: string): Promise<void> => {
   await page.getByText(alias, { exact: true }).click()
-  await clickOpenConnectionAction(page)
-  await clickCloseConnectionAction(page)
+  
+  // Robust wait for the Disconnect menu item to become enabled
+  let isEnabled = false
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await clickOpenConnectionAction(page)
+    
+    for (let i = 0; i < 10; i++) {
+      await openConnectionMenu(page)
+      const item = page.getByRole('menuitem', { name: /^(断开|Disconnect)/ }).first()
+      try {
+        await expect(item).toBeEnabled({ timeout: 1000 })
+        isEnabled = true
+        break
+      } catch {
+        await page.keyboard.press('Escape')
+        await page.waitForTimeout(1000)
+      }
+    }
+    if (isEnabled) break
+  }
+  
+  if (!isEnabled) {
+    throw new Error(`Connection "${alias}" failed to open (Disconnect button stayed disabled)`)
+  }
+
+  await clickMenuAction(page, /^(断开|Disconnect)/)
 }
 
 const openConnectionMenu = async (page: Page): Promise<void> => {
-  await page.getByRole('button', { name: /^(连接|Connection)$/ }).click()
+  const btn = page.getByRole('button', { name: /^(连接|Connection)$/ })
+  await btn.click()
+  // Ensure the menu actually appeared
+  try {
+    await expect(page.getByRole('menu')).toBeVisible({ timeout: 2000 })
+  } catch {
+    // Retry once if menu didn't open
+    await btn.click()
+    await expect(page.getByRole('menu')).toBeVisible({ timeout: 2000 })
+  }
 }
 
 const clickMenuAction = async (page: Page, name: RegExp): Promise<void> => {

@@ -77,6 +77,55 @@ export const ScriptDefinitionSchema = z.object({
   lastRunAt: z.number().optional()
 })
 
+import { ServerConnectionConfig } from './server'
+
+export const toServerConfig = (connection: Connection): ServerConnectionConfig => {
+  const invalidRequestBehavior = connection.invalidRequestBehavior ?? 'silent'
+  switch (connection.mode) {
+    case 'tcp':
+      return {
+        protocol: 'ModbusTcp',
+        host: connection.ipAddress || '127.0.0.1',
+        port: connection.port || 502,
+        invalidRequestBehavior
+      }
+    case 'udp':
+      return {
+        protocol: 'ModbusUdp',
+        host: connection.ipAddress || '127.0.0.1',
+        port: connection.port || 502,
+        invalidRequestBehavior
+      }
+    case 'rtuovertcp':
+      return {
+        protocol: 'ModbusRtuOverTcp',
+        host: connection.ipAddress || '127.0.0.1',
+        port: connection.port || 502,
+        invalidRequestBehavior
+      }
+    case 'rtuoverudp':
+      return {
+        protocol: 'ModbusRtuOverUdp',
+        host: connection.ipAddress || '127.0.0.1',
+        port: connection.port || 502,
+        invalidRequestBehavior
+      }
+    case 'rtu':
+    default:
+      return {
+        protocol: connection.frameFormat === 'ascii' ? 'ModbusAscii' : 'ModbusRtu',
+        invalidRequestBehavior,
+        serial: {
+          port: connection.serialPort || '',
+          baudRate: connection.baudRate || 9600,
+          dataBits: connection.dataBits || 8,
+          stopBits: connection.stopBits || 1,
+          parity: connection.parity || 'none'
+        }
+      }
+  }
+}
+
 export interface Register {
   address: number
   value: number

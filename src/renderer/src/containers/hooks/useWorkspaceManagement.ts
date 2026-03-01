@@ -203,95 +203,99 @@ export const useWorkspaceManagement = ({
       options?: { fileName?: string; filePath?: string | null }
     ): string | null => {
       const workspaceVersion = workspace.version
-      if (
-        (workspaceVersion === 1 ||
-          workspaceVersion === 2 ||
-          workspaceVersion === 3 ||
-          workspaceVersion === 4) &&
-        Array.isArray(workspace.connections)
-      ) {
-        const restoredTabSettings =
-          (workspaceVersion === 2 || workspaceVersion === 3 || workspaceVersion === 4) &&
-          workspace.tabSettings &&
-          typeof workspace.tabSettings === 'object'
-            ? workspace.tabSettings
-            : {}
+      try {
+        if (
+          (workspaceVersion === 1 ||
+            workspaceVersion === 2 ||
+            workspaceVersion === 3 ||
+            workspaceVersion === 4) &&
+          Array.isArray(workspace.connections)
+        ) {
+          const restoredTabSettings =
+            (workspaceVersion === 2 || workspaceVersion === 3 || workspaceVersion === 4) &&
+            workspace.tabSettings &&
+            typeof workspace.tabSettings === 'object'
+              ? workspace.tabSettings
+              : {}
 
-        const restoredOpenTabs =
-          workspaceVersion === 4 && Array.isArray(workspace.openTabs)
-            ? workspace.openTabs
-                .map((savedTab) => {
-                  const connection = workspace.connections.find(
-                    (conn) => conn.id === savedTab.connectionId
-                  )
-                  const slave = connection?.slaves.find((item) => item.id === savedTab.slaveId)
-                  const group = slave?.registerGroups.find(
-                    (item) => item.id === savedTab.registerGroupId
-                  )
-                  if (!connection || !slave || !group) return null
-                  const tabId = getTabId(
-                    savedTab.connectionId,
-                    savedTab.slaveId,
-                    savedTab.registerGroupId
-                  )
-                  const savedSettings = restoredTabSettings[tabId]
-                  return {
-                    connectionId: savedTab.connectionId,
-                    slaveId: savedTab.slaveId,
-                    registerGroupId: savedTab.registerGroupId,
-                    selectedAddresses: new Set<number>(),
-                    interpretationTab: savedSettings?.interpretationTab || 'basic',
-                    stringEncoding: savedSettings?.stringEncoding || globalEncoding,
-                    typedInterpretation: savedSettings?.typedInterpretation || {},
-                    registerDisplayFormat: savedSettings?.registerDisplayFormat || {}
-                  } as OpenTab
-                })
-                .filter((tab): tab is OpenTab => tab !== null)
-            : []
+          const restoredOpenTabs =
+            workspaceVersion === 4 && Array.isArray(workspace.openTabs)
+              ? workspace.openTabs
+                  .map((savedTab) => {
+                    const connection = workspace.connections.find(
+                      (conn) => conn.id === savedTab.connectionId
+                    )
+                    const slave = connection?.slaves.find((item) => item.id === savedTab.slaveId)
+                    const group = slave?.registerGroups.find(
+                      (item) => item.id === savedTab.registerGroupId
+                    )
+                    if (!connection || !slave || !group) return null
+                    const tabId = getTabId(
+                      savedTab.connectionId,
+                      savedTab.slaveId,
+                      savedTab.registerGroupId
+                    )
+                    const savedSettings = restoredTabSettings[tabId]
+                    return {
+                      connectionId: savedTab.connectionId,
+                      slaveId: savedTab.slaveId,
+                      registerGroupId: savedTab.registerGroupId,
+                      selectedAddresses: new Set<number>(),
+                      interpretationTab: savedSettings?.interpretationTab || 'basic',
+                      stringEncoding: savedSettings?.stringEncoding || globalEncoding,
+                      typedInterpretation: savedSettings?.typedInterpretation || {},
+                      registerDisplayFormat: savedSettings?.registerDisplayFormat || {}
+                    } as OpenTab
+                  })
+                  .filter((tab): tab is OpenTab => tab !== null)
+              : []
 
-        const normalizedConnections = workspace.connections.map((connection) => ({
-          ...connection,
-          isOpen: false
-        }))
-        const normalizedTabSettings = buildWorkspaceTabSettingsSnapshot(
-          restoredTabSettings,
-          restoredOpenTabs.map((tab) => ({
-            tabId: getTabId(tab.connectionId, tab.slaveId, tab.registerGroupId),
-            interpretationTab: tab.interpretationTab,
-            stringEncoding: tab.stringEncoding,
-            typedInterpretation: tab.typedInterpretation,
-            registerDisplayFormat: tab.registerDisplayFormat
+          const normalizedConnections = workspace.connections.map((connection) => ({
+            ...connection,
+            isOpen: false
           }))
-        )
+          const normalizedTabSettings = buildWorkspaceTabSettingsSnapshot(
+            restoredTabSettings,
+            restoredOpenTabs.map((tab) => ({
+              tabId: getTabId(tab.connectionId, tab.slaveId, tab.registerGroupId),
+              interpretationTab: tab.interpretationTab,
+              stringEncoding: tab.stringEncoding,
+              typedInterpretation: tab.typedInterpretation,
+              registerDisplayFormat: tab.registerDisplayFormat
+            }))
+          )
 
-        const restoredScripts =
-          (workspaceVersion === 3 || workspaceVersion === 4) &&
-          workspace.scriptsByConnection &&
-          typeof workspace.scriptsByConnection === 'object'
-            ? workspace.scriptsByConnection
-            : {}
+          const restoredScripts =
+            (workspaceVersion === 3 || workspaceVersion === 4) &&
+            workspace.scriptsByConnection &&
+            typeof workspace.scriptsByConnection === 'object'
+              ? workspace.scriptsByConnection
+              : {}
 
-        const nextActiveTabId =
-          workspaceVersion === 4 && typeof workspace.activeTabId === 'string'
-            ? workspace.activeTabId
-            : null
+          const nextActiveTabId =
+            workspaceVersion === 4 && typeof workspace.activeTabId === 'string'
+              ? workspace.activeTabId
+              : null
 
-        setConnections(normalizedConnections)
-        setScriptsByConnection(restoredScripts)
-        setOpenTabs(restoredOpenTabs)
-        setActiveTabId(nextActiveTabId)
-        setWorkspaceTabSettings(normalizedTabSettings)
+          setConnections(normalizedConnections)
+          setScriptsByConnection(restoredScripts)
+          setOpenTabs(restoredOpenTabs)
+          setActiveTabId(nextActiveTabId)
+          setWorkspaceTabSettings(normalizedTabSettings)
 
-        setWorkspaceFileHandle(null)
-        setWorkspaceFilename(options?.fileName || null)
-        setWorkspaceFilePath(options?.filePath || null)
+          setWorkspaceFileHandle(null)
+          setWorkspaceFilename(options?.fileName || null)
+          setWorkspaceFilePath(options?.filePath || null)
 
-        const fingerprint = serializeWorkspaceSnapshot({
-          ...workspace,
-          connections: normalizedConnections
-        })
-        workspaceInitialFingerprintRef.current = fingerprint
-        return fingerprint
+          const fingerprint = serializeWorkspaceSnapshot({
+            ...workspace,
+            connections: normalizedConnections
+          })
+          workspaceInitialFingerprintRef.current = fingerprint
+          return fingerprint
+        }
+      } catch (err) {
+        console.error('CRASH in applyWorkspaceSnapshot:', err)
       }
       showUserError('Invalid workspace file format.')
       return null

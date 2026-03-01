@@ -1,4 +1,12 @@
-import { useState, useRef, useEffect, useCallback, type MouseEvent as ReactMouseEvent } from 'react'
+import {
+  useState,
+  useRef,
+  useEffect,
+  useCallback,
+  useTransition,
+  type MouseEvent as ReactMouseEvent
+} from 'react'
+
 import { useTranslation } from 'react-i18next'
 import { onEvent, sendEvent } from '@renderer/events'
 import {
@@ -39,7 +47,9 @@ import {
   Autocomplete,
   CircularProgress
 } from '@mui/material'
+import { alpha } from '@mui/material/styles'
 import { useSnackbar } from 'notistack'
+
 import {
   Add as AddIcon,
   Close as CloseIcon,
@@ -86,6 +96,7 @@ import type {
   ScriptDefinition,
   PersistedWorkspaceSnapshot
 } from '@shared'
+import { toServerConfig } from '@shared'
 import {
   canSelectInterpretationAtAddress,
   getBatchAssignableAddresses,
@@ -1915,13 +1926,6 @@ const Server = (): JSX.Element => {
   >(null)
   const [, startTableTransition] = useTransition()
   const [plotWindows, setPlotWindows] = useState<PlotWindowState[]>([])
-
-  const getTabId = (connectionId: string, slaveId: string, registerGroupId: string): string =>
-    `${connectionId}-${slaveId}-${registerGroupId}`
-
-  const showUserError = (message: string): void => {
-    enqueueSnackbar(message, { variant: 'error' })
-  }
 
   useEffect(() => {
     connectionsRef.current = connections
