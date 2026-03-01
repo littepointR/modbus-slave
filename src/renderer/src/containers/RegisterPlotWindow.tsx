@@ -251,8 +251,21 @@ const RegisterPlotWindow = (): JSX.Element => {
       </Paper>
 
       <Paper variant="outlined" sx={{ p: 1, flex: 1, minHeight: 360 }}>
-        <svg viewBox={`0 0 ${width} ${height}`} width="100%" height="100%" preserveAspectRatio="none">
-          <rect x={padding} y={padding} width={plotWidth} height={plotHeight} fill="none" stroke="#c7c7c7" strokeWidth="1" />
+        <svg
+          viewBox={`0 0 ${width} ${height}`}
+          width="100%"
+          height="100%"
+          preserveAspectRatio="none"
+        >
+          <rect
+            x={padding}
+            y={padding}
+            width={plotWidth}
+            height={plotHeight}
+            fill="none"
+            stroke="#c7c7c7"
+            strokeWidth="1"
+          />
           {([0.25, 0.5, 0.75] as const).map((ratio) => (
             <line
               key={ratio}

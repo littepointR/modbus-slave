@@ -8,11 +8,7 @@ import {
   type PropsWithChildren
 } from 'react'
 import { ThemeProvider } from '@mui/material/styles'
-import {
-  createAppTheme,
-  type ThemeModePreference,
-  type ThemePrimaryPreset
-} from './index'
+import { createAppTheme, type ThemeModePreference, type ThemePrimaryPreset } from './index'
 import {
   GLOBAL_COMM_BUFFER_MB_KEY,
   GLOBAL_MONO_FONT_KEY,
@@ -147,7 +143,10 @@ export const ThemeSettingsProvider = ({ children }: PropsWithChildren): JSX.Elem
     return () => window.removeEventListener('storage', onStorage)
   }, [])
 
-  const muiTheme = useMemo(() => createAppTheme(resolvedMode, themeColor), [resolvedMode, themeColor])
+  const muiTheme = useMemo(
+    () => createAppTheme(resolvedMode, themeColor),
+    [resolvedMode, themeColor]
+  )
 
   const value = useMemo<ThemeSettingsContextValue>(
     () => ({

@@ -137,7 +137,7 @@ const resolveConnection = async (options) => {
   }
 
   const infoPath =
-    options['info-file'] ?? process.env.MODBUS-SLAVE_CLI_INFO_FILE ?? defaultInfoFilePath()
+    options['info-file'] ?? process.env.MODBUS - SLAVE_CLI_INFO_FILE ?? defaultInfoFilePath()
   const content = await readFile(infoPath, 'utf8')
   const parsed = JSON.parse(content)
   if (!parsed.host || !parsed.port || !parsed.token) {
@@ -158,7 +158,11 @@ const defaultInfoFilePath = () => {
   if (process.platform === 'darwin') {
     return join(homedir(), 'Library', 'Application Support', 'modbus-slave', 'cli-api.json')
   }
-  return join(process.env.XDG_CONFIG_HOME || join(homedir(), '.config'), 'modbus-slave', 'cli-api.json')
+  return join(
+    process.env.XDG_CONFIG_HOME || join(homedir(), '.config'),
+    'modbus-slave',
+    'cli-api.json'
+  )
 }
 
 const request = async (connection, path, options) => {

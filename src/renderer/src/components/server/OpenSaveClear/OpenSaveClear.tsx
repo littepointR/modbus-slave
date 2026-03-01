@@ -83,7 +83,9 @@ const useOpen: UseOpenHook = () => {
         if (wasMixedEndianness) {
           enqueueSnackbar({
             variant: 'warning',
-            message: t('snackbar.mixedEndianness', { endian: config.littleEndian ? t('common.littleEndian') : t('common.bigEndian') }),
+            message: t('snackbar.mixedEndianness', {
+              endian: config.littleEndian ? t('common.littleEndian') : t('common.bigEndian')
+            }),
             autoHideDuration: 8000
           })
         }
@@ -98,7 +100,10 @@ const useOpen: UseOpenHook = () => {
         }
       } catch (error) {
         const tError = error as Error
-        enqueueSnackbar({ variant: 'error', message: t('snackbar.invalidJson', { message: tError.message }) })
+        enqueueSnackbar({
+          variant: 'error',
+          message: t('snackbar.invalidJson', { message: tError.message })
+        })
         console.error('Config load error:', error)
       }
 

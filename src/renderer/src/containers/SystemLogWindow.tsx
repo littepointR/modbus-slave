@@ -1,5 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { AppBar, Box, Button, Checkbox, Chip, FormControlLabel, TextField, Toolbar, Typography } from '@mui/material'
+import {
+  AppBar,
+  Box,
+  Button,
+  Checkbox,
+  Chip,
+  FormControlLabel,
+  TextField,
+  Toolbar,
+  Typography
+} from '@mui/material'
 import { useTranslation } from 'react-i18next'
 import type { SystemLogEntry, SystemLogStats } from '@shared'
 import { onEvent } from '@renderer/events'
@@ -13,7 +23,8 @@ import {
   getGlobalMonoFontSizePreference
 } from '@renderer/settings/global-preferences'
 
-const MONO_FONT_FAMILY = 'var(--modbus-slave-mono-font, "Iosevka", "Cascadia Mono", "Consolas", monospace)'
+const MONO_FONT_FAMILY =
+  'var(--modbus-slave-mono-font, "Iosevka", "Cascadia Mono", "Consolas", monospace)'
 const MONO_FONT_SIZE = 'var(--modbus-slave-mono-font-size, 13px)'
 const OVERSCAN = 12
 const WINDOW_TITLEBAR_PADDING_TOP = 'calc(env(titlebar-area-height, 0px) + 10px)'
@@ -38,7 +49,8 @@ const buildFilteredIndices = (rows: LogRow[], query: string): number[] => {
       next.push(i)
       continue
     }
-    const haystack = `${row.level} ${row.source} ${row.module} ${row.message} ${row.line}`.toLowerCase()
+    const haystack =
+      `${row.level} ${row.source} ${row.module} ${row.message} ${row.line}`.toLowerCase()
     if (haystack.includes(normalized)) next.push(i)
   }
   return next
@@ -76,7 +88,9 @@ const SystemLogWindow = (): JSX.Element => {
   const { t } = useTranslation()
   const { alwaysOnTop, setWindowAlwaysOnTop } = useWindowAlwaysOnTop()
   const [monoFontSize, setMonoFontSize] = useState<number>(getGlobalMonoFontSizePreference)
-  const [renderBufferLimitMb, setRenderBufferLimitMb] = useState<number>(getGlobalSystemLogBufferSizePreference)
+  const [renderBufferLimitMb, setRenderBufferLimitMb] = useState<number>(
+    getGlobalSystemLogBufferSizePreference
+  )
   const [paused, setPaused] = useState(false)
   const [autoScroll, setAutoScroll] = useState(true)
   const [filterInput, setFilterInput] = useState('')
@@ -97,7 +111,10 @@ const SystemLogWindow = (): JSX.Element => {
   const lineHeight = useMemo(() => Math.max(24, monoFontSize + 10), [monoFontSize])
 
   const trimToLimit = useCallback(() => {
-    while (bufferBytesRef.current > renderBufferLimitBytesRef.current && rowsRef.current.length > 0) {
+    while (
+      bufferBytesRef.current > renderBufferLimitBytesRef.current &&
+      rowsRef.current.length > 0
+    ) {
       const first = rowsRef.current.shift()
       if (!first) break
       bufferBytesRef.current -= first.sizeBytes
@@ -167,7 +184,10 @@ const SystemLogWindow = (): JSX.Element => {
 
   useEffect(() => {
     const timer = window.setInterval(() => {
-      window.api.getSystemLogStats().then(setStats).catch(() => undefined)
+      window.api
+        .getSystemLogStats()
+        .then(setStats)
+        .catch(() => undefined)
     }, 1000)
     return () => window.clearInterval(timer)
   }, [])
@@ -178,7 +198,8 @@ const SystemLogWindow = (): JSX.Element => {
       setRenderBufferLimitMb(getGlobalSystemLogBufferSizePreference())
     }
     const onStorage = (event: StorageEvent): void => {
-      if (event.key === GLOBAL_MONO_FONT_SIZE_KEY || event.key === GLOBAL_SYSTEM_LOG_BUFFER_MB_KEY) syncFromGlobal()
+      if (event.key === GLOBAL_MONO_FONT_SIZE_KEY || event.key === GLOBAL_SYSTEM_LOG_BUFFER_MB_KEY)
+        syncFromGlobal()
     }
     const onPreferenceChange = (event: Event): void => {
       const customEvent = event as CustomEvent<GlobalPreferenceChangeDetail>
@@ -193,7 +214,10 @@ const SystemLogWindow = (): JSX.Element => {
     window.addEventListener(GLOBAL_PREFERENCE_CHANGE_EVENT, onPreferenceChange as EventListener)
     return () => {
       window.removeEventListener('storage', onStorage)
-      window.removeEventListener(GLOBAL_PREFERENCE_CHANGE_EVENT, onPreferenceChange as EventListener)
+      window.removeEventListener(
+        GLOBAL_PREFERENCE_CHANGE_EVENT,
+        onPreferenceChange as EventListener
+      )
     }
   }, [])
 
@@ -261,7 +285,10 @@ const SystemLogWindow = (): JSX.Element => {
   const bufferSummary = stats
     ? `${formatBytes(stats.bufferBytes)} / ${formatBytes(stats.bufferLimitBytes)}`
     : `${formatBytes(bufferBytesRef.current)} / ${formatBytes(renderBufferLimitBytesRef.current)}`
-  const contentWidth = Math.max(viewportWidth, Math.ceil(maxLineCharsRef.current * monoFontSize * 0.62) + 24)
+  const contentWidth = Math.max(
+    viewportWidth,
+    Math.ceil(maxLineCharsRef.current * monoFontSize * 0.62) + 24
+  )
 
   return (
     <Box
@@ -301,7 +328,11 @@ const SystemLogWindow = (): JSX.Element => {
             <FormControlLabel
               sx={{ m: 0, mr: 0.5, '& .MuiFormControlLabel-label': { fontSize: 12.5 } }}
               control={
-                <Checkbox checked={autoScroll} onChange={(e) => setAutoScroll(e.target.checked)} size="small" />
+                <Checkbox
+                  checked={autoScroll}
+                  onChange={(e) => setAutoScroll(e.target.checked)}
+                  size="small"
+                />
               }
               label={t('common.autoScroll')}
             />
@@ -322,7 +353,7 @@ const SystemLogWindow = (): JSX.Element => {
               size="small"
               value={filterInput}
               onChange={(e) => setFilterInput(e.target.value)}
-              placeholder='Filter (level/source/module/message)'
+              placeholder="Filter (level/source/module/message)"
               sx={{ flex: '1 1 500px', minWidth: 320, maxWidth: 820 }}
             />
             <Button

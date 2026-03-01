@@ -137,7 +137,9 @@ function createWindow(): BrowserWindow {
   })
 
   windows.main.on('close', () => {
-    const mainWindow = windows.main as (BrowserWindow & { __modbusSlaveAllowClose?: boolean }) | null
+    const mainWindow = windows.main as
+      | (BrowserWindow & { __modbusSlaveAllowClose?: boolean })
+      | null
     if (!mainWindow?.__modbusSlaveAllowClose) return
     windows.server?.close()
     windows.commLog?.close()
@@ -191,7 +193,9 @@ onIpcEvent('open_server_window', () => {
   }
 
   windows.server.on('close', () => {
-    const serverWindow = windows.server as (BrowserWindow & { __modbusSlaveAllowClose?: boolean }) | null
+    const serverWindow = windows.server as
+      | (BrowserWindow & { __modbusSlaveAllowClose?: boolean })
+      | null
     if (!serverWindow?.__modbusSlaveAllowClose) return
     windows.server = null
   })
@@ -377,7 +381,10 @@ onIpcEvent('open_script_editor_window', (_event, payload: ScriptEditorWindowInit
       scriptEditorWindow = null
       scriptEditorConnectionId = null
     })
-    lockWindowTitle(scriptEditorWindow, `${APP_DISPLAY_NAME} - Script Editor (${payload.connectionAlias})`)
+    lockWindowTitle(
+      scriptEditorWindow,
+      `${APP_DISPLAY_NAME} - Script Editor (${payload.connectionAlias})`
+    )
   }
 
   const editorWindow = scriptEditorWindow
@@ -478,4 +485,3 @@ app.on('before-quit', () => {
 
 // In this file you can include the rest of your app"s specific main process
 // code. You can also put them in separate files and require them here.
-

@@ -55,7 +55,10 @@ const dispatchPreferenceChange = (key: string, value: string): void => {
 const quoteFontName = (value: string): string => {
   const trimmed = value.trim()
   if (!trimmed) return GLOBAL_DEFAULT_MONO_FONT
-  if ((trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
     return trimmed
   }
   return `"${trimmed.replace(/"/g, '\\"')}"`
@@ -70,7 +73,10 @@ export const getGlobalMonoFontFamily = (fontName: string): string => {
 }
 
 export const applyGlobalMonoFontPreference = (fontName: string): void => {
-  document.documentElement.style.setProperty('--modbus-slave-mono-font', getGlobalMonoFontFamily(fontName))
+  document.documentElement.style.setProperty(
+    '--modbus-slave-mono-font',
+    getGlobalMonoFontFamily(fontName)
+  )
 }
 
 export const setGlobalMonoFontPreference = (fontName: string): void => {
@@ -93,7 +99,10 @@ export const getGlobalMonoFontSizePreference = (): number => {
 }
 
 export const applyGlobalMonoFontSizePreference = (fontSize: number): void => {
-  document.documentElement.style.setProperty('--modbus-slave-mono-font-size', `${clampMonoFontSize(fontSize)}px`)
+  document.documentElement.style.setProperty(
+    '--modbus-slave-mono-font-size',
+    `${clampMonoFontSize(fontSize)}px`
+  )
 }
 
 export const setGlobalMonoFontSizePreference = (fontSize: number): void => {
@@ -103,8 +112,15 @@ export const setGlobalMonoFontSizePreference = (fontSize: number): void => {
   dispatchPreferenceChange(GLOBAL_MONO_FONT_SIZE_KEY, String(value))
 }
 
-const isGlobalEncoding = (value: string | null): value is (typeof GLOBAL_STRING_ENCODING_OPTIONS)[number] => {
-  return typeof value === 'string' && GLOBAL_STRING_ENCODING_OPTIONS.includes(value as (typeof GLOBAL_STRING_ENCODING_OPTIONS)[number])
+const isGlobalEncoding = (
+  value: string | null
+): value is (typeof GLOBAL_STRING_ENCODING_OPTIONS)[number] => {
+  return (
+    typeof value === 'string' &&
+    GLOBAL_STRING_ENCODING_OPTIONS.includes(
+      value as (typeof GLOBAL_STRING_ENCODING_OPTIONS)[number]
+    )
+  )
 }
 
 export const getGlobalStringEncodingPreference = (): string => {

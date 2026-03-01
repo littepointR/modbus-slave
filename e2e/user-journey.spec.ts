@@ -52,7 +52,10 @@ test('realistic server user journey e2e', async () => {
   await page.locator('p.MuiTypography-root', { hasText: 'Default Group' }).first().dblclick()
   await expect(page.getByRole('tab', { name: /Default Group/ })).toBeVisible()
 
-  const valueHeader = page.locator('thead th').filter({ hasText: /^Value$/ }).first()
+  const valueHeader = page
+    .locator('thead th')
+    .filter({ hasText: /^Value$/ })
+    .first()
   const resizeHandle = page.getByTestId('col-resize-value').first()
   const widthBefore = await valueHeader.evaluate((el) => el.getBoundingClientRect().width)
   const handleBox = await resizeHandle.boundingBox()
@@ -74,7 +77,9 @@ test('realistic server user journey e2e', async () => {
   await ensureChecked(thirdRow)
   await ensureChecked(fourthRow)
 
-  const selectionPanel = page.getByRole('heading', { name: 'Set Display For Selection' }).locator('..')
+  const selectionPanel = page
+    .getByRole('heading', { name: 'Set Display For Selection' })
+    .locator('..')
   const batchMode = selectionPanel.locator('[role="combobox"]').first()
   await batchMode.click()
   await page.getByRole('option', { name: /^INT \(2w\)$/ }).click()

@@ -350,7 +350,9 @@ const ServerTreeNavigation = meme(({ onSelectNode }: ServerTreeNavigationProps):
             </MenuItem>
           ))}
           {availableUnitIds.length > 50 && (
-            <MenuItem disabled dense>...and {availableUnitIds.length - 50} more</MenuItem>
+            <MenuItem disabled dense>
+              ...and {availableUnitIds.length - 50} more
+            </MenuItem>
           )}
         </Menu>
       </Toolbar>

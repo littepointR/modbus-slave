@@ -56,7 +56,9 @@ const SettingsMenu = () => {
   const [monoFont, setMonoFont] = useState<string>(getGlobalMonoFontPreference)
   const [monoFontSize, setMonoFontSize] = useState<number>(getGlobalMonoFontSizePreference)
   const [commBufferMb, setCommBufferMb] = useState<number>(getGlobalCommBufferSizePreference)
-  const [systemLogBufferMb, setSystemLogBufferMb] = useState<number>(getGlobalSystemLogBufferSizePreference)
+  const [systemLogBufferMb, setSystemLogBufferMb] = useState<number>(
+    getGlobalSystemLogBufferSizePreference
+  )
   const [globalEncoding, setGlobalEncoding] = useState<string>(getGlobalStringEncodingPreference)
   const [localFontFamilies, setLocalFontFamilies] = useState<string[]>([])
   const buttonRef = useRef<HTMLButtonElement | null>(null)
@@ -73,8 +75,8 @@ const SettingsMenu = () => {
         }
         if (typeof win.queryLocalFonts !== 'function') return
         const fonts = await win.queryLocalFonts()
-        const families = [...new Set(fonts.map((font) => font.family).filter(Boolean))].sort((a, b) =>
-          a.localeCompare(b)
+        const families = [...new Set(fonts.map((font) => font.family).filter(Boolean))].sort(
+          (a, b) => a.localeCompare(b)
         )
         setLocalFontFamilies(families)
       } catch {
@@ -100,7 +102,10 @@ const SettingsMenu = () => {
     }
     window.addEventListener(GLOBAL_PREFERENCE_CHANGE_EVENT, onPreferenceChange as EventListener)
     return () => {
-      window.removeEventListener(GLOBAL_PREFERENCE_CHANGE_EVENT, onPreferenceChange as EventListener)
+      window.removeEventListener(
+        GLOBAL_PREFERENCE_CHANGE_EVENT,
+        onPreferenceChange as EventListener
+      )
     }
   }, [])
 
@@ -221,7 +226,11 @@ const SettingsMenu = () => {
           </Typography>
           <FormControl size="small" fullWidth>
             <InputLabel>{t('common.themeMode')}</InputLabel>
-            <Select label={t('common.themeMode')} value={themeMode} onChange={handleThemeModeChange}>
+            <Select
+              label={t('common.themeMode')}
+              value={themeMode}
+              onChange={handleThemeModeChange}
+            >
               <MenuItem value="light">{t('common.themeModeLight')}</MenuItem>
               <MenuItem value="dark">{t('common.themeModeDark')}</MenuItem>
               <MenuItem value="system">{t('common.themeModeSystem')}</MenuItem>
@@ -271,7 +280,13 @@ const SettingsMenu = () => {
               </IconButton>
             </Box>
             <Collapse in={colorPickerExpanded} timeout={120}>
-              <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 0.75 }}>
+              <Box
+                sx={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+                  gap: 0.75
+                }}
+              >
                 {themeColorPresets.map((preset) => {
                   const isActive = themeColor === preset.value
                   return (
@@ -304,7 +319,11 @@ const SettingsMenu = () => {
             onInputChange={handleFontInputChange}
             renderInput={(params) => <TextField {...params} label={t('common.globalFont')} />}
             renderOption={(props, option) => (
-              <Box component="li" {...props} sx={{ fontFamily: `"${option}", ${GLOBAL_MONO_FONT_FALLBACK}` }}>
+              <Box
+                component="li"
+                {...props}
+                sx={{ fontFamily: `"${option}", ${GLOBAL_MONO_FONT_FALLBACK}` }}
+              >
                 {option}
               </Box>
             )}
@@ -335,7 +354,11 @@ const SettingsMenu = () => {
           </Box>
           <FormControl size="small" fullWidth>
             <InputLabel>{t('common.globalEncoding')}</InputLabel>
-            <Select label={t('common.globalEncoding')} value={globalEncoding} onChange={handleEncodingChange}>
+            <Select
+              label={t('common.globalEncoding')}
+              value={globalEncoding}
+              onChange={handleEncodingChange}
+            >
               {GLOBAL_STRING_ENCODING_OPTIONS.map((encoding) => (
                 <MenuItem key={encoding} value={encoding}>
                   {encoding}

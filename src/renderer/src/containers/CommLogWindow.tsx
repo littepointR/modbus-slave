@@ -1,6 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { AppBar, Box, Button, Checkbox, Chip, FormControlLabel, TextField, Toolbar, Typography } from '@mui/material'
+import {
+  AppBar,
+  Box,
+  Button,
+  Checkbox,
+  Chip,
+  FormControlLabel,
+  TextField,
+  Toolbar,
+  Typography
+} from '@mui/material'
 import type { PacketStats, ServerCommPacket } from '@shared'
 import { onEvent } from '@renderer/events'
 import { useWindowAlwaysOnTop } from '@renderer/hooks/useWindowAlwaysOnTop'
@@ -13,7 +23,8 @@ import {
   getGlobalMonoFontSizePreference
 } from '@renderer/settings/global-preferences'
 
-const MONO_FONT_FAMILY = 'var(--modbus-slave-mono-font, "Iosevka", "Cascadia Mono", "Consolas", monospace)'
+const MONO_FONT_FAMILY =
+  'var(--modbus-slave-mono-font, "Iosevka", "Cascadia Mono", "Consolas", monospace)'
 const MONO_FONT_SIZE = 'var(--modbus-slave-mono-font-size, 13px)'
 const OVERSCAN = 12
 const WINDOW_TITLEBAR_PADDING_TOP = 'calc(env(titlebar-area-height, 0px) + 10px)'
@@ -67,8 +78,7 @@ const normalizeField = (input: string): string => {
 
 const tokenizeFilter = (input: string): string[] => {
   const tokens: string[] = []
-  const regex =
-    /\s*(>=|<=|==|!=|&&|\|\||>|<|\(|\)|!|"(?:\\.|[^"])*"|'(?:\\.|[^'])*'|\S+)\s*/g
+  const regex = /\s*(>=|<=|==|!=|&&|\|\||>|<|\(|\)|!|"(?:\\.|[^"])*"|'(?:\\.|[^'])*'|\S+)\s*/g
   let match: RegExpExecArray | null
   while ((match = regex.exec(input)) !== null) {
     tokens.push(match[1])
@@ -120,7 +130,12 @@ const parseFilter = (input: string): FilterAst => {
       next()
       const valueToken = next()
       if (!valueToken) throw new Error(`Expected value after "${opToken}"`)
-      return { type: 'comparison', field, op: opMap[opToken.toLowerCase()], value: parseValue(valueToken) }
+      return {
+        type: 'comparison',
+        field,
+        op: opMap[opToken.toLowerCase()],
+        value: parseValue(valueToken)
+      }
     }
     return { type: 'field', field }
   }
@@ -186,7 +201,10 @@ const evalFilter = (ast: FilterAst, entry: CommLogEntry): boolean => {
     }
   }
 
-  if (ast.type === 'binary') return ast.op === 'and' ? evalFilter(ast.left, entry) && evalFilter(ast.right, entry) : evalFilter(ast.left, entry) || evalFilter(ast.right, entry)
+  if (ast.type === 'binary')
+    return ast.op === 'and'
+      ? evalFilter(ast.left, entry) && evalFilter(ast.right, entry)
+      : evalFilter(ast.left, entry) || evalFilter(ast.right, entry)
   if (ast.type === 'not') return !evalFilter(ast.expr, entry)
   if (ast.type === 'field') return Boolean(getFieldValue(ast.field))
 
@@ -262,7 +280,9 @@ const CommLogWindow = (): JSX.Element => {
   const { t } = useTranslation()
   const { alwaysOnTop, setWindowAlwaysOnTop } = useWindowAlwaysOnTop()
   const [monoFontSize, setMonoFontSize] = useState<number>(getGlobalMonoFontSizePreference)
-  const [renderBufferLimitMb, setRenderBufferLimitMb] = useState<number>(getGlobalCommBufferSizePreference)
+  const [renderBufferLimitMb, setRenderBufferLimitMb] = useState<number>(
+    getGlobalCommBufferSizePreference
+  )
   const [paused, setPaused] = useState(false)
   const [autoScroll, setAutoScroll] = useState(true)
   const [filterInput, setFilterInput] = useState('')
@@ -397,7 +417,10 @@ const CommLogWindow = (): JSX.Element => {
 
   useEffect(() => {
     const timer = window.setInterval(() => {
-      window.api.getCommStats().then(setStats).catch(() => undefined)
+      window.api
+        .getCommStats()
+        .then(setStats)
+        .catch(() => undefined)
     }, 1000)
     return () => window.clearInterval(timer)
   }, [])
@@ -409,7 +432,8 @@ const CommLogWindow = (): JSX.Element => {
     }
 
     const onStorage = (event: StorageEvent): void => {
-      if (event.key === GLOBAL_MONO_FONT_SIZE_KEY || event.key === GLOBAL_COMM_BUFFER_MB_KEY) syncFromGlobal()
+      if (event.key === GLOBAL_MONO_FONT_SIZE_KEY || event.key === GLOBAL_COMM_BUFFER_MB_KEY)
+        syncFromGlobal()
     }
     const onPreferenceChange = (event: Event): void => {
       const customEvent = event as CustomEvent<GlobalPreferenceChangeDetail>
@@ -425,7 +449,10 @@ const CommLogWindow = (): JSX.Element => {
     window.addEventListener(GLOBAL_PREFERENCE_CHANGE_EVENT, onPreferenceChange as EventListener)
     return () => {
       window.removeEventListener('storage', onStorage)
-      window.removeEventListener(GLOBAL_PREFERENCE_CHANGE_EVENT, onPreferenceChange as EventListener)
+      window.removeEventListener(
+        GLOBAL_PREFERENCE_CHANGE_EVENT,
+        onPreferenceChange as EventListener
+      )
     }
   }, [])
 
@@ -495,7 +522,10 @@ const CommLogWindow = (): JSX.Element => {
   const bufferSummary = stats
     ? `${formatBytes(stats.bufferBytes)} / ${formatBytes(stats.bufferLimitBytes)}`
     : `${formatBytes(bufferBytesRef.current)} / ${formatBytes(renderBufferLimitBytesRef.current)}`
-  const contentWidth = Math.max(viewportWidth, Math.ceil(maxLineCharsRef.current * monoFontSize * 0.62) + 24)
+  const contentWidth = Math.max(
+    viewportWidth,
+    Math.ceil(maxLineCharsRef.current * monoFontSize * 0.62) + 24
+  )
 
   return (
     <Box
@@ -537,7 +567,11 @@ const CommLogWindow = (): JSX.Element => {
             <FormControlLabel
               sx={{ m: 0, mr: 0.5, '& .MuiFormControlLabel-label': { fontSize: 12.5 } }}
               control={
-                <Checkbox checked={autoScroll} onChange={(e) => setAutoScroll(e.target.checked)} size="small" />
+                <Checkbox
+                  checked={autoScroll}
+                  onChange={(e) => setAutoScroll(e.target.checked)}
+                  size="small"
+                />
               }
               label={t('common.autoScroll')}
             />
@@ -562,9 +596,11 @@ const CommLogWindow = (): JSX.Element => {
               size="small"
               value={filterInput}
               onChange={(e) => setFilterInput(e.target.value)}
-              placeholder='Filter (e.g. direction == RX and fc == 3 and unit == 1)'
+              placeholder="Filter (e.g. direction == RX and fc == 3 and unit == 1)"
               error={Boolean(filterError)}
-              helperText={filterError || 'Fields: direction/fc/unit/client/protocol/frame/data/exception'}
+              helperText={
+                filterError || 'Fields: direction/fc/unit/client/protocol/frame/data/exception'
+              }
               sx={{ flex: '1 1 560px', minWidth: 320, maxWidth: 860 }}
             />
             <Button

@@ -24,7 +24,9 @@ interface CommMonitorProps {
 // Stub component - CommMonitor functionality requires IPC handlers that don't exist yet
 export const CommMonitor = (_props: CommMonitorProps): JSX.Element => {
   const [isMonitoring, setIsMonitoring] = useState(false)
-  const [packets] = useState<Array<{ id: number; timestamp: string; direction: string; data: string }>>([])
+  const [packets] = useState<
+    Array<{ id: number; timestamp: string; direction: string; data: string }>
+  >([])
 
   const handleStart = useCallback(() => {
     setIsMonitoring(true)
@@ -50,13 +52,23 @@ export const CommMonitor = (_props: CommMonitorProps): JSX.Element => {
         </Typography>
         {!isMonitoring ? (
           <Tooltip title="Start Monitoring">
-            <IconButton aria-label="Start Monitoring" size="small" onClick={handleStart} color="success">
+            <IconButton
+              aria-label="Start Monitoring"
+              size="small"
+              onClick={handleStart}
+              color="success"
+            >
               <PlayArrow />
             </IconButton>
           </Tooltip>
         ) : (
           <Tooltip title="Stop Monitoring">
-            <IconButton aria-label="Stop Monitoring" size="small" onClick={handleStop} color="error">
+            <IconButton
+              aria-label="Stop Monitoring"
+              size="small"
+              onClick={handleStop}
+              color="error"
+            >
               <Stop />
             </IconButton>
           </Tooltip>
@@ -88,7 +100,9 @@ export const CommMonitor = (_props: CommMonitorProps): JSX.Element => {
             {packets.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={5} align="center" sx={{ py: 4, color: 'text.secondary' }}>
-                  {isMonitoring ? 'Monitoring... No packets received yet.' : 'Click Start to begin monitoring'}
+                  {isMonitoring
+                    ? 'Monitoring... No packets received yet.'
+                    : 'Click Start to begin monitoring'}
                 </TableCell>
               </TableRow>
             ) : (

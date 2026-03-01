@@ -24,11 +24,14 @@ const UpdateBanner = (): JSX.Element | null => {
         if (dismissed && !FORCE_SHOW_BANNER) return
 
         // Fetch latest release from GitHub API
-        const response = await fetch('https://api.github.com/repos/ploxc/modbus-slave/releases/latest', {
-          headers: {
-            Accept: 'application/vnd.github.v3+json'
+        const response = await fetch(
+          'https://api.github.com/repos/ploxc/modbus-slave/releases/latest',
+          {
+            headers: {
+              Accept: 'application/vnd.github.v3+json'
+            }
           }
-        })
+        )
 
         if (!response.ok) {
           // If API call fails, silently fail (don't show banner)

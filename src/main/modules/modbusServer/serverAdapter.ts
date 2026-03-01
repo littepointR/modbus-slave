@@ -457,7 +457,11 @@ export class RtuServerAdapter extends BaseServerAdapter {
     })
   }
 
-  private async _writeHoldingRegister(address: number, value: number, unitId: number): Promise<void> {
+  private async _writeHoldingRegister(
+    address: number,
+    value: number,
+    unitId: number
+  ): Promise<void> {
     const setter = this._vector.setRegister
     if (!setter) throw new Error('Holding register setter is not available')
     await new Promise<void>((resolve, reject) => {
@@ -471,7 +475,11 @@ export class RtuServerAdapter extends BaseServerAdapter {
     })
   }
 
-  private async _readHoldingRange(address: number, quantity: number, unitId: number): Promise<number[]> {
+  private async _readHoldingRange(
+    address: number,
+    quantity: number,
+    unitId: number
+  ): Promise<number[]> {
     const values: number[] = []
     for (let i = 0; i < quantity; i++) {
       values.push(await this._readHoldingRegister(address + i, unitId))

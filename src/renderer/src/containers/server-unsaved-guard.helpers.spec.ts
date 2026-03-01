@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
-import { confirmUnsavedWorkspaceChanges, getWorkspaceDirtyState } from './server-unsaved-guard.helpers'
+import {
+  confirmUnsavedWorkspaceChanges,
+  getWorkspaceDirtyState
+} from './server-unsaved-guard.helpers'
 
 describe('confirmUnsavedWorkspaceChanges', () => {
   it('allows action immediately when workspace is clean', () => {

@@ -38,4 +38,3 @@ export interface AppendSystemLogParams {
   slaveId?: number
   details?: unknown
 }
-
