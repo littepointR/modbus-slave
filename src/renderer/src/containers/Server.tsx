@@ -1259,6 +1259,7 @@ const NewConnectionDialog = ({
                             ) : (
                               <Tooltip title="Refresh serial ports">
                                 <IconButton
+                                  aria-label="Refresh serial ports"
                                   onClick={(e) => {
                                     e.stopPropagation()
                                     scanSerialPorts()
@@ -1751,6 +1752,7 @@ const NewSlaveDialog = ({ open, onClose, onConfirm, initialSlave }: NewSlaveDial
                   }
                 />
                 <IconButton
+                  aria-label="Delete register group"
                   onClick={() => removeRegisterGroup(group.id)}
                   size="small"
                   disabled={registerGroups.length <= 1}
@@ -1824,6 +1826,7 @@ const TreeNode = ({
         onContextMenu={onContextMenu}
       >
         <IconButton
+          aria-label={isExpanded ? 'Collapse node' : 'Expand node'}
           size="small"
           onClick={(e) => {
             e.stopPropagation()
@@ -4606,6 +4609,7 @@ const Server = (): JSX.Element => {
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                             <Typography variant="caption">{group?.name || 'Unknown'}</Typography>
                             <IconButton
+                              aria-label="Close tab"
                               size="small"
                               onClick={(e) => {
                                 e.stopPropagation()

@@ -50,24 +50,24 @@ export const CommMonitor = (_props: CommMonitorProps): JSX.Element => {
         </Typography>
         {!isMonitoring ? (
           <Tooltip title="Start Monitoring">
-            <IconButton size="small" onClick={handleStart} color="success">
+            <IconButton aria-label="Start Monitoring" size="small" onClick={handleStart} color="success">
               <PlayArrow />
             </IconButton>
           </Tooltip>
         ) : (
           <Tooltip title="Stop Monitoring">
-            <IconButton size="small" onClick={handleStop} color="error">
+            <IconButton aria-label="Stop Monitoring" size="small" onClick={handleStop} color="error">
               <Stop />
             </IconButton>
           </Tooltip>
         )}
         <Tooltip title="Clear">
-          <IconButton size="small" onClick={handleClear}>
+          <IconButton aria-label="Clear monitoring log" size="small" onClick={handleClear}>
             <Clear />
           </IconButton>
         </Tooltip>
         <Tooltip title="Export to CSV">
-          <IconButton size="small" onClick={handleExport}>
+          <IconButton aria-label="Export to CSV" size="small" onClick={handleExport}>
             <Save />
           </IconButton>
         </Tooltip>

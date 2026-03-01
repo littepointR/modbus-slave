@@ -1,74 +1,38 @@
-# Modbus Slave (Gemini Instructional Context)
+# Modbus Slave Emulator (Gemini Instructional Context)
 
-Modbus Slave is a professional Modbus Client/Server simulation tool built with Electron, React, and TypeScript. It is currently undergoing a strategic shift (v2.0) to focus primarily on being a high-performance, professional-grade **Modbus Slave (Server) Emulator**.
+Modbus Slave Emulator is a high-performance simulation tool built with Electron, React, and TypeScript. It is optimized for simulating complex Modbus server environments with a focus on multi-slave support and real-time monitoring.
 
 ## Core Mandates & Vision
-- **Server-First:** Prioritize Modbus Slave simulation features (Multi-Slave, Traffic Monitoring, Easing Functions).
-- **Type Safety:** Strict TypeScript usage across Main and Renderer processes.
-- **Performance:** Efficient handling of large-scale register spaces (up to 65535 registers per type) and high-frequency polling.
-- **Reliability:** Comprehensive testing with Vitest (Unit) and Playwright (E2E).
+- **Server-First Simulation**: prioritize multi-slave (Unit ID) support and diverse protocol compatibility (TCP, RTU, UDP, ASCII).
+- **Data Integrity**: enforce strict Type Safety and Zod-based validation for workspace configurations.
+- **Observability**: provide deep visibility into Modbus traffic with millisecond-level precision.
+- **Safety**: prevent data loss through "Unsaved Changes" protection and automatic workspace finger-printing.
 
 ## Technical Stack
-- **Framework:** Electron with `electron-vite`
-- **Frontend:** React 18, Material-UI (MUI v6)
-- **State Management:** Zustand (with `mutative` and `persist` middleware)
-- **Protocol Core:** `modbus-serial`, `serialport`
-- **Data Validation:** Zod
-- **Utilities:** Luxon (Time), Lodash, Monaco Editor (Scripting)
-- **Testing:** Vitest, Playwright
+- **Backend**: Electron (Node.js), `modbus-serial`, `serialport`.
+- **Frontend**: React 18, MUI v6, Zustand (with `mutative` & `persist`).
+- **Validation**: Zod (for workspace snapshots).
+- **Tooling**: `electron-vite`, Vitest, Playwright (E2E).
 
-## Project Architecture
+## Architecture & Logic
 
 ### 1. Main Process (`src/main`)
-- **`index.ts`**: Entry point, manages window lifecycle and module initialization.
-- **`ipc.ts`**: Centralized IPC handler and event registry.
-- **`modules/modbusServer.ts`**: Core logic for managing Modbus protocol adapters and register data.
-- **`modules/trafficMonitor.ts`**: Intercepts and records RX/TX packets for the Communication Monitor.
-- **`modules/systemLogger.ts`**: High-performance JSON-based logger with file rotation and memory buffering.
-- **`modules/cliWorkspace.ts`**: Runtime for CLI-driven workspace management.
+- **`index.ts`**: manages window lifecycle and title-bar customization.
+- **`ipc.ts`**: centralized IPC handler using `ipcHandle` wrapper.
+- **`modules/modbusServer.ts`**: handles protocol adapters and register data management.
+- **`modules/trafficMonitor.ts`**: captures and parses Modbus PDU packets.
 
 ### 2. Renderer Process (`src/renderer`)
-- **Containers**: `Server.tsx`, `CommLogWindow.tsx`, `RegisterPlotWindow.tsx`, `ScriptEditorWindow.tsx`.
-- **Context**: `root.zustand.ts` (Global config), `server.zustand.ts` (Server state), `layout.zustand.ts`.
-- **UI Architecture**: Multi-window approach where sub-windows (Plot, Editor) share state via IPC.
+- **Containers**: `Server.tsx` (Core Workspace), `CommLogWindow.tsx`, `RegisterPlotWindow.tsx`.
+- **Hooks**: `useWindowAlwaysOnTop.ts`, `useWorkspace.ts` (Planned).
+- **Standards**: adhere to [Web Interface Guidelines](https://raw.githubusercontent.com/vercel-labs/web-interface-guidelines/main/command.md).
 
-### 3. Shared Layer (`src/shared`)
-- **Types**: Centralized domain types (`server.ts`, `comm.ts`, `datatype.ts`).
-- **Utils**: `crc.ts` (Modbus CRC/LRC), `excel.ts` (Import/Export), `conversion.ts`.
-- **Migrations**: Versioned state migrations for persisted Zustand stores.
-
-## Key Workflows
-
-### Development Commands
-```bash
-# Start development environment (HMR enabled)
-yarn dev
-
-# Run all quality checks (Lint, Typecheck, Unit Tests, E2E Tests)
-yarn checkup
-
-# Run unit tests
-yarn test
-
-# Run E2E tests (Requires build first)
-yarn test:e2e
-
-# Build for production
-yarn build:win  # or :mac, :linux
-```
-
-### Core Logic: Modbus Register Handling
-- **Register Types**: Coils, Discrete Inputs, Input Registers, Holding Registers.
-- **Data Types**: Supports Int16/32/64, Float, Double, UTF-8 Strings, etc.
-- **Value Generators**: Registers can be static or dynamic (using Easing Functions or Random generators).
-
-## v2.0 Implementation Goals (Reference `IMPLEMENTATION_PLAN.md`)
-1. **Multi-Slave Simulation**: Support multiple Slave IDs on a single port/server.
-2. **Extended Protocols**: ASCII, UDP, RTU-over-TCP, RTU-over-UDP.
-3. **Professional Tooling**: Byte-order conversion, CRC calculator, and Excel-based register mapping.
+## Key Workflows & Features (v2.1+)
+- **Multi-Slave Support**: simulate multiple devices on a single physical/virtual connection.
+- **Unsaved State Guard**: uses `attachCloseRequestBridge` in Main and `request_window_close` event in Renderer to prevent accidental data loss.
+- **Easing Functions**: dynamic register value generation using standardized easing algorithms.
 
 ## Development Conventions
-- **Surgical Edits**: Use `replace` for targeted code updates.
-- **Testing**: Every bug fix or feature must include a corresponding test in `__tests__` or `e2e/`.
-- **Naming**: Follow existing camelCase for functions/variables and PascalCase for Components/Classes.
-- **State**: Prefer `zustand` for frontend state; avoid Prop Drilling. Use `mutative` for immutable updates.
+- **Accessibility**: every `IconButton` must have an `aria-label`.
+- **Testing**: maintain 100% pass rate for `yarn checkup`.
+- **Documentation**: keep `README.md` and `GEMINI.md` synchronized with feature updates.
