@@ -1,7 +1,8 @@
 import { AppState } from './state'
 import { IpcHandlerMap, IpcEvent, IpcEventPayloadMap } from '@shared'
-import { ModbusServer } from './modules/mobusServer'
-import { IpcMainEvent, IpcMainInvokeEvent, dialog, ipcMain } from 'electron'
+import { ModbusServer } from './modules/modbusServer'
+import { BrowserWindow, IpcMainEvent, IpcMainInvokeEvent, dialog, ipcMain } from 'electron'
+import { defaultClientState, type ClientState } from '@shared'
 import type { SystemLogger } from './modules/systemLogger'
 
 const ipcHandlerRegistry = new Map<keyof IpcHandlerMap, (...args: unknown[]) => unknown>()
@@ -54,6 +55,50 @@ type InitIpcFn = (
 ) => void
 
 export const initIpc: InitIpcFn = (app, _state, server, logger) => {
+  let clientState: ClientState = { ...defaultClientState }
+
+  const patchClientState = (patch: Partial<ClientState>): void => {
+    clientState = { ...clientState, ...patch }
+  }
+
+  // Client (legacy compatibility)
+  ipcHandle('get_connection_config', () => _state.connectionConfig)
+  ipcHandle('update_connection_config', (_, config) => _state.updateConnectionConfig(config))
+  ipcHandle('update_register_config', (_, config) => _state.updateRegisterConfig(config))
+  ipcHandle('get_client_state', () => clientState)
+  ipcHandle('set_register_mapping', (_, mapping) => _state.setRegisterMapping(mapping))
+  ipcHandle('connect', () => {
+    patchClientState({ connectState: 'connected' })
+  })
+  ipcHandle('disconnect', () => {
+    patchClientState({
+      connectState: 'disconnected',
+      polling: false,
+      scanningUniId: false,
+      scanningRegisters: false
+    })
+  })
+  ipcHandle('read', () => {})
+  ipcHandle('start_polling', () => {
+    patchClientState({ polling: true })
+  })
+  ipcHandle('stop_polling', () => {
+    patchClientState({ polling: false })
+  })
+  ipcHandle('write', () => {})
+  ipcHandle('scan_unit_ids', () => {
+    patchClientState({ scanningUniId: true })
+  })
+  ipcHandle('stop_scanning_unit_ids', () => {
+    patchClientState({ scanningUniId: false })
+  })
+  ipcHandle('scan_registers', () => {
+    patchClientState({ scanningRegisters: true })
+  })
+  ipcHandle('stop_scanning_registers', () => {
+    patchClientState({ scanningRegisters: false })
+  })
+
   // Server
   ipcHandle('add_replace_server_register', (_, params) => server.addRegister(params))
   ipcHandle('remove_server_register', (_, params) => server.removeRegister(params))
@@ -73,6 +118,14 @@ export const initIpc: InitIpcFn = (app, _state, server, logger) => {
   ipcHandle('export_comm_log', (_, filepath: string) =>
     server.getTrafficMonitor().exportToFile(filepath)
   )
+  ipcHandle('get_comm_packets', (_, limit?: number) => {
+    const packets = server.getTrafficMonitor().getPackets()
+    if (!Number.isFinite(limit)) return packets
+    const normalized = Math.max(0, Math.floor(limit as number))
+    if (normalized === 0) return []
+    if (packets.length <= normalized) return packets
+    return packets.slice(-normalized)
+  })
   ipcHandle('get_comm_stats', () => server.getTrafficMonitor().getStats())
   ipcHandle('read_text_file', async (_, absolutePath: string) => {
     const fs = await import('fs/promises')
@@ -86,10 +139,19 @@ export const initIpc: InitIpcFn = (app, _state, server, logger) => {
     const result = await dialog.showOpenDialog({
       title: 'Open Workspace',
       properties: ['openFile'],
-      filters: [{ name: 'Modbux Workspace', extensions: ['json'] }]
+      filters: [{ name: 'Modbus Slave Workspace', extensions: ['json'] }]
     })
     if (result.canceled || result.filePaths.length === 0) return null
     return result.filePaths[0]
+  })
+  ipcHandle('pick_workspace_save_file', async (_, suggestedName?: string) => {
+    const result = await dialog.showSaveDialog({
+      title: 'Save Workspace',
+      defaultPath: suggestedName || 'modbus-slave_workspace.json',
+      filters: [{ name: 'Modbus Slave Workspace', extensions: ['json'] }]
+    })
+    if (result.canceled || !result.filePath) return null
+    return result.filePath
   })
   ipcHandle('append_system_log', (_, params) => {
     logger?.log(params)
@@ -122,19 +184,60 @@ export const initIpc: InitIpcFn = (app, _state, server, logger) => {
   ipcHandle('export_system_logs', (_, filepath: string) => {
     logger?.exportToFile(filepath)
   })
-  ipcHandle('set_log_buffer_limit_mb', (_, limitMb: number) => {
+  ipcHandle('set_comm_buffer_limit_mb', (_, limitMb: number) => {
     const parsed = Number.isFinite(limitMb) ? limitMb : 100
     const normalizedMb = Math.max(1, Math.min(1024, Math.round(parsed)))
     const limitBytes = normalizedMb * 1024 * 1024
     server.getTrafficMonitor().setMaxBufferBytes(limitBytes)
+    return normalizedMb
+  })
+  ipcHandle('get_comm_buffer_limit_mb', () => {
+    return Math.max(1, Math.round(server.getTrafficMonitor().getMaxBufferBytes() / (1024 * 1024)))
+  })
+  ipcHandle('set_system_log_buffer_limit_mb', (_, limitMb: number) => {
+    const parsed = Number.isFinite(limitMb) ? limitMb : 100
+    const normalizedMb = Math.max(1, Math.min(1024, Math.round(parsed)))
+    const limitBytes = normalizedMb * 1024 * 1024
     logger?.setMaxBufferBytes(limitBytes)
     return normalizedMb
   })
-  ipcHandle('get_log_buffer_limit_mb', () => {
-    return Math.max(1, Math.round(server.getTrafficMonitor().getMaxBufferBytes() / (1024 * 1024)))
+  ipcHandle('get_system_log_buffer_limit_mb', () => {
+    return logger ? Math.max(1, Math.round(logger.getMaxBufferBytes() / (1024 * 1024))) : 100
   })
 
   ipcHandle('get_app_version', () => app.getVersion())
+  ipcHandle('confirm_window_close', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender) as
+      | (BrowserWindow & {
+          __modbusSlaveAllowClose?: boolean
+          __modbusSlaveCloseRequestPending?: boolean
+        })
+      | null
+    if (!win || win.isDestroyed()) return
+    win.__modbusSlaveCloseRequestPending = false
+    win.__modbusSlaveAllowClose = true
+    win.close()
+  })
+  ipcHandle('reject_window_close', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender) as
+      | (BrowserWindow & {
+          __modbusSlaveCloseRequestPending?: boolean
+        })
+      | null
+    if (!win || win.isDestroyed()) return
+    win.__modbusSlaveCloseRequestPending = false
+  })
+  ipcHandle('set_window_always_on_top', (event, alwaysOnTop: boolean) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win || win.isDestroyed()) return false
+    win.setAlwaysOnTop(Boolean(alwaysOnTop))
+    return win.isAlwaysOnTop()
+  })
+  ipcHandle('get_window_always_on_top', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win || win.isDestroyed()) return false
+    return win.isAlwaysOnTop()
+  })
 
   ipcHandle('list_serial_ports', async () => {
     try {
@@ -271,14 +374,29 @@ export const initIpc: InitIpcFn = (app, _state, server, logger) => {
 
   ipcHandle('import_server_data', async (_, params) => {
     const fs = await import('fs')
+    const { importFromExcel } = await import('../shared/utils/excel')
 
     try {
-      fs.readFileSync(params.filePath)
+      const buffer = fs.readFileSync(params.filePath)
+      const result = importFromExcel(buffer, {
+        defaultUnitId: params.unitId ? parseInt(params.unitId, 10) : 1
+      })
+
+      if (!result.success || !result.data) {
+        return {
+          success: false,
+          importedCount: 0,
+          errors: result.errors || [],
+          warnings: []
+        }
+      }
+
       return {
         success: true,
-        importedCount: 0,
+        importedCount: result.rowCount,
         errors: [],
-        warnings: ['Import not fully implemented yet']
+        warnings: [],
+        data: result.data
       }
     } catch (error) {
       return {

@@ -170,7 +170,7 @@ describe('configMigration', () => {
       it('handles future version (v3) with warning', () => {
         const v3Config = JSON.stringify({
           version: 3,
-          modbuxVersion: '2.0.0',
+          modbusSlaveVersion: '2.0.0',
           name: 'Future',
           littleEndian: false,
           newField: 'something',
@@ -260,7 +260,7 @@ describe('configMigration', () => {
       it('handles future version with warning', () => {
         const v3Config = JSON.stringify({
           version: 3,
-          modbuxVersion: '2.0.0',
+          modbusSlaveVersion: '2.0.0',
           name: 'Future',
           registerMapping: {}
         })

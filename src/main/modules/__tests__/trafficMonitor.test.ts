@@ -127,7 +127,7 @@ describe('trafficMonitor', () => {
       parsed: { isException: false }
     })
 
-    const output = path.join(os.tmpdir(), `modbux-comm-${Date.now()}.csv`)
+    const output = path.join(os.tmpdir(), `modbus-slave-comm-${Date.now()}.csv`)
     monitor.exportToFile(output)
 
     const content = fs.readFileSync(output, 'utf8')

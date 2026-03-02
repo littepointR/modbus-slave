@@ -83,7 +83,9 @@ const useOpen: UseOpenHook = () => {
         if (wasMixedEndianness) {
           enqueueSnackbar({
             variant: 'warning',
-            message: t('snackbar.mixedEndianness', { endian: config.littleEndian ? t('common.littleEndian') : t('common.bigEndian') }),
+            message: t('snackbar.mixedEndianness', {
+              endian: config.littleEndian ? t('common.littleEndian') : t('common.bigEndian')
+            }),
             autoHideDuration: 8000
           })
         }
@@ -98,7 +100,10 @@ const useOpen: UseOpenHook = () => {
         }
       } catch (error) {
         const tError = error as Error
-        enqueueSnackbar({ variant: 'error', message: t('snackbar.invalidJson', { message: tError.message }) })
+        enqueueSnackbar({
+          variant: 'error',
+          message: t('snackbar.invalidJson', { message: tError.message })
+        })
         console.error('Config load error:', error)
       }
 
@@ -138,11 +143,11 @@ const useSave: UseSaveHook = () => {
     })
 
     // Get app version
-    const modbuxVersion = await window.api.getAppVersion()
+    const modbusSlaveVersion = await window.api.getAppVersion()
 
     const config: ServerConfig = {
       version: 2,
-      modbuxVersion,
+      modbusSlaveVersion,
       name,
       littleEndian: littleEndian[selectedUuid] ?? false,
       serverRegistersPerUnit
@@ -152,7 +157,7 @@ const useSave: UseSaveHook = () => {
     const element = document.createElement('a')
     element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(configJson))
 
-    const filename = `modbux_server_${snakeCase(name)}.json`
+    const filename = `modbus-slave_server_${snakeCase(name)}.json`
 
     element.setAttribute('download', filename)
     element.style.display = 'none'

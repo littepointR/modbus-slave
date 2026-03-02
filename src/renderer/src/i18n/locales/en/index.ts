@@ -20,6 +20,7 @@ export default {
     showLog: 'Show Log',
     hideLog: 'Hide Log',
     settings: 'Settings',
+    version: 'Version',
     language: 'Language',
     theme: 'Theme',
     themeMode: 'Appearance',
@@ -34,12 +35,14 @@ export default {
     globalFont: 'Global Font',
     globalFontSize: 'Global Font Size',
     globalEncoding: 'Global Encoding',
-    logBufferSize: 'Log Buffer Size (MB)',
+    commBufferSize: 'Communication Buffer Size (MB)',
+    systemLogBufferSize: 'System Log Buffer Size (MB)',
     returnToHome: 'Return to home',
     view: 'View',
     refresh: 'Refresh',
     validate: 'Validate',
     continue: 'Continue',
+    alwaysOnTop: 'Always On Top',
     autoScroll: 'Auto Scroll',
     moreOptions: 'More options',
     timeSettings: 'Time settings',
@@ -127,7 +130,7 @@ export default {
       save: 'Save configuration',
       saveTooltip: 'save datatype, scaling and comment configuration to json file',
       load: 'Load configuration',
-      loadTooltip: 'load a modbux client configuration file',
+      loadTooltip: 'load a modbus-slave client configuration file',
       clear: 'Clear configuration',
       clearTooltip: 'clear datatype, scaling and comment configuration'
     },
@@ -180,8 +183,17 @@ export default {
       openConnection: 'Open Connection',
       closeConnection: 'Close Connection',
       editConnection: 'Edit Connection',
+      deleteConnection: 'Delete Connection',
       editSlave: 'Edit Slave',
+      deleteSlave: 'Delete Slave',
+      copySlave: 'Copy Slave',
+      exportSlaveData: 'Export Slave Data',
+      importSlaveData: 'Import Slave Data',
+      addressModeProtocolHex: 'Protocol Addresses (Base 0, Hexadecimal)',
+      addressModeProtocolDec: 'Protocol Addresses (Base 0, Decimal)',
+      addressModePlc: 'PLC Addresses (Base 1)',
       commDetails: 'Communication Details',
+      systemLogs: 'System Logs',
       editScript: 'Edit Script'
     },
     dialog: {
@@ -214,7 +226,10 @@ export default {
       registerType: 'Register Type',
       startAddress: 'Start Address',
       count: 'Count',
-      addGroup: 'Add Register Group'
+      addGroup: 'Add Register Group',
+      unsavedChangesTitle: 'Unsaved Changes',
+      unsavedChangesOnClose:
+        'You have unsaved workspace changes. Continue and discard these changes?'
     },
     connection: {
       protocol: 'Protocol',
@@ -359,7 +374,7 @@ export default {
     invalidConfig: 'Invalid Config',
     invalidJson: 'INVALID JSON: {{message}}',
     futureVersion:
-      'This config was created with a newer version of Modbux. Some features may not work correctly.',
+      'This config was created with a newer version of Modbus Slave. Some features may not work correctly.',
     mixedEndianness:
       'Warning: Config had mixed byte order settings. Now using {{endian}} globally. Please verify.'
   },

@@ -46,7 +46,7 @@ vi.mock('../modbusServer/serverAdapter', () => ({
   })
 }))
 
-import { ModbusServer } from '../mobusServer'
+import { ModbusServer } from '../modbusServer'
 
 const createMockWindows = (): Windows => ({ send: vi.fn() }) as unknown as Windows
 

@@ -41,7 +41,7 @@ export type RegisterMapping = z.infer<typeof RegisterMappingSchema>
 // Client config schema (v2 with metadata)
 export const RegisterMapConfigSchema = z.object({
   version: z.number(),
-  modbuxVersion: z.string(),
+  modbusSlaveVersion: z.string(),
   name: z.string().optional(),
   registerMapping: RegisterMappingSchema
 })

@@ -4,21 +4,21 @@ import { readFile } from 'fs/promises'
 import { homedir } from 'os'
 import { join } from 'path'
 
-const HELP_TEXT = `modbux-cli
+const HELP_TEXT = `modbus-slave-cli
 
 Usage:
-  modbux-cli health [--info-file <path>]
-  modbux-cli channels [--info-file <path>]
-  modbux-cli invoke <channel> [--args <json-array>] [--info-file <path>]
-  modbux-cli action <action> [--payload <json-object>] [--info-file <path>]
-  modbux-cli invoke <channel> [--args <json-array>] --host <host> --port <port> --token <token>
+  modbus-slave-cli health [--info-file <path>]
+  modbus-slave-cli channels [--info-file <path>]
+  modbus-slave-cli invoke <channel> [--args <json-array>] [--info-file <path>]
+  modbus-slave-cli action <action> [--payload <json-object>] [--info-file <path>]
+  modbus-slave-cli invoke <channel> [--args <json-array>] --host <host> --port <port> --token <token>
 
 Examples:
-  modbux-cli channels
-  modbux-cli invoke get_app_version
-  modbux-cli action workspace.get
-  modbux-cli action connection.open --payload '{"connectionId":"conn-1"}'
-  modbux-cli invoke create_server --args '[{"uuid":"demo","config":{"protocol":"tcp","port":1502}}]'
+  modbus-slave-cli channels
+  modbus-slave-cli invoke get_app_version
+  modbus-slave-cli action workspace.get
+  modbus-slave-cli action connection.open --payload '{"connectionId":"conn-1"}'
+  modbus-slave-cli invoke create_server --args '[{"uuid":"demo","config":{"protocol":"tcp","port":1502}}]'
 `
 
 const main = async () => {
@@ -137,7 +137,7 @@ const resolveConnection = async (options) => {
   }
 
   const infoPath =
-    options['info-file'] ?? process.env.MODBUX_CLI_INFO_FILE ?? defaultInfoFilePath()
+    options['info-file'] ?? process.env.MODBUS - SLAVE_CLI_INFO_FILE ?? defaultInfoFilePath()
   const content = await readFile(infoPath, 'utf8')
   const parsed = JSON.parse(content)
   if (!parsed.host || !parsed.port || !parsed.token) {
@@ -153,12 +153,16 @@ const resolveConnection = async (options) => {
 
 const defaultInfoFilePath = () => {
   if (process.platform === 'win32' && process.env.APPDATA) {
-    return join(process.env.APPDATA, 'modbux', 'cli-api.json')
+    return join(process.env.APPDATA, 'modbus-slave', 'cli-api.json')
   }
   if (process.platform === 'darwin') {
-    return join(homedir(), 'Library', 'Application Support', 'modbux', 'cli-api.json')
+    return join(homedir(), 'Library', 'Application Support', 'modbus-slave', 'cli-api.json')
   }
-  return join(process.env.XDG_CONFIG_HOME || join(homedir(), '.config'), 'modbux', 'cli-api.json')
+  return join(
+    process.env.XDG_CONFIG_HOME || join(homedir(), '.config'),
+    'modbus-slave',
+    'cli-api.json'
+  )
 }
 
 const request = async (connection, path, options) => {

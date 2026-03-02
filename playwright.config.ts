@@ -7,6 +7,7 @@ export default defineConfig({
   workers: 1, // Electron tests must run serially
   maxFailures: 1, // Stop on first failure — prevents cascading errors after app closes
   use: {
-    trace: 'on-first-retry'
+    trace: 'on',
+    video: 'on'
   }
 })

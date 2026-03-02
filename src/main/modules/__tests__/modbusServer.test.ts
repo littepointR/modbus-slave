@@ -12,27 +12,29 @@ const { adapterInstances } = vi.hoisted(() => ({
   }>
 }))
 
-import { ModbusServer, SERVER_DEVICE_FAILURE, ILLEGAL_DATA_ADDRESS } from '../mobusServer'
+import { ModbusServer, SERVER_DEVICE_FAILURE, ILLEGAL_DATA_ADDRESS } from '../modbusServer'
 import { createServerAdapter } from '../modbusServer/serverAdapter'
 
 // Mock serverAdapter to avoid ServerTCP instantiation issues
 vi.mock('../modbusServer/serverAdapter', () => ({
-  createServerAdapter: vi.fn().mockImplementation(
-    (protocol: string, _vector: IServiceVector, config: { host?: string; port?: number }) => {
-      const host = config.host ?? '0.0.0.0'
-      const port = config.port ?? 502
-      const suffix = protocol === 'ModbusTcp' ? '' : '/mock'
-      const adapter = {
-        start: vi.fn().mockResolvedValue(undefined),
-        stop: vi.fn().mockResolvedValue(undefined),
-        isRunning: vi.fn().mockReturnValue(true),
-        getAddress: vi.fn().mockReturnValue(`${host}:${port}${suffix}`),
-        getProtocol: vi.fn().mockReturnValue(protocol)
+  createServerAdapter: vi
+    .fn()
+    .mockImplementation(
+      (protocol: string, _vector: IServiceVector, config: { host?: string; port?: number }) => {
+        const host = config.host ?? '0.0.0.0'
+        const port = config.port ?? 502
+        const suffix = protocol === 'ModbusTcp' ? '' : '/mock'
+        const adapter = {
+          start: vi.fn().mockResolvedValue(undefined),
+          stop: vi.fn().mockResolvedValue(undefined),
+          isRunning: vi.fn().mockReturnValue(true),
+          getAddress: vi.fn().mockReturnValue(`${host}:${port}${suffix}`),
+          getProtocol: vi.fn().mockReturnValue(protocol)
+        }
+        adapterInstances.push(adapter)
+        return adapter
       }
-      adapterInstances.push(adapter)
-      return adapter
-    }
-  )
+    )
 }))
 
 vi.mock('modbus-serial', () => ({
@@ -825,7 +827,11 @@ describe('ModbusServer', () => {
     })
 
     it.each([
-      { protocol: 'ModbusTcp', config: { host: '127.0.0.1', port: 1502 }, expectedAddress: '127.0.0.1:1502' },
+      {
+        protocol: 'ModbusTcp',
+        config: { host: '127.0.0.1', port: 1502 },
+        expectedAddress: '127.0.0.1:1502'
+      },
       {
         protocol: 'ModbusUdp',
         config: { host: '127.0.0.1', port: 1503 },
@@ -844,14 +850,26 @@ describe('ModbusServer', () => {
       {
         protocol: 'ModbusRtu',
         config: {
-          serial: { port: '/dev/tty.usbmodem-rtu', baudRate: 9600, dataBits: 8, stopBits: 1, parity: 'none' as const }
+          serial: {
+            port: '/dev/tty.usbmodem-rtu',
+            baudRate: 9600,
+            dataBits: 8,
+            stopBits: 1,
+            parity: 'none' as const
+          }
         },
         expectedAddress: '0.0.0.0:502/mock'
       },
       {
         protocol: 'ModbusAscii',
         config: {
-          serial: { port: '/dev/tty.usbmodem-ascii', baudRate: 9600, dataBits: 8, stopBits: 1, parity: 'none' as const }
+          serial: {
+            port: '/dev/tty.usbmodem-ascii',
+            baudRate: 9600,
+            dataBits: 8,
+            stopBits: 1,
+            parity: 'none' as const
+          }
         },
         expectedAddress: '0.0.0.0:502/mock'
       }

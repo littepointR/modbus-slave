@@ -8,24 +8,22 @@ import {
   type PropsWithChildren
 } from 'react'
 import { ThemeProvider } from '@mui/material/styles'
+import { createAppTheme, type ThemeModePreference, type ThemePrimaryPreset } from './index'
 import {
-  createAppTheme,
-  type ThemeModePreference,
-  type ThemePrimaryPreset
-} from './index'
-import {
-  GLOBAL_LOG_BUFFER_MB_KEY,
+  GLOBAL_COMM_BUFFER_MB_KEY,
   GLOBAL_MONO_FONT_KEY,
   GLOBAL_MONO_FONT_SIZE_KEY,
+  GLOBAL_SYSTEM_LOG_BUFFER_MB_KEY,
   applyGlobalMonoFontPreference,
   applyGlobalMonoFontSizePreference,
-  getGlobalLogBufferSizePreference,
+  getGlobalCommBufferSizePreference,
   getGlobalMonoFontPreference,
-  getGlobalMonoFontSizePreference
+  getGlobalMonoFontSizePreference,
+  getGlobalSystemLogBufferSizePreference
 } from '@renderer/settings/global-preferences'
 
-const THEME_MODE_KEY = 'modbux.theme.mode'
-const THEME_COLOR_KEY = 'modbux.theme.color'
+const THEME_MODE_KEY = 'modbus-slave.theme.mode'
+const THEME_COLOR_KEY = 'modbus-slave.theme.color'
 
 interface ThemeSettingsContextValue {
   themeMode: ThemeModePreference
@@ -100,7 +98,8 @@ export const ThemeSettingsProvider = ({ children }: PropsWithChildren): JSX.Elem
   useEffect(() => {
     applyGlobalMonoFontPreference(getGlobalMonoFontPreference())
     applyGlobalMonoFontSizePreference(getGlobalMonoFontSizePreference())
-    void window.api.setLogBufferLimitMb(getGlobalLogBufferSizePreference())
+    void window.api.setCommBufferLimitMb(getGlobalCommBufferSizePreference())
+    void window.api.setSystemLogBufferLimitMb(getGlobalSystemLogBufferSizePreference())
   }, [])
 
   useEffect(() => {
@@ -132,8 +131,11 @@ export const ThemeSettingsProvider = ({ children }: PropsWithChildren): JSX.Elem
       if (event.key === GLOBAL_MONO_FONT_SIZE_KEY) {
         applyGlobalMonoFontSizePreference(getGlobalMonoFontSizePreference())
       }
-      if (event.key === GLOBAL_LOG_BUFFER_MB_KEY) {
-        void window.api.setLogBufferLimitMb(getGlobalLogBufferSizePreference())
+      if (event.key === GLOBAL_COMM_BUFFER_MB_KEY) {
+        void window.api.setCommBufferLimitMb(getGlobalCommBufferSizePreference())
+      }
+      if (event.key === GLOBAL_SYSTEM_LOG_BUFFER_MB_KEY) {
+        void window.api.setSystemLogBufferLimitMb(getGlobalSystemLogBufferSizePreference())
       }
     }
 
@@ -141,7 +143,10 @@ export const ThemeSettingsProvider = ({ children }: PropsWithChildren): JSX.Elem
     return () => window.removeEventListener('storage', onStorage)
   }, [])
 
-  const muiTheme = useMemo(() => createAppTheme(resolvedMode, themeColor), [resolvedMode, themeColor])
+  const muiTheme = useMemo(
+    () => createAppTheme(resolvedMode, themeColor),
+    [resolvedMode, themeColor]
+  )
 
   const value = useMemo<ThemeSettingsContextValue>(
     () => ({

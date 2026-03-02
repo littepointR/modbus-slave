@@ -1,5 +1,5 @@
-appId: com.ploxc.modbux
-productName: Modbux
+appId: com.ploxc.modbus-slave
+productName: Modbus Slave
 directories:
   buildResources: build
 files:
@@ -12,7 +12,7 @@ files:
 asarUnpack:
   - resources/**
 win:
-  executableName: Modbux
+  executableName: Modbus Slave
 nsis:
   artifactName: ${name}-${version}-${arch}-setup.${ext}
   shortcutName: ${productName}

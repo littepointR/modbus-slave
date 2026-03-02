@@ -5,7 +5,7 @@ import icon from '../../resources/icon.png?asset'
 import { initIpc, onIpcEvent } from './ipc'
 import { AppState } from './state'
 import os from 'os'
-import { ModbusServer } from './modules/mobusServer'
+import { ModbusServer } from './modules/modbusServer'
 import { Windows } from '@shared'
 import type {
   RegisterPlotData,
@@ -17,6 +17,50 @@ import type {
 import { startCliApiServerWithOptions, stopCliApiServer } from './cliApi'
 import { CliWorkspaceRuntime } from './modules/cliWorkspace'
 import { SystemLogger } from './modules/systemLogger'
+
+const APP_DISPLAY_NAME = 'Modbus Slave Emulator'
+const SERVER_WINDOW_TITLE = `${APP_DISPLAY_NAME} - Workspace`
+const COMM_LOG_WINDOW_TITLE = `${APP_DISPLAY_NAME} - Communication Log`
+const SYSTEM_LOG_WINDOW_TITLE = `${APP_DISPLAY_NAME} - System Log`
+const TITLE_BAR_OVERLAY_OPTIONS =
+  process.platform === 'win32'
+    ? {
+        titleBarOverlay: {
+          color: '#0b1327',
+          symbolColor: '#dbeafe',
+          height: 36
+        }
+      }
+    : {}
+
+const lockWindowTitle = (window: BrowserWindow, title: string): void => {
+  window.setTitle(title)
+  window.on('page-title-updated', (event) => {
+    event.preventDefault()
+    if (!window.isDestroyed()) window.setTitle(title)
+  })
+}
+
+const attachCloseRequestBridge = (window: BrowserWindow): void => {
+  const guardedWindow = window as BrowserWindow & {
+    __modbusSlaveAllowClose?: boolean
+    __modbusSlaveCloseRequestPending?: boolean
+  }
+  window.on('close', (event) => {
+    if (guardedWindow.__modbusSlaveAllowClose) {
+      guardedWindow.__modbusSlaveCloseRequestPending = false
+      return
+    }
+    if (window.webContents.isDestroyed()) return
+    if (guardedWindow.__modbusSlaveCloseRequestPending) {
+      guardedWindow.__modbusSlaveAllowClose = true
+      return
+    }
+    event.preventDefault()
+    guardedWindow.__modbusSlaveCloseRequestPending = true
+    window.webContents.send('request_window_close')
+  })
+}
 
 if (is.dev && os.platform() === 'darwin') {
   app.disableHardwareAcceleration()
@@ -37,6 +81,7 @@ const appState = new AppState()
 
 // Initialize the modbus server
 const server = new ModbusServer({ windows, logger: systemLogger })
+server.getTrafficMonitor().start()
 const cliWorkspaceRuntime = new CliWorkspaceRuntime(server, systemLogger)
 
 // IPC
@@ -65,6 +110,7 @@ function createWindow(): BrowserWindow {
     minWidth: 820,
     minHeight: 800,
     autoHideMenuBar: true,
+    ...TITLE_BAR_OVERLAY_OPTIONS,
     show: false,
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
@@ -73,15 +119,17 @@ function createWindow(): BrowserWindow {
       nodeIntegration: false,
       contextIsolation: true
     },
-    title: 'Modbux',
+    title: APP_DISPLAY_NAME,
     icon: join(__dirname, 'assets', 'icon.png'),
     backgroundColor: '#181818'
   })
 
   windows.main.on('ready-to-show', () => {
     if (windows.main === null) return
+    lockWindowTitle(windows.main, APP_DISPLAY_NAME)
     windows.main.show()
   })
+  attachCloseRequestBridge(windows.main)
 
   windows.main.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url)
@@ -89,7 +137,13 @@ function createWindow(): BrowserWindow {
   })
 
   windows.main.on('close', () => {
+    const mainWindow = windows.main as
+      | (BrowserWindow & { __modbusSlaveAllowClose?: boolean })
+      | null
+    if (!mainWindow?.__modbusSlaveAllowClose) return
     windows.server?.close()
+    windows.commLog?.close()
+    windows.systemLog?.close()
     scriptEditorWindow?.close()
     registerPlotWindows.forEach((plotWindow) => plotWindow.close())
   })
@@ -118,6 +172,7 @@ onIpcEvent('open_server_window', () => {
     minWidth: 820,
     minHeight: 800,
     autoHideMenuBar: true,
+    ...TITLE_BAR_OVERLAY_OPTIONS,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
@@ -125,7 +180,7 @@ onIpcEvent('open_server_window', () => {
       contextIsolation: true,
       additionalArguments: ['is-server-window']
     },
-    title: 'Server',
+    title: SERVER_WINDOW_TITLE,
     backgroundColor: '#181818'
   })
 
@@ -138,8 +193,14 @@ onIpcEvent('open_server_window', () => {
   }
 
   windows.server.on('close', () => {
+    const serverWindow = windows.server as
+      | (BrowserWindow & { __modbusSlaveAllowClose?: boolean })
+      | null
+    if (!serverWindow?.__modbusSlaveAllowClose) return
     windows.server = null
   })
+  lockWindowTitle(windows.server, SERVER_WINDOW_TITLE)
+  attachCloseRequestBridge(windows.server)
 })
 
 onIpcEvent('open_comm_log_window', () => {
@@ -154,6 +215,7 @@ onIpcEvent('open_comm_log_window', () => {
     minWidth: 600,
     minHeight: 400,
     autoHideMenuBar: true,
+    ...TITLE_BAR_OVERLAY_OPTIONS,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
@@ -161,7 +223,7 @@ onIpcEvent('open_comm_log_window', () => {
       contextIsolation: true,
       additionalArguments: ['is-comm-log-window']
     },
-    title: 'Communication Details',
+    title: COMM_LOG_WINDOW_TITLE,
     backgroundColor: '#181818'
   })
 
@@ -176,6 +238,7 @@ onIpcEvent('open_comm_log_window', () => {
   windows.commLog.on('close', () => {
     windows.commLog = null
   })
+  lockWindowTitle(windows.commLog, COMM_LOG_WINDOW_TITLE)
 })
 
 const registerPlotWindows = new Map<string, BrowserWindow>()
@@ -189,6 +252,7 @@ onIpcEvent('open_register_plot_window', (_event, payload: RegisterPlotWindowInit
     minWidth: 760,
     minHeight: 480,
     autoHideMenuBar: true,
+    ...TITLE_BAR_OVERLAY_OPTIONS,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
@@ -201,6 +265,7 @@ onIpcEvent('open_register_plot_window', (_event, payload: RegisterPlotWindowInit
   })
 
   registerPlotWindows.set(payload.chartId, win)
+  lockWindowTitle(win, `${APP_DISPLAY_NAME} - ${payload.title}`)
 
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     win.loadURL(`${process.env['ELECTRON_RENDERER_URL']}`)
@@ -228,6 +293,44 @@ onIpcEvent('register_plot_data', (_event, payload: RegisterPlotData) => {
   plotWin.webContents.send('register_plot_data', payload)
 })
 
+onIpcEvent('open_system_log_window', () => {
+  if (windows.systemLog) {
+    windows.systemLog.focus()
+    return
+  }
+
+  windows.systemLog = new BrowserWindow({
+    width: 900,
+    height: 620,
+    minWidth: 640,
+    minHeight: 420,
+    autoHideMenuBar: true,
+    ...TITLE_BAR_OVERLAY_OPTIONS,
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      sandbox: false,
+      nodeIntegration: false,
+      contextIsolation: true,
+      additionalArguments: ['is-system-log-window']
+    },
+    title: SYSTEM_LOG_WINDOW_TITLE,
+    backgroundColor: '#181818'
+  })
+
+  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+    windows.systemLog.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/system-log`)
+  } else {
+    windows.systemLog.loadFile(join(__dirname, '../renderer/index.html'), {
+      hash: '#/system-log'
+    })
+  }
+
+  windows.systemLog.on('close', () => {
+    windows.systemLog = null
+  })
+  lockWindowTitle(windows.systemLog, SYSTEM_LOG_WINDOW_TITLE)
+})
+
 onIpcEvent('close_register_plot_windows', () => {
   registerPlotWindows.forEach((plotWin) => {
     if (!plotWin.isDestroyed()) plotWin.close()
@@ -253,6 +356,7 @@ onIpcEvent('open_script_editor_window', (_event, payload: ScriptEditorWindowInit
       minWidth: 900,
       minHeight: 560,
       autoHideMenuBar: true,
+      ...TITLE_BAR_OVERLAY_OPTIONS,
       webPreferences: {
         preload: join(__dirname, '../preload/index.js'),
         sandbox: false,
@@ -260,7 +364,7 @@ onIpcEvent('open_script_editor_window', (_event, payload: ScriptEditorWindowInit
         contextIsolation: true,
         additionalArguments: ['is-script-editor-window']
       },
-      title: `Script Editor - ${payload.connectionAlias}`,
+      title: `${APP_DISPLAY_NAME} - Script Editor (${payload.connectionAlias})`,
       backgroundColor: '#181818'
     })
 
@@ -277,6 +381,10 @@ onIpcEvent('open_script_editor_window', (_event, payload: ScriptEditorWindowInit
       scriptEditorWindow = null
       scriptEditorConnectionId = null
     })
+    lockWindowTitle(
+      scriptEditorWindow,
+      `${APP_DISPLAY_NAME} - Script Editor (${payload.connectionAlias})`
+    )
   }
 
   const editorWindow = scriptEditorWindow

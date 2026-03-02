@@ -28,23 +28,24 @@ const { tcpInstances, udpSockets, serialInstances } = vi.hoisted(() => ({
 }))
 
 vi.mock('modbus-serial', () => ({
-  ServerTCP: vi
-    .fn()
-    .mockImplementation(function (_vector: IServiceVector, options: { host: string; port: number }) {
-      const handlers: Record<string, (...args: unknown[]) => void> = {}
-      const close = vi.fn((cb: () => void) => cb())
-      const instance = {
-        _server: {
-          once: (event: string, handler: (...args: unknown[]) => void) => {
-            handlers[event] = handler
-          },
-          on: vi.fn()
+  ServerTCP: vi.fn().mockImplementation(function (
+    _vector: IServiceVector,
+    options: { host: string; port: number }
+  ) {
+    const handlers: Record<string, (...args: unknown[]) => void> = {}
+    const close = vi.fn((cb: () => void) => cb())
+    const instance = {
+      _server: {
+        once: (event: string, handler: (...args: unknown[]) => void) => {
+          handlers[event] = handler
         },
-        close
-      }
-      tcpInstances.push({ options, handlers, close })
-      return instance
-    })
+        on: vi.fn()
+      },
+      close
+    }
+    tcpInstances.push({ options, handlers, close })
+    return instance
+  })
 }))
 
 vi.mock('dgram', () => ({
@@ -71,30 +72,28 @@ vi.mock('dgram', () => ({
 }))
 
 vi.mock('serialport', () => ({
-  SerialPort: vi
-    .fn()
-    .mockImplementation(function (options: {
-      path: string
-      baudRate: number
-      dataBits: number
-      stopBits: number
-      parity: 'none' | 'even' | 'odd'
-      autoOpen: boolean
-    }) {
-      const handlers: Record<string, (...args: unknown[]) => void> = {}
-      const open = vi.fn(() => handlers.open?.())
-      const close = vi.fn((cb: () => void) => cb())
-      const instance = {
-        on: (event: string, handler: (...args: unknown[]) => void) => {
-          handlers[event] = handler
-        },
-        open,
-        close,
-        write: vi.fn()
-      }
-      serialInstances.push({ options, handlers, open, close })
-      return instance
-    })
+  SerialPort: vi.fn().mockImplementation(function (options: {
+    path: string
+    baudRate: number
+    dataBits: number
+    stopBits: number
+    parity: 'none' | 'even' | 'odd'
+    autoOpen: boolean
+  }) {
+    const handlers: Record<string, (...args: unknown[]) => void> = {}
+    const open = vi.fn(() => handlers.open?.())
+    const close = vi.fn((cb: () => void) => cb())
+    const instance = {
+      on: (event: string, handler: (...args: unknown[]) => void) => {
+        handlers[event] = handler
+      },
+      open,
+      close,
+      write: vi.fn()
+    }
+    serialInstances.push({ options, handlers, open, close })
+    return instance
+  })
 }))
 
 import {
@@ -155,8 +154,14 @@ describe('serverAdapter', () => {
 
   it('creates UDP and RTU-over adapters with expected addresses', () => {
     const udp = createServerAdapter('ModbusUdp', vector, { host: '127.0.0.1', port: 1502 })
-    const rtuTcp = createServerAdapter('ModbusRtuOverTcp', vector, { host: '127.0.0.1', port: 1503 })
-    const rtuUdp = createServerAdapter('ModbusRtuOverUdp', vector, { host: '127.0.0.1', port: 1504 })
+    const rtuTcp = createServerAdapter('ModbusRtuOverTcp', vector, {
+      host: '127.0.0.1',
+      port: 1503
+    })
+    const rtuUdp = createServerAdapter('ModbusRtuOverUdp', vector, {
+      host: '127.0.0.1',
+      port: 1504
+    })
 
     expect(udp).toBeInstanceOf(UdpServerAdapter)
     expect(udp.getAddress()).toBe('127.0.0.1:1502/udp')
@@ -264,11 +269,13 @@ describe('serverAdapter', () => {
   })
 
   it('handles FC22 mask write register on RTU adapter', async () => {
-    const getHoldingRegister = vi.fn((address: number, unitId: number, cb: (err: null, value: number) => void) => {
-      expect(address).toBe(0x0012)
-      expect(unitId).toBe(7)
-      cb(null, 0x1234)
-    })
+    const getHoldingRegister = vi.fn(
+      (address: number, unitId: number, cb: (err: null, value: number) => void) => {
+        expect(address).toBe(0x0012)
+        expect(unitId).toBe(7)
+        cb(null, 0x1234)
+      }
+    )
     const setRegister = vi.fn(
       (address: number, value: number, unitId: number, cb: (err?: Error | null) => void) => {
         expect(address).toBe(0x0012)
@@ -303,10 +310,12 @@ describe('serverAdapter', () => {
         cb(null)
       }
     )
-    const getHoldingRegister = vi.fn((address: number, unitId: number, cb: (err: null, value: number) => void) => {
-      expect(unitId).toBe(9)
-      cb(null, address + 0x1000)
-    })
+    const getHoldingRegister = vi.fn(
+      (address: number, unitId: number, cb: (err: null, value: number) => void) => {
+        expect(unitId).toBe(9)
+        cb(null, address + 0x1000)
+      }
+    )
 
     const adapter = new RtuServerAdapter(
       {
@@ -360,9 +369,11 @@ describe('serverAdapter', () => {
   })
 
   it('processes concatenated RTU frames from a single receive buffer', async () => {
-    const getHoldingRegister = vi.fn((address: number, _unitId: number, cb: (err: null, value: number) => void) => {
-      cb(null, address + 0x1000)
-    })
+    const getHoldingRegister = vi.fn(
+      (address: number, _unitId: number, cb: (err: null, value: number) => void) => {
+        cb(null, address + 0x1000)
+      }
+    )
 
     const adapter = new RtuServerAdapter(
       {
@@ -377,8 +388,10 @@ describe('serverAdapter', () => {
 
     const frameA = withRtuCrc([0x01, 0x03, 0x00, 0x10, 0x00, 0x01])
     const frameB = withRtuCrc([0x01, 0x03, 0x00, 0x11, 0x00, 0x01])
-    ;(adapter as unknown as { _receiveBuffer: Buffer })._receiveBuffer = Buffer.concat([frameA, frameB])
-
+    ;(adapter as unknown as { _receiveBuffer: Buffer })._receiveBuffer = Buffer.concat([
+      frameA,
+      frameB
+    ])
     ;(adapter as unknown as { _processRTUFrame: () => void })._processRTUFrame()
     await new Promise((resolve) => setTimeout(resolve, 0))
 

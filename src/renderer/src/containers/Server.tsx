@@ -2,9 +2,11 @@ import {
   useState,
   useRef,
   useEffect,
+  useCallback,
   useTransition,
   type MouseEvent as ReactMouseEvent
 } from 'react'
+
 import { useTranslation } from 'react-i18next'
 import { onEvent, sendEvent } from '@renderer/events'
 import {
@@ -47,6 +49,7 @@ import {
 } from '@mui/material'
 import { alpha } from '@mui/material/styles'
 import { useSnackbar } from 'notistack'
+
 import {
   Add as AddIcon,
   Close as CloseIcon,
@@ -61,7 +64,10 @@ import {
   Storage as HoldingRegisterIcon,
   Input as InputRegisterIcon,
   Refresh as RefreshIcon,
-  ShowChart as ShowChartIcon
+  ShowChart as ShowChartIcon,
+  DashboardCustomize as WorkspaceMenuIcon,
+  Cable as ConnectionMenuIcon,
+  Construction as ToolsMenuIcon
 } from '@mui/icons-material'
 import { v4 as uuidv4 } from 'uuid'
 import SettingsMenu from '@renderer/components/shared/SettingsMenu'
@@ -74,195 +80,34 @@ import {
   setGlobalStringEncodingPreference
 } from '@renderer/settings/global-preferences'
 import type {
-  CreateServerParams,
   PlotInterpretation,
   RegisterParams,
   RegisterPlotWindowInit,
-  ServerConnectionConfig,
-  UnitIdString
+  UnitIdString,
+  AddressDisplayMode,
+  RegisterDisplayFormat,
+  Connection,
+  Slave,
+  Register,
+  RegisterGroup,
+  OpenTab,
+  WorkspaceFileHandle,
+  RecentWorkspaceEntry,
+  ScriptDefinition,
+  PersistedWorkspaceSnapshot
 } from '@shared'
+import { toServerConfig } from '@shared'
 import {
   canSelectInterpretationAtAddress,
   getBatchAssignableAddresses,
   getWordSpanForInterpretation
 } from './register-plot.helpers'
+import { useWindowAlwaysOnTop } from '@renderer/hooks/useWindowAlwaysOnTop'
+import { useWorkspaceManagement } from './hooks/useWorkspaceManagement'
 
 // =============================================================================
 // TYPES
 // =============================================================================
-
-interface Register {
-  address: number
-  value: number
-  variableName: string
-  comment: string
-  displayFormat?: RegisterDisplayFormat
-}
-
-interface RegisterGroup {
-  id: string
-  name: string
-  type: '01' | '02' | '03' | '04'
-  startAddress: number
-  count: number
-  registers: Register[]
-}
-
-interface Slave {
-  id: string
-  alias: string
-  slaveId: number
-  responseDelay: number
-  initMode: 'none' | 'random' | 'address'
-  addressType: 'protocol' | 'plc'
-  registerGroups: RegisterGroup[]
-}
-
-interface Connection {
-  id: string
-  alias: string
-  mode: 'rtu' | 'tcp' | 'udp' | 'rtuovertcp' | 'rtuoverudp'
-  invalidRequestBehavior?: 'silent' | 'exception'
-  serialPort?: string
-  baudRate?: number
-  dataBits?: number
-  parity?: 'none' | 'even' | 'odd'
-  stopBits?: number
-  flowControl?: 'none' | 'rtscts' | 'xonxoff'
-  frameFormat?: 'rtu' | 'ascii'
-  ipAddress?: string
-  port?: number
-  isOpen: boolean
-  slaves: Slave[]
-}
-
-interface ScriptDefinition {
-  id: string
-  name: string
-  enabled: boolean
-  intervalMs: number
-  code: string
-  lastError?: string
-  lastRunAt?: number
-}
-
-interface ScriptRuntimeApi {
-  getValue: (unitId: number, registerType: RegisterGroup['type'], address: number) => number | undefined
-  setValue: (
-    unitId: number,
-    registerType: RegisterGroup['type'],
-    address: number,
-    value: number
-  ) => boolean
-  setValues: (
-    unitId: number,
-    registerType: RegisterGroup['type'],
-    values: Record<number, number>
-  ) => number
-  log: (...args: unknown[]) => void
-}
-
-interface ScriptRuntimeEvent {
-  type: 'manual' | 'interval'
-  timestamp: number
-}
-
-const toServerConfig = (connection: Connection): ServerConnectionConfig => {
-  const invalidRequestBehavior = connection.invalidRequestBehavior ?? 'silent'
-  switch (connection.mode) {
-    case 'tcp':
-      return {
-        protocol: 'ModbusTcp',
-        host: connection.ipAddress || '127.0.0.1',
-        port: connection.port || 502,
-        invalidRequestBehavior
-      }
-    case 'udp':
-      return {
-        protocol: 'ModbusUdp',
-        host: connection.ipAddress || '127.0.0.1',
-        port: connection.port || 502,
-        invalidRequestBehavior
-      }
-    case 'rtuovertcp':
-      return {
-        protocol: 'ModbusRtuOverTcp',
-        host: connection.ipAddress || '127.0.0.1',
-        port: connection.port || 502,
-        invalidRequestBehavior
-      }
-    case 'rtuoverudp':
-      return {
-        protocol: 'ModbusRtuOverUdp',
-        host: connection.ipAddress || '127.0.0.1',
-        port: connection.port || 502,
-        invalidRequestBehavior
-      }
-    case 'rtu':
-    default:
-      return {
-        protocol: connection.frameFormat === 'ascii' ? 'ModbusAscii' : 'ModbusRtu',
-        invalidRequestBehavior,
-        serial: {
-          port: connection.serialPort || '',
-          baudRate: connection.baudRate || 9600,
-          dataBits: connection.dataBits || 8,
-          stopBits: connection.stopBits || 1,
-          parity: connection.parity || 'none'
-        }
-      }
-  }
-}
-
-interface OpenTab {
-  connectionId: string
-  slaveId: string
-  registerGroupId: string
-  selectedAddresses: Set<number>
-  interpretationTab: 'basic' | 'long' | 'float' | 'double' | 'typed' | 'string'
-  stringEncoding: string
-  typedInterpretation: Record<number, PlotInterpretation>
-  registerDisplayFormat: Record<number, RegisterDisplayFormat>
-}
-
-interface PlotWindowState extends RegisterPlotWindowInit {
-  selectionColor: string
-}
-
-interface WorkspaceTabSettings {
-  interpretationTab: OpenTab['interpretationTab']
-  stringEncoding: string
-  typedInterpretation: Record<number, PlotInterpretation>
-  registerDisplayFormat: Record<number, RegisterDisplayFormat>
-}
-
-interface WorkspaceFileHandle {
-  name?: string
-  createWritable: () => Promise<{
-    write: (data: string) => Promise<void>
-    close: () => Promise<void>
-  }>
-}
-
-interface PersistedWorkspaceSnapshot {
-  version: number
-  connections: Connection[]
-  tabSettings?: Record<string, WorkspaceTabSettings>
-  scriptsByConnection?: Record<string, ScriptDefinition[]>
-  openTabs?: Array<{
-    connectionId: string
-    slaveId: string
-    registerGroupId: string
-  }>
-  activeTabId?: string | null
-}
-
-interface RecentWorkspaceEntry {
-  id: string
-  name: string
-  path: string
-  updatedAt: number
-}
 
 interface TypedValueEditMenuState {
   tabId: string
@@ -284,6 +129,21 @@ interface DisplayFormatEditMenuState {
   mouseY: number
 }
 
+interface TreeContextMenuState {
+  mouseX: number
+  mouseY: number
+  target: 'connection' | 'slave'
+  connectionId: string
+  slaveId?: string
+}
+
+interface ActionConfirmDialogState {
+  open: boolean
+  title: string
+  message: string
+  confirmLabel: string
+}
+
 // =============================================================================
 // CONSTANTS
 // =============================================================================
@@ -299,18 +159,15 @@ const TYPED_INTERPRETATION_OPTIONS: PlotInterpretation[] = [
   'double'
 ]
 
-type RegisterDisplayFormat =
-  | 'dec'
-  | 'hex'
-  | 'bin'
-  | 'oct'
+type RegisterDisplayFormat = 'dec' | 'hex' | 'bin' | 'oct'
 
-const DISPLAY_FORMAT_OPTIONS: Array<{ mode: RegisterDisplayFormat; label: string; words: number }> = [
-  { mode: 'dec', label: 'DEC', words: 1 },
-  { mode: 'hex', label: 'HEX', words: 1 },
-  { mode: 'bin', label: 'BIN', words: 1 },
-  { mode: 'oct', label: 'OCT', words: 1 }
-]
+const DISPLAY_FORMAT_OPTIONS: Array<{ mode: RegisterDisplayFormat; label: string; words: number }> =
+  [
+    { mode: 'dec', label: 'DEC', words: 1 },
+    { mode: 'hex', label: 'HEX', words: 1 },
+    { mode: 'bin', label: 'BIN', words: 1 },
+    { mode: 'oct', label: 'OCT', words: 1 }
+  ]
 
 interface TypedSpanHint {
   startAddress: number
@@ -319,13 +176,7 @@ interface TypedSpanHint {
   index: number
 }
 
-type TableColumnKey =
-  | 'interpretation'
-  | 'display'
-  | 'address'
-  | 'variable'
-  | 'value'
-  | 'comments'
+type TableColumnKey = 'interpretation' | 'display' | 'address' | 'variable' | 'value' | 'comments'
 
 const DEFAULT_TABLE_COLUMN_WIDTHS: Record<TableColumnKey, number> = {
   interpretation: 150,
@@ -345,21 +196,49 @@ const MIN_TABLE_COLUMN_WIDTHS: Record<TableColumnKey, number> = {
   comments: 150
 }
 
-const SERVER_LAYOUT_STORAGE_KEY = 'modbux.server.layout.v1'
-const MONO_FONT_FAMILY = 'var(--modbux-mono-font, "Iosevka", "Cascadia Mono", "Consolas", monospace)'
-const MONO_FONT_SIZE = 'var(--modbux-mono-font-size, 13px)'
+const SERVER_LAYOUT_STORAGE_KEY = 'modbus-slave.server.layout.v1'
+const MONO_FONT_FAMILY =
+  'var(--modbus-slave-mono-font, "Iosevka", "Cascadia Mono", "Consolas", monospace)'
+const MONO_FONT_SIZE = 'var(--modbus-slave-mono-font-size, 13px)'
 const DEFAULT_LEFT_PANEL_WIDTH = 320
 const DEFAULT_BOTTOM_PANEL_HEIGHT = 300
 const MIN_LEFT_PANEL_WIDTH = 240
 const MIN_RIGHT_PANEL_WIDTH = 560
 const MIN_BOTTOM_PANEL_HEIGHT = 180
 const MIN_TOP_PANEL_HEIGHT = 220
-const DEFAULT_WORKSPACE_FILENAME_PREFIX = 'modbux_workspace'
-const RECENT_WORKSPACES_STORAGE_KEY = 'modbux.server.recentWorkspaces.v1'
-const LAST_WORKSPACE_ID_STORAGE_KEY = 'modbux.server.lastWorkspaceId.v1'
-const MAX_RECENT_WORKSPACES = 8
+const WINDOW_TITLEBAR_PADDING_TOP = 'calc(env(titlebar-area-height, 0px) + 6px)'
+const TOP_MENU_BUTTON_SX = {
+  borderRadius: 999,
+  px: 1.25,
+  py: 0.45,
+  textTransform: 'none',
+  fontWeight: 600,
+  letterSpacing: 0.1,
+  border: '1px solid',
+  borderColor: (theme) => (theme.palette.mode === 'dark' ? 'rgba(148,163,184,0.35)' : '#94a3b8'),
+  color: (theme) => (theme.palette.mode === 'dark' ? '#e2e8f0' : '#0f172a'),
+  bgcolor: (theme) =>
+    theme.palette.mode === 'dark' ? 'rgba(15,23,42,0.58)' : 'rgba(255,255,255,0.96)',
+  backdropFilter: 'blur(8px)',
+  boxShadow: (theme) =>
+    theme.palette.mode === 'dark'
+      ? '0 6px 16px rgba(15,23,42,0.24)'
+      : '0 6px 14px rgba(15,23,42,0.14)',
+  WebkitAppRegion: 'no-drag',
+  '&:hover': {
+    borderColor: (theme) => (theme.palette.mode === 'dark' ? '#60a5fa' : '#2563eb'),
+    color: (theme) => (theme.palette.mode === 'dark' ? '#bfdbfe' : '#1d4ed8'),
+    bgcolor: (theme) =>
+      theme.palette.mode === 'dark' ? 'rgba(30,58,138,0.26)' : 'rgba(226,232,240,0.98)',
+    boxShadow: (theme) =>
+      theme.palette.mode === 'dark'
+        ? '0 8px 18px rgba(37,99,235,0.32)'
+        : '0 8px 18px rgba(37,99,235,0.18)'
+  }
+} as const
 
-const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value))
+const clamp = (value: number, min: number, max: number): number =>
+  Math.min(max, Math.max(min, value))
 
 const toUnitIdString = (slaveId: number): UnitIdString => String(slaveId) as UnitIdString
 
@@ -442,7 +321,7 @@ const createDefaultSlave = (): Slave => ({
   registerGroups: [createDefaultRegisterGroup()]
 })
 
-const getRegisterTypeName = (type: string) => {
+const getRegisterTypeName = (type: string): string => {
   const names: Record<string, string> = {
     '01': 'Coil (0x)',
     '02': 'Discrete Input (1x)',
@@ -452,7 +331,7 @@ const getRegisterTypeName = (type: string) => {
   return names[type] || type
 }
 
-const getRegisterTypeIcon = (type: string) => {
+const getRegisterTypeIcon = (type: string): React.ReactNode => {
   const icons: Record<string, React.ReactNode> = {
     '01': <CoilIcon sx={{ fontSize: 16, color: '#4caf50' }} />,
     '02': <DiscreteInputIcon sx={{ fontSize: 16, color: '#ff9800' }} />,
@@ -462,7 +341,9 @@ const getRegisterTypeIcon = (type: string) => {
   return icons[type] || <CircleIcon sx={{ fontSize: 12 }} />
 }
 
-const formatAddress = (address: number): string => {
+const formatAddress = (address: number, mode: AddressDisplayMode = 'protocol_hex'): string => {
+  if (mode === 'protocol_dec') return String(address)
+  if (mode === 'plc') return String(address + 1)
   return `0x${address.toString(16).toUpperCase().padStart(4, '0')}`
 }
 
@@ -705,17 +586,23 @@ const INTERPRETATION_COLORS: Record<
   double: { bg: '#f1f8e9', fg: '#33691e', border: '#c5e1a5' }
 }
 
-const DISPLAY_COLORS: Record<
-  RegisterDisplayFormat,
-  { bg: string; fg: string; border: string }
-> = {
+const DISPLAY_COLORS: Record<RegisterDisplayFormat, { bg: string; fg: string; border: string }> = {
   dec: { bg: '#e8f5e9', fg: '#1b5e20', border: '#a5d6a7' },
   hex: { bg: '#ede7f6', fg: '#311b92', border: '#b39ddb' },
   bin: { bg: '#e3f2fd', fg: '#0d47a1', border: '#90caf9' },
   oct: { bg: '#fff3e0', fg: '#e65100', border: '#ffcc80' }
 }
 
-const PLOT_SERIES_COLORS = ['#0B57D0', '#B3261E', '#2E7D32', '#ED6C02', '#8E24AA', '#00897B', '#6D4C41', '#546E7A']
+const PLOT_SERIES_COLORS = [
+  '#0B57D0',
+  '#B3261E',
+  '#2E7D32',
+  '#ED6C02',
+  '#8E24AA',
+  '#00897B',
+  '#6D4C41',
+  '#546E7A'
+]
 const PLOT_SELECTION_COLORS = ['#90caf9', '#ffab91', '#a5d6a7', '#ce93d8', '#ffe082', '#80cbc4']
 
 const getPlotSelectionColor = (index: number): string =>
@@ -784,7 +671,10 @@ const uint32ToRegisters = (
         : order === 'BADC'
           ? [bytes[1], bytes[0], bytes[3], bytes[2]]
           : [bytes[3], bytes[2], bytes[1], bytes[0]]
-  return [((arranged[0] & 0xff) << 8) | (arranged[1] & 0xff), ((arranged[2] & 0xff) << 8) | (arranged[3] & 0xff)]
+  return [
+    ((arranged[0] & 0xff) << 8) | (arranged[1] & 0xff),
+    ((arranged[2] & 0xff) << 8) | (arranged[3] & 0xff)
+  ]
 }
 
 const float32ToRegisters = (
@@ -913,7 +803,7 @@ const NewConnectionDialog = ({
   onClose,
   onConfirm,
   initialConnection
-}: NewConnectionDialogProps) => {
+}: NewConnectionDialogProps): JSX.Element => {
   const { t } = useTranslation()
   const isEditMode = !!initialConnection
 
@@ -1044,7 +934,7 @@ const NewConnectionDialog = ({
     return Object.keys(newErrors).length === 0
   }
 
-  const handleConfirm = () => {
+  const handleConfirm = (): void => {
     if (!validateForm()) return
 
     const connection: Connection = {
@@ -1152,9 +1042,7 @@ const NewConnectionDialog = ({
             <InputLabel size="small">Invalid Request Handling</InputLabel>
             <Select
               value={invalidRequestBehavior}
-              onChange={(e) =>
-                setInvalidRequestBehavior(e.target.value as 'silent' | 'exception')
-              }
+              onChange={(e) => setInvalidRequestBehavior(e.target.value as 'silent' | 'exception')}
               label="Invalid Request Handling"
               size="small"
             >
@@ -1203,6 +1091,7 @@ const NewConnectionDialog = ({
                             ) : (
                               <Tooltip title="Refresh serial ports">
                                 <IconButton
+                                  aria-label="Refresh serial ports"
                                   onClick={(e) => {
                                     e.stopPropagation()
                                     scanSerialPorts()
@@ -1371,7 +1260,12 @@ interface NewSlaveDialogProps {
   initialSlave?: Slave
 }
 
-const NewSlaveDialog = ({ open, onClose, onConfirm, initialSlave }: NewSlaveDialogProps) => {
+const NewSlaveDialog = ({
+  open,
+  onClose,
+  onConfirm,
+  initialSlave
+}: NewSlaveDialogProps): JSX.Element => {
   const { t } = useTranslation()
   const isEditMode = !!initialSlave
   const [alias, setAlias] = useState(initialSlave?.alias || '')
@@ -1454,7 +1348,7 @@ const NewSlaveDialog = ({ open, onClose, onConfirm, initialSlave }: NewSlaveDial
     return Object.keys(newErrors).length === 0
   }
 
-  const handleConfirm = () => {
+  const handleConfirm = (): void => {
     if (!validateForm()) return
 
     const slave: Slave = {
@@ -1695,6 +1589,7 @@ const NewSlaveDialog = ({ open, onClose, onConfirm, initialSlave }: NewSlaveDial
                   }
                 />
                 <IconButton
+                  aria-label="Delete register group"
                   onClick={() => removeRegisterGroup(group.id)}
                   size="small"
                   disabled={registerGroups.length <= 1}
@@ -1730,6 +1625,7 @@ interface TreeNodeProps {
   onDoubleClick?: () => void
   isSelected?: boolean
   onSelect?: () => void
+  onContextMenu?: (event: ReactMouseEvent<HTMLDivElement>) => void
   level?: number
   children?: React.ReactNode
   hasChildren?: boolean
@@ -1743,10 +1639,11 @@ const TreeNode = ({
   onDoubleClick,
   isSelected,
   onSelect,
+  onContextMenu,
   level = 0,
   children,
   hasChildren
-}: TreeNodeProps) => {
+}: TreeNodeProps): JSX.Element => {
   return (
     <Box>
       <Box
@@ -1763,8 +1660,10 @@ const TreeNode = ({
         }}
         onClick={onSelect}
         onDoubleClick={onDoubleClick}
+        onContextMenu={onContextMenu}
       >
         <IconButton
+          aria-label={isExpanded ? 'Collapse node' : 'Expand node'}
           size="small"
           onClick={(e) => {
             e.stopPropagation()
@@ -1790,21 +1689,21 @@ interface EditableCellProps {
   placeholder?: string
 }
 
-const EditableCell = ({ value, onChange, placeholder }: EditableCellProps) => {
+const EditableCell = ({ value, onChange, placeholder }: EditableCellProps): JSX.Element => {
   const [isEditing, setIsEditing] = useState(false)
   const [editValue, setEditValue] = useState(value)
 
-  const handleDoubleClick = () => {
+  const handleDoubleClick = (): void => {
     setIsEditing(true)
     setEditValue(value)
   }
 
-  const handleBlur = () => {
+  const handleBlur = (): void => {
     setIsEditing(false)
     onChange(editValue)
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent): void => {
     if (e.key === 'Enter') {
       setIsEditing(false)
       onChange(editValue)
@@ -1854,31 +1753,88 @@ const EditableCell = ({ value, onChange, placeholder }: EditableCellProps) => {
 const Server = (): JSX.Element => {
   const { t } = useTranslation()
   const { enqueueSnackbar } = useSnackbar()
+  const { alwaysOnTop, setWindowAlwaysOnTop } = useWindowAlwaysOnTop()
   const [connections, setConnections] = useState<Connection[]>([])
   const [expandedConnections, setExpandedConnections] = useState<Set<string>>(new Set())
   const [expandedSlaves, setExpandedSlaves] = useState<Set<string>>(new Set())
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [openTabs, setOpenTabs] = useState<OpenTab[]>([])
   const [activeTabId, setActiveTabId] = useState<string | null>(null)
-  const [workspaceTabSettings, setWorkspaceTabSettings] = useState<
-    Record<string, WorkspaceTabSettings>
+  const [globalEncoding, setGlobalEncoding] = useState<string>(getGlobalStringEncodingPreference)
+  const [scriptsByConnection, setScriptsByConnection] = useState<
+    Record<string, ScriptDefinition[]>
   >({})
-  const [workspaceFileHandle, setWorkspaceFileHandle] = useState<WorkspaceFileHandle | null>(null)
-  const [workspaceFilename, setWorkspaceFilename] = useState<string | null>(null)
-  const [workspaceFilePath, setWorkspaceFilePath] = useState<string | null>(null)
-  const [recentWorkspaces, setRecentWorkspaces] = useState<RecentWorkspaceEntry[]>([])
+
+  const showUserError = useCallback(
+    (message: string): void => {
+      enqueueSnackbar(message, { variant: 'error' })
+    },
+    [enqueueSnackbar]
+  )
+
+  const getTabId = useCallback(
+    (connectionId: string, slaveId: string, groupId: string): string =>
+      `${connectionId}-${slaveId}-${groupId}`,
+    []
+  )
+
+  const {
+    workspaceTabSettings,
+    setWorkspaceTabSettings,
+    workspaceFileHandle,
+    setWorkspaceFileHandle,
+    workspaceFilename,
+    workspaceFilePath,
+    setWorkspaceFilename,
+    setWorkspaceFilePath,
+    setWorkspaceSavedFingerprint,
+    recentWorkspaces,
+    setRecentWorkspaces,
+    isWorkspaceDirty,
+    getWorkspaceSnapshot,
+    serializeWorkspaceSnapshot,
+    openWorkspaceByPath,
+    upsertRecentWorkspaceByPath,
+    loadRecentWorkspacesFromStorage,
+    markLastWorkspaceId,
+    DEFAULT_WORKSPACE_FILENAME_PREFIX,
+    LAST_WORKSPACE_ID_STORAGE_KEY
+  } = useWorkspaceManagement({
+    connections,
+    setConnections,
+    scriptsByConnection,
+    setScriptsByConnection,
+    openTabs,
+    setOpenTabs,
+    activeTabId,
+    setActiveTabId,
+    globalEncoding,
+    showUserError,
+    getTabId
+  })
+
   const [workspaceMenuAnchorEl, setWorkspaceMenuAnchorEl] = useState<null | HTMLElement>(null)
   const [connectionMenuAnchorEl, setConnectionMenuAnchorEl] = useState<null | HTMLElement>(null)
   const [toolsMenuAnchorEl, setToolsMenuAnchorEl] = useState<null | HTMLElement>(null)
-  const [globalEncoding, setGlobalEncoding] = useState<string>(getGlobalStringEncodingPreference)
-  const [scriptsByConnection, setScriptsByConnection] = useState<Record<string, ScriptDefinition[]>>(
-    {}
-  )
+  const [treeContextMenu, setTreeContextMenu] = useState<TreeContextMenuState | null>(null)
+  const [slaveAddressDisplayModes, setSlaveAddressDisplayModes] = useState<
+    Record<string, AddressDisplayMode>
+  >({})
   const scriptStateMapRef = useRef<Record<string, Record<string, unknown>>>({})
   const scriptTimerMapRef = useRef<
     Record<string, { timer: ReturnType<typeof setInterval>; intervalMs: number }>
   >({})
   const connectionsRef = useRef<Connection[]>([])
+  const unsavedConfirmResolverRef = useRef<((confirmed: boolean) => void) | null>(null)
+  const unsavedConfirmPromiseRef = useRef<Promise<boolean> | null>(null)
+  const [unsavedConfirmOpen, setUnsavedConfirmOpen] = useState(false)
+  const [actionConfirmDialog, setActionConfirmDialog] = useState<ActionConfirmDialogState>({
+    open: false,
+    title: '',
+    message: '',
+    confirmLabel: ''
+  })
+  const actionConfirmRef = useRef<(() => Promise<void> | void) | null>(null)
 
   const [newConnectionOpen, setNewConnectionOpen] = useState(false)
   const [newSlaveOpen, setNewSlaveOpen] = useState(false)
@@ -1974,18 +1930,15 @@ const Server = (): JSX.Element => {
   const [, startTableTransition] = useTransition()
   const [plotWindows, setPlotWindows] = useState<PlotWindowState[]>([])
 
-  const getTabId = (connectionId: string, slaveId: string, registerGroupId: string): string =>
-    `${connectionId}-${slaveId}-${registerGroupId}`
-
-  const showUserError = (message: string): void => {
-    enqueueSnackbar({ variant: 'error', message })
-  }
-
   useEffect(() => {
     connectionsRef.current = connections
   }, [connections])
 
   useEffect(() => {
+    const globalWindow = window as Window & { __modbusSlaveAutoRestoreTriggered?: boolean }
+    if (globalWindow.__modbusSlaveAutoRestoreTriggered) return
+    globalWindow.__modbusSlaveAutoRestoreTriggered = true
+
     const recents = loadRecentWorkspacesFromStorage()
     setRecentWorkspaces(recents)
 
@@ -1998,10 +1951,15 @@ const Server = (): JSX.Element => {
       removeOnError: true,
       setAsLast: false
     })
-  }, [])
+  }, [
+    loadRecentWorkspacesFromStorage,
+    setRecentWorkspaces,
+    LAST_WORKSPACE_ID_STORAGE_KEY,
+    openWorkspaceByPath
+  ])
 
   useEffect(() => {
-    const persistLastSession = () => {
+    const persistLastSession = (): void => {
       if (connectionsRef.current.length === 0 || !workspaceFilePath) {
         markLastWorkspaceId(null)
         return
@@ -2017,7 +1975,7 @@ const Server = (): JSX.Element => {
     return () => {
       window.removeEventListener('beforeunload', persistLastSession)
     }
-  }, [workspaceFilename, workspaceFilePath, recentWorkspaces, connections])
+  }, [workspaceFilename, workspaceFilePath, upsertRecentWorkspaceByPath, markLastWorkspaceId])
 
   const syncSlaveToBackend = async (connectionId: string, slave: Slave): Promise<void> => {
     const unitId = toUnitIdString(slave.slaveId)
@@ -2066,13 +2024,6 @@ const Server = (): JSX.Element => {
   }
 
   useEffect(() => {
-    void window.api.startCommMonitor()
-    return () => {
-      void window.api.stopCommMonitor()
-    }
-  }, [])
-
-  useEffect(() => {
     const offPlotClose = onEvent('register_plot_window_closed', (chartId) => {
       setPlotWindows((prev) => prev.filter((p) => p.chartId !== chartId))
     })
@@ -2093,7 +2044,9 @@ const Server = (): JSX.Element => {
         const group = slave?.registerGroups.find((g) => g.id === plotWindow.registerGroupId)
         if (!group) return
 
-        const rawRegisters = Object.fromEntries(group.registers.map((reg) => [reg.address, reg.value]))
+        const rawRegisters = Object.fromEntries(
+          group.registers.map((reg) => [reg.address, reg.value])
+        )
         sendEvent('register_plot_data', {
           chartId: plotWindow.chartId,
           timestamp: now,
@@ -2226,7 +2179,7 @@ const Server = (): JSX.Element => {
     }
   }, [])
 
-  const toggleConnection = (id: string) => {
+  const toggleConnection = (id: string): void => {
     setExpandedConnections((prev) => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id)
@@ -2235,7 +2188,7 @@ const Server = (): JSX.Element => {
     })
   }
 
-  const toggleSlave = (id: string) => {
+  const toggleSlave = (id: string): void => {
     setExpandedSlaves((prev) => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id)
@@ -2244,7 +2197,11 @@ const Server = (): JSX.Element => {
     })
   }
 
-  const openRegisterGroup = (connectionId: string, slaveId: string, registerGroupId: string) => {
+  const openRegisterGroup = (
+    connectionId: string,
+    slaveId: string,
+    registerGroupId: string
+  ): void => {
     const tabId = getTabId(connectionId, slaveId, registerGroupId)
     const savedSettings = workspaceTabSettings[tabId]
     setOpenTabs((prev) => {
@@ -2268,7 +2225,11 @@ const Server = (): JSX.Element => {
     setActiveTabId(tabId)
   }
 
-  const selectRegisterGroup = (connectionId: string, slaveId: string, registerGroupId: string) => {
+  const selectRegisterGroup = (
+    connectionId: string,
+    slaveId: string,
+    registerGroupId: string
+  ): void => {
     setSelectedNodeId(`${connectionId}/${slaveId}/${registerGroupId}`)
     const tabId = getTabId(connectionId, slaveId, registerGroupId)
     const isOpened = openTabs.some(
@@ -2279,7 +2240,7 @@ const Server = (): JSX.Element => {
     }
   }
 
-  const closeTab = (tabId: string) => {
+  const closeTab = (tabId: string): void => {
     const newTabs = openTabs.filter(
       (t) => `${t.connectionId}-${t.slaveId}-${t.registerGroupId}` !== tabId
     )
@@ -2293,7 +2254,7 @@ const Server = (): JSX.Element => {
     }
   }
 
-  const updateTab = (tabId: string, updates: Partial<OpenTab>) => {
+  const updateTab = (tabId: string, updates: Partial<OpenTab>): void => {
     setOpenTabs((prev) =>
       prev.map((t) =>
         `${t.connectionId}-${t.slaveId}-${t.registerGroupId}` === tabId ? { ...t, ...updates } : t
@@ -2307,7 +2268,7 @@ const Server = (): JSX.Element => {
     ctrlKey: boolean,
     shiftKey: boolean,
     allAddresses: number[]
-  ) => {
+  ): void => {
     const tab = openTabs.find(
       (t) => `${t.connectionId}-${t.slaveId}-${t.registerGroupId}` === tabId
     )
@@ -2348,7 +2309,7 @@ const Server = (): JSX.Element => {
     updateTab(tabId, { selectedAddresses: newSelection })
   }
 
-  const selectAllAddresses = (tabId: string, addresses: number[]) => {
+  const selectAllAddresses = (tabId: string, addresses: number[]): void => {
     const tab = openTabs.find(
       (t) => `${t.connectionId}-${t.slaveId}-${t.registerGroupId}` === tabId
     )
@@ -2362,7 +2323,10 @@ const Server = (): JSX.Element => {
     }
   }
 
-  const applyTypedInterpretationToSelection = (tabId: string, mode: PlotInterpretation): boolean => {
+  const applyTypedInterpretationToSelection = (
+    tabId: string,
+    mode: PlotInterpretation
+  ): boolean => {
     const tab = openTabs.find(
       (t) => `${t.connectionId}-${t.slaveId}-${t.registerGroupId}` === tabId
     )
@@ -2384,7 +2348,9 @@ const Server = (): JSX.Element => {
   }
 
   const applyDisplayFormatToSelection = (tabId: string, mode: RegisterDisplayFormat): boolean => {
-    const tab = openTabs.find((t) => `${t.connectionId}-${t.slaveId}-${t.registerGroupId}` === tabId)
+    const tab = openTabs.find(
+      (t) => `${t.connectionId}-${t.slaveId}-${t.registerGroupId}` === tabId
+    )
     if (!tab || tab.selectedAddresses.size === 0) {
       showUserError('Please select at least one register first.')
       return false
@@ -2447,128 +2413,63 @@ const Server = (): JSX.Element => {
     })
   }
 
-  const updateRegister = (
-    connectionId: string,
-    slaveId: string,
-    groupId: string,
-    address: number,
-    updates: Partial<Register>
-  ) => {
-    const normalizedUpdates =
-      typeof updates.value === 'number'
-        ? { ...updates, value: clamp(Math.round(updates.value), 0, 65535) }
-        : updates
-    setConnections((prev) =>
-      prev.map((conn) => {
-        if (conn.id !== connectionId) return conn
-        return {
-          ...conn,
-          slaves: conn.slaves.map((slave) => {
-            if (slave.id !== slaveId) return slave
-            return {
-              ...slave,
-              registerGroups: slave.registerGroups.map((group) => {
-                if (group.id !== groupId) return group
-                return {
-                  ...group,
-                  registers: group.registers.map((reg) =>
-                    reg.address === address ? { ...reg, ...normalizedUpdates } : reg
-                  )
-                }
-              })
-            }
-          })
-        }
-      })
-    )
+  const updateRegister = useCallback(
+    (
+      connectionId: string,
+      slaveId: string,
+      groupId: string,
+      address: number,
+      updates: Partial<Register>
+    ): void => {
+      const normalizedUpdates =
+        typeof updates.value === 'number'
+          ? { ...updates, value: clamp(Math.round(updates.value), 0, 65535) }
+          : updates
+      setConnections((prev) =>
+        prev.map((conn) => {
+          if (conn.id !== connectionId) return conn
+          return {
+            ...conn,
+            slaves: conn.slaves.map((slave) => {
+              if (slave.id !== slaveId) return slave
+              return {
+                ...slave,
+                registerGroups: slave.registerGroups.map((group) => {
+                  if (group.id !== groupId) return group
+                  return {
+                    ...group,
+                    registers: group.registers.map((reg) =>
+                      reg.address === address ? { ...reg, ...normalizedUpdates } : reg
+                    )
+                  }
+                })
+              }
+            })
+          }
+        })
+      )
 
-    if (typeof normalizedUpdates.value !== 'number') return
+      if (typeof normalizedUpdates.value !== 'number') return
 
-    const connection = connectionsRef.current.find((conn) => conn.id === connectionId)
-    if (!connection?.isOpen) return
-    const slave = connection.slaves.find((item) => item.id === slaveId)
-    if (!slave) return
-    const group = slave.registerGroups.find((item) => item.id === groupId)
-    if (!group) return
+      const connection = connectionsRef.current.find((conn) => conn.id === connectionId)
+      if (!connection?.isOpen) return
+      const slave = connection.slaves.find((item) => item.id === slaveId)
+      if (!slave) return
+      const group = slave.registerGroups.find((item) => item.id === groupId)
+      if (!group) return
 
-    const unitId = toUnitIdString(slave.slaveId)
-    const value = clamp(Math.round(normalizedUpdates.value), 0, 65535)
-    const baseRegister = group.registers.find((item) => item.address === address)
-    const nextRegister = {
-      address,
-      value,
-      variableName: normalizedUpdates.variableName ?? baseRegister?.variableName ?? '',
-      comment: normalizedUpdates.comment ?? baseRegister?.comment ?? ''
-    }
-
-    const boolType = getBackendBoolRegisterType(group.type)
-    if (boolType) {
-      void window.api.setBool({
-        uuid: connectionId,
-        unitId,
-        registerType: boolType,
+      const unitId = toUnitIdString(slave.slaveId)
+      const value = clamp(Math.round(normalizedUpdates.value), 0, 65535)
+      const baseRegister = group.registers.find((item) => item.address === address)
+      const nextRegister = {
         address,
-        state: value !== 0
-      })
-      return
-    }
+        value,
+        variableName: normalizedUpdates.variableName ?? baseRegister?.variableName ?? '',
+        comment: normalizedUpdates.comment ?? baseRegister?.comment ?? ''
+      }
 
-    const numberType = getBackendNumberRegisterType(group.type)
-    if (!numberType) return
-
-    void window.api.addReplaceServerRegister({
-      uuid: connectionId,
-      unitId,
-      littleEndian: false,
-      params: toStaticRegisterParams(nextRegister, numberType)
-    })
-  }
-
-  const updateRegistersBatch = (
-    connectionId: string,
-    slaveId: string,
-    groupId: string,
-    valueMap: Record<number, number>
-  ): void => {
-    setConnections((prev) =>
-      prev.map((conn) => {
-        if (conn.id !== connectionId) return conn
-        return {
-          ...conn,
-          slaves: conn.slaves.map((slave) => {
-            if (slave.id !== slaveId) return slave
-            return {
-              ...slave,
-              registerGroups: slave.registerGroups.map((group) => {
-                if (group.id !== groupId) return group
-                return {
-                  ...group,
-                  registers: group.registers.map((reg) => {
-                    const next = valueMap[reg.address]
-                    if (next === undefined) return reg
-                    return { ...reg, value: clamp(Math.round(next), 0, 65535) }
-                  })
-                }
-              })
-            }
-          })
-        }
-      })
-    )
-
-    const connection = connectionsRef.current.find((conn) => conn.id === connectionId)
-    if (!connection?.isOpen) return
-    const slave = connection.slaves.find((item) => item.id === slaveId)
-    if (!slave) return
-    const group = slave.registerGroups.find((item) => item.id === groupId)
-    if (!group) return
-
-    const unitId = toUnitIdString(slave.slaveId)
-    const boolType = getBackendBoolRegisterType(group.type)
-    if (boolType) {
-      Object.entries(valueMap).forEach(([addressStr, rawValue]) => {
-        const address = Number(addressStr)
-        const value = clamp(Math.round(rawValue), 0, 65535)
+      const boolType = getBackendBoolRegisterType(group.type)
+      if (boolType) {
         void window.api.setBool({
           uuid: connectionId,
           unitId,
@@ -2576,23 +2477,11 @@ const Server = (): JSX.Element => {
           address,
           state: value !== 0
         })
-      })
-      return
-    }
-
-    const numberType = getBackendNumberRegisterType(group.type)
-    if (!numberType) return
-
-    Object.entries(valueMap).forEach(([addressStr, rawValue]) => {
-      const address = Number(addressStr)
-      const value = clamp(Math.round(rawValue), 0, 65535)
-      const existing = group.registers.find((item) => item.address === address)
-      const nextRegister: Register = {
-        address,
-        value,
-        variableName: existing?.variableName ?? '',
-        comment: existing?.comment ?? ''
+        return
       }
+
+      const numberType = getBackendNumberRegisterType(group.type)
+      if (!numberType) return
 
       void window.api.addReplaceServerRegister({
         uuid: connectionId,
@@ -2600,8 +2489,91 @@ const Server = (): JSX.Element => {
         littleEndian: false,
         params: toStaticRegisterParams(nextRegister, numberType)
       })
-    })
-  }
+    },
+    []
+  )
+
+  const updateRegistersBatch = useCallback(
+    (
+      connectionId: string,
+      slaveId: string,
+      groupId: string,
+      valueMap: Record<number, number>
+    ): void => {
+      setConnections((prev) =>
+        prev.map((conn) => {
+          if (conn.id !== connectionId) return conn
+          return {
+            ...conn,
+            slaves: conn.slaves.map((slave) => {
+              if (slave.id !== slaveId) return slave
+              return {
+                ...slave,
+                registerGroups: slave.registerGroups.map((group) => {
+                  if (group.id !== groupId) return group
+                  return {
+                    ...group,
+                    registers: group.registers.map((reg) => {
+                      const next = valueMap[reg.address]
+                      if (next === undefined) return reg
+                      return { ...reg, value: clamp(Math.round(next), 0, 65535) }
+                    })
+                  }
+                })
+              }
+            })
+          }
+        })
+      )
+
+      const connection = connectionsRef.current.find((conn) => conn.id === connectionId)
+      if (!connection?.isOpen) return
+      const slave = connection.slaves.find((item) => item.id === slaveId)
+      if (!slave) return
+      const group = slave.registerGroups.find((item) => item.id === groupId)
+      if (!group) return
+
+      const unitId = toUnitIdString(slave.slaveId)
+      const boolType = getBackendBoolRegisterType(group.type)
+      if (boolType) {
+        Object.entries(valueMap).forEach(([addressStr, rawValue]) => {
+          const address = Number(addressStr)
+          const value = clamp(Math.round(rawValue), 0, 65535)
+          void window.api.setBool({
+            uuid: connectionId,
+            unitId,
+            registerType: boolType,
+            address,
+            state: value !== 0
+          })
+        })
+        return
+      }
+
+      const numberType = getBackendNumberRegisterType(group.type)
+      if (!numberType) return
+
+      Object.entries(valueMap).forEach(([addressStr, rawValue]) => {
+        const address = Number(addressStr)
+        const value = clamp(Math.round(rawValue), 0, 65535)
+        const existing = group.registers.find((item) => item.address === address)
+        const nextRegister: Register = {
+          address,
+          value,
+          variableName: existing?.variableName ?? '',
+          comment: existing?.comment ?? ''
+        }
+
+        void window.api.addReplaceServerRegister({
+          uuid: connectionId,
+          unitId,
+          littleEndian: false,
+          params: toStaticRegisterParams(nextRegister, numberType)
+        })
+      })
+    },
+    []
+  )
 
   const getScriptTargetEntries = (
     connectionId: string,
@@ -2622,142 +2594,151 @@ const Server = (): JSX.Element => {
     return targets
   }
 
-  const executeScript = async (
-    connectionId: string,
-    scriptId: string,
-    trigger: 'manual' | 'interval'
-  ): Promise<void> => {
-    const scripts = scriptsByConnection[connectionId] ?? []
-    const script = scripts.find((item) => item.id === scriptId)
-    if (!script) return
+  const executeScript = useCallback(
+    async (
+      connectionId: string,
+      scriptId: string,
+      trigger: 'manual' | 'interval'
+    ): Promise<void> => {
+      const scripts = scriptsByConnection[connectionId] ?? []
+      const script = scripts.find((item) => item.id === scriptId)
+      if (!script) return
 
-    const scopeKey = `${connectionId}:${scriptId}`
-    const scope = scriptStateMapRef.current[scopeKey] ?? {}
-    scriptStateMapRef.current[scopeKey] = scope
+      const scopeKey = `${connectionId}:${scriptId}`
+      const scope = scriptStateMapRef.current[scopeKey] ?? {}
+      scriptStateMapRef.current[scopeKey] = scope
 
-    const api: ScriptRuntimeApi = {
-      getValue: (unitId: number, registerType: RegisterGroup['type'], address: number): number | undefined => {
-        const targets = getScriptTargetEntries(connectionId, unitId, registerType)
-        for (const target of targets) {
-          const register = target.registers.find((item) => item.address === address)
-          if (register) return register.value
-        }
-        return undefined
-      },
-      setValue: (
-        unitId: number,
-        registerType: RegisterGroup['type'],
-        address: number,
-        value: number
-      ): boolean => {
-        const targets = getScriptTargetEntries(connectionId, unitId, registerType)
-        if (targets.length === 0) return false
-        const normalized =
-          registerType === '01' || registerType === '02'
-            ? value !== 0
-              ? 1
-              : 0
-            : clamp(Math.round(value), 0, 65535)
+      const api: ScriptRuntimeApi = {
+        getValue: (
+          unitId: number,
+          registerType: RegisterGroup['type'],
+          address: number
+        ): number | undefined => {
+          const targets = getScriptTargetEntries(connectionId, unitId, registerType)
+          for (const target of targets) {
+            const register = target.registers.find((item) => item.address === address)
+            if (register) return register.value
+          }
+          return undefined
+        },
+        setValue: (
+          unitId: number,
+          registerType: RegisterGroup['type'],
+          address: number,
+          value: number
+        ): boolean => {
+          const targets = getScriptTargetEntries(connectionId, unitId, registerType)
+          if (targets.length === 0) return false
+          const normalized =
+            registerType === '01' || registerType === '02'
+              ? value !== 0
+                ? 1
+                : 0
+              : clamp(Math.round(value), 0, 65535)
 
-        targets.forEach((target) => {
-          updateRegister(connectionId, target.slaveId, target.groupId, address, { value: normalized })
-        })
-        return true
-      },
-      setValues: (
-        unitId: number,
-        registerType: RegisterGroup['type'],
-        values: Record<number, number>
-      ): number => {
-        const targets = getScriptTargetEntries(connectionId, unitId, registerType)
-        if (targets.length === 0) return 0
-        const normalizedMap = Object.fromEntries(
-          Object.entries(values).map(([addressStr, value]) => {
-            const normalized =
-              registerType === '01' || registerType === '02'
-                ? value !== 0
-                  ? 1
-                  : 0
-                : clamp(Math.round(value), 0, 65535)
-            return [Number(addressStr), normalized]
+          targets.forEach((target) => {
+            updateRegister(connectionId, target.slaveId, target.groupId, address, {
+              value: normalized
+            })
           })
-        ) as Record<number, number>
+          return true
+        },
+        setValues: (
+          unitId: number,
+          registerType: RegisterGroup['type'],
+          values: Record<number, number>
+        ): number => {
+          const targets = getScriptTargetEntries(connectionId, unitId, registerType)
+          if (targets.length === 0) return 0
+          const normalizedMap = Object.fromEntries(
+            Object.entries(values).map(([addressStr, value]) => {
+              const normalized =
+                registerType === '01' || registerType === '02'
+                  ? value !== 0
+                    ? 1
+                    : 0
+                  : clamp(Math.round(value), 0, 65535)
+              return [Number(addressStr), normalized]
+            })
+          ) as Record<number, number>
 
-        targets.forEach((target) => {
-          updateRegistersBatch(connectionId, target.slaveId, target.groupId, normalizedMap)
-        })
-        return Object.keys(normalizedMap).length
-      },
-      log: (...args: unknown[]): void => {
-        console.log(`[Script:${connectionId}/${script.name}]`, ...args)
+          targets.forEach((target) => {
+            updateRegistersBatch(connectionId, target.slaveId, target.groupId, normalizedMap)
+          })
+          return Object.keys(normalizedMap).length
+        },
+        log: (...args: unknown[]): void => {
+          console.log(`[Script:${connectionId}/${script.name}]`, ...args)
+          void window.api.appendSystemLog({
+            level: 'info',
+            source: 'script',
+            module: 'server.ui',
+            message: `[${script.name}] ${args.map((arg) => String(arg)).join(' ')}`,
+            connectionId,
+            details: { scriptId, trigger }
+          })
+        }
+      }
+
+      try {
         void window.api.appendSystemLog({
           level: 'info',
           source: 'script',
           module: 'server.ui',
-          message: `[${script.name}] ${args.map((arg) => String(arg)).join(' ')}`,
+          message: `Script started: ${script.name}`,
+          connectionId,
+          details: { scriptId, trigger }
+        })
+
+        const runner = new Function(
+          'api',
+          'state',
+          'event',
+          `"use strict"; return (async () => { ${script.code}\n })();`
+        ) as (
+          api: ScriptRuntimeApi,
+          state: Record<string, unknown>,
+          event: ScriptRuntimeEvent
+        ) => Promise<void>
+
+        await runner(api, scope, { type: trigger, timestamp: Date.now() })
+
+        setScriptsByConnection((prev) => ({
+          ...prev,
+          [connectionId]: (prev[connectionId] ?? []).map((item) =>
+            item.id === scriptId ? { ...item, lastRunAt: Date.now(), lastError: undefined } : item
+          )
+        }))
+        void window.api.appendSystemLog({
+          level: 'info',
+          source: 'script',
+          module: 'server.ui',
+          message: `Script completed: ${script.name}`,
+          connectionId,
+          details: { scriptId, trigger }
+        })
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        setScriptsByConnection((prev) => ({
+          ...prev,
+          [connectionId]: (prev[connectionId] ?? []).map((item) =>
+            item.id === scriptId ? { ...item, enabled: false, lastError: message } : item
+          )
+        }))
+        console.error(`Script failed (${connectionId}/${script.name}):`, error)
+        showUserError(`Script "${script.name}" failed and was disabled.`)
+        void window.api.appendSystemLog({
+          level: 'error',
+          source: 'script',
+          module: 'server.ui',
+          message: `Script failed: ${script.name} - ${message}`,
           connectionId,
           details: { scriptId, trigger }
         })
       }
-    }
-
-    try {
-      void window.api.appendSystemLog({
-        level: 'info',
-        source: 'script',
-        module: 'server.ui',
-        message: `Script started: ${script.name}`,
-        connectionId,
-        details: { scriptId, trigger }
-      })
-
-      const runner = new Function(
-        'api',
-        'state',
-        'event',
-        `"use strict"; return (async () => { ${script.code}\n })();`
-      ) as (
-        api: ScriptRuntimeApi,
-        state: Record<string, unknown>,
-        event: ScriptRuntimeEvent
-      ) => Promise<void>
-
-      await runner(api, scope, { type: trigger, timestamp: Date.now() })
-
-      setScriptsByConnection((prev) => ({
-        ...prev,
-        [connectionId]: (prev[connectionId] ?? []).map((item) =>
-          item.id === scriptId ? { ...item, lastRunAt: Date.now(), lastError: undefined } : item
-        )
-      }))
-      void window.api.appendSystemLog({
-        level: 'info',
-        source: 'script',
-        module: 'server.ui',
-        message: `Script completed: ${script.name}`,
-        connectionId,
-        details: { scriptId, trigger }
-      })
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      setScriptsByConnection((prev) => ({
-        ...prev,
-        [connectionId]: (prev[connectionId] ?? []).map((item) =>
-          item.id === scriptId ? { ...item, enabled: false, lastError: message } : item
-        )
-      }))
-      console.error(`Script failed (${connectionId}/${script.name}):`, error)
-      showUserError(`Script "${script.name}" failed and was disabled.`)
-      void window.api.appendSystemLog({
-        level: 'error',
-        source: 'script',
-        module: 'server.ui',
-        message: `Script failed: ${script.name} - ${message}`,
-        connectionId,
-        details: { scriptId, trigger }
-      })
-    }
-  }
+    },
+    [scriptsByConnection, showUserError, updateRegister, updateRegistersBatch]
+  )
 
   useEffect(() => {
     const offApply = onEvent('script_editor_apply', ({ connectionId, scripts }) => {
@@ -2814,7 +2795,9 @@ const Server = (): JSX.Element => {
 
   useEffect(() => {
     setOpenTabs((prev) =>
-      prev.map((tab) => (tab.stringEncoding === globalEncoding ? tab : { ...tab, stringEncoding: globalEncoding }))
+      prev.map((tab) =>
+        tab.stringEncoding === globalEncoding ? tab : { ...tab, stringEncoding: globalEncoding }
+      )
     )
     setWorkspaceTabSettings((prev) => {
       const next = { ...prev }
@@ -2850,7 +2833,10 @@ const Server = (): JSX.Element => {
     window.addEventListener(GLOBAL_PREFERENCE_CHANGE_EVENT, onPreferenceChange as EventListener)
     return () => {
       window.removeEventListener('storage', onStorage)
-      window.removeEventListener(GLOBAL_PREFERENCE_CHANGE_EVENT, onPreferenceChange as EventListener)
+      window.removeEventListener(
+        GLOBAL_PREFERENCE_CHANGE_EVENT,
+        onPreferenceChange as EventListener
+      )
     }
   }, [])
 
@@ -2892,6 +2878,14 @@ const Server = (): JSX.Element => {
     setEditConnectionOpen(true)
   }
 
+  const handleEditConnectionById = (connectionId: string): void => {
+    const conn = getConnectionById(connectionId)
+    if (!conn) return
+    setSelectedNodeId(connectionId)
+    setEditingConnection(conn)
+    setEditConnectionOpen(true)
+  }
+
   const handleSaveEditedConnection = async (connection: Connection) => {
     setConnections(connections.map((c) => (c.id === connection.id ? connection : c)))
     setEditConnectionOpen(false)
@@ -2917,6 +2911,15 @@ const Server = (): JSX.Element => {
     setEditSlaveOpen(true)
   }
 
+  const handleEditSlaveById = (connectionId: string, slaveId: string): void => {
+    const slave = getSlaveById(connectionId, slaveId)
+    if (!slave) return
+    setSelectedNodeId(`${connectionId}/${slaveId}`)
+    setEditingSlave(slave)
+    setEditingSlaveConnectionId(connectionId)
+    setEditSlaveOpen(true)
+  }
+
   const handleSaveEditedSlave = (slave: Slave) => {
     if (!editingSlaveConnectionId) return
     const connection = connections.find((item) => item.id === editingSlaveConnectionId)
@@ -2939,227 +2942,322 @@ const Server = (): JSX.Element => {
     }
   }
 
-  const getWorkspaceSnapshot = (): PersistedWorkspaceSnapshot => {
-    return {
-      version: 4,
-      connections: connections.map((c) => ({
-        ...c,
-        isOpen: false
-      })),
-      tabSettings: workspaceTabSettings,
-      scriptsByConnection,
-      openTabs: openTabs.map((tab) => ({
-        connectionId: tab.connectionId,
-        slaveId: tab.slaveId,
-        registerGroupId: tab.registerGroupId
-      })),
-      activeTabId
+  const handleDeleteConnectionById = async (connectionId: string): Promise<void> => {
+    const connection = getConnectionById(connectionId)
+    if (!connection) return
+    requestActionConfirmation(
+      {
+        title: t('server.toolbar.deleteConnection'),
+        message: `Delete connection "${connection.alias}"?`,
+        confirmLabel: t('server.toolbar.deleteConnection')
+      },
+      async () => {
+        if (connection.isOpen) {
+          const closeOk = await handleCloseConnectionById(connectionId)
+          if (!closeOk) return
+        }
+
+        setConnections((prev) => prev.filter((item) => item.id !== connectionId))
+        setScriptsByConnection((prev) => {
+          const next = { ...prev }
+          delete next[connectionId]
+          return next
+        })
+        setOpenTabs((prev) => prev.filter((tab) => tab.connectionId !== connectionId))
+        setExpandedConnections((prev) => {
+          const next = new Set(prev)
+          next.delete(connectionId)
+          return next
+        })
+        setSelectedNodeId((prev) => {
+          if (!prev) return prev
+          return prev.startsWith(`${connectionId}/`) || prev === connectionId ? null : prev
+        })
+      }
+    )
+  }
+
+  const handleDeleteSlaveById = async (connectionId: string, slaveId: string): Promise<void> => {
+    const connection = getConnectionById(connectionId)
+    const slave = getSlaveById(connectionId, slaveId)
+    if (!connection || !slave) return
+    requestActionConfirmation(
+      {
+        title: t('server.toolbar.deleteSlave'),
+        message: `Delete slave "${slave.alias}" (ID:${slave.slaveId})?`,
+        confirmLabel: t('server.toolbar.deleteSlave')
+      },
+      async () => {
+        const nextConnection: Connection = {
+          ...connection,
+          slaves: connection.slaves.filter((item) => item.id !== slaveId)
+        }
+
+        setConnections((prev) =>
+          prev.map((item) => (item.id === connectionId ? nextConnection : item))
+        )
+        setOpenTabs((prev) =>
+          prev.filter((tab) => !(tab.connectionId === connectionId && tab.slaveId === slaveId))
+        )
+        setExpandedSlaves((prev) => {
+          const next = new Set(prev)
+          next.delete(slaveId)
+          return next
+        })
+        setSelectedNodeId((prev) => {
+          if (!prev) return prev
+          return prev.startsWith(`${connectionId}/${slaveId}`) ? connectionId : prev
+        })
+
+        if (connection.isOpen) {
+          try {
+            await window.api.resetServer(connectionId)
+            await syncConnectionToBackend(nextConnection)
+          } catch (error) {
+            console.error('Failed to sync slave deletion to backend:', error)
+            showUserError('Failed to sync slave deletion to backend.')
+          }
+        }
+      }
+    )
+  }
+
+  const handleCopySlaveById = (connectionId: string, slaveId: string): void => {
+    const connection = getConnectionById(connectionId)
+    const slave = getSlaveById(connectionId, slaveId)
+    if (!connection || !slave) return
+
+    const copiedSlave: Slave = {
+      ...slave,
+      id: uuidv4(),
+      alias: `${slave.alias} Copy`,
+      registerGroups: slave.registerGroups.map((group) => ({
+        ...group,
+        id: uuidv4(),
+        registers: group.registers.map((reg) => ({ ...reg }))
+      }))
     }
-  }
 
-  const getDefaultWorkspaceFilename = () =>
-    `${DEFAULT_WORKSPACE_FILENAME_PREFIX}_${new Date().toISOString().slice(0, 10)}.json`
-
-  const loadRecentWorkspacesFromStorage = (): RecentWorkspaceEntry[] => {
-    try {
-      const raw = localStorage.getItem(RECENT_WORKSPACES_STORAGE_KEY)
-      if (!raw) return []
-      const parsed = JSON.parse(raw)
-      if (!Array.isArray(parsed)) return []
-      return parsed.filter((item) => item && typeof item === 'object') as RecentWorkspaceEntry[]
-    } catch {
-      return []
+    const usedUnitIds = new Set(connection.slaves.map((item) => item.slaveId))
+    let nextUnitId: number | null = null
+    for (let offset = 0; offset < 256; offset++) {
+      const candidate = (copiedSlave.slaveId + offset) % 256
+      if (!usedUnitIds.has(candidate)) {
+        nextUnitId = candidate
+        break
+      }
     }
-  }
-
-  const persistRecentWorkspaces = (entries: RecentWorkspaceEntry[]): void => {
-    setRecentWorkspaces(entries)
-    localStorage.setItem(RECENT_WORKSPACES_STORAGE_KEY, JSON.stringify(entries))
-  }
-
-  const markLastWorkspaceId = (id: string | null): void => {
-    if (!id) {
-      localStorage.removeItem(LAST_WORKSPACE_ID_STORAGE_KEY)
+    if (nextUnitId === null) {
+      showUserError('No available slave ID for copy.')
       return
     }
-    localStorage.setItem(LAST_WORKSPACE_ID_STORAGE_KEY, id)
-  }
+    copiedSlave.slaveId = nextUnitId
 
-  const upsertRecentWorkspaceByPath = (
-    path: string,
-    name: string,
-    options?: { setAsLast?: boolean }
-  ): void => {
-    const existing = recentWorkspaces.find((entry) => entry.path === path)
-    const nextEntry: RecentWorkspaceEntry = existing
-      ? { ...existing, name, updatedAt: Date.now() }
-      : { id: uuidv4(), name, path, updatedAt: Date.now() }
-
-    const merged = [nextEntry, ...recentWorkspaces.filter((entry) => entry.path !== path)].slice(
-      0,
-      MAX_RECENT_WORKSPACES
+    setConnections((prev) =>
+      prev.map((item) =>
+        item.id === connectionId ? { ...item, slaves: [...item.slaves, copiedSlave] } : item
+      )
     )
-    persistRecentWorkspaces(merged)
-    if (options?.setAsLast !== false) {
-      markLastWorkspaceId(nextEntry.id)
-    }
-  }
+    setExpandedSlaves((prev) => new Set([...prev, copiedSlave.id]))
 
-  const removeRecentWorkspace = (entryId: string): void => {
-    const next = recentWorkspaces.filter((entry) => entry.id !== entryId)
-    persistRecentWorkspaces(next)
-    const lastId = localStorage.getItem(LAST_WORKSPACE_ID_STORAGE_KEY)
-    if (lastId === entryId) {
-      markLastWorkspaceId(null)
-    }
-  }
-
-  const applyWorkspaceSnapshot = (
-    workspace: PersistedWorkspaceSnapshot,
-    options?: { fileName?: string; filePath?: string | null }
-  ): boolean => {
-    const workspaceVersion = workspace.version
-    if (
-      (workspaceVersion === 1 || workspaceVersion === 2 || workspaceVersion === 3 || workspaceVersion === 4) &&
-      Array.isArray(workspace.connections)
-    ) {
-      const restoredTabSettings =
-        (workspaceVersion === 2 || workspaceVersion === 3 || workspaceVersion === 4) &&
-        workspace.tabSettings &&
-        typeof workspace.tabSettings === 'object'
-          ? workspace.tabSettings
-          : {}
-
-      const restoredOpenTabs =
-        workspaceVersion === 4 && Array.isArray(workspace.openTabs)
-          ? workspace.openTabs
-              .map((savedTab) => {
-                const connection = workspace.connections.find((conn) => conn.id === savedTab.connectionId)
-                const slave = connection?.slaves.find((item) => item.id === savedTab.slaveId)
-                const group = slave?.registerGroups.find((item) => item.id === savedTab.registerGroupId)
-                if (!connection || !slave || !group) return null
-                const tabId = getTabId(savedTab.connectionId, savedTab.slaveId, savedTab.registerGroupId)
-                const savedSettings = restoredTabSettings[tabId]
-                return {
-                  connectionId: savedTab.connectionId,
-                  slaveId: savedTab.slaveId,
-                  registerGroupId: savedTab.registerGroupId,
-                  selectedAddresses: new Set<number>(),
-                  interpretationTab: savedSettings?.interpretationTab || 'basic',
-                  stringEncoding: savedSettings?.stringEncoding || globalEncoding,
-                  typedInterpretation: savedSettings?.typedInterpretation || {},
-                  registerDisplayFormat: savedSettings?.registerDisplayFormat || {}
-                } as OpenTab
-              })
-              .filter((tab): tab is OpenTab => tab !== null)
-          : []
-
-      setConnections(workspace.connections)
-      setWorkspaceTabSettings(restoredTabSettings)
-      setScriptsByConnection(
-        (workspaceVersion === 3 || workspaceVersion === 4) &&
-          workspace.scriptsByConnection &&
-          typeof workspace.scriptsByConnection === 'object'
-          ? workspace.scriptsByConnection
-          : {}
-      )
-      setOpenTabs(restoredOpenTabs)
-      const preferredActiveTabId =
-        workspaceVersion === 4 && typeof workspace.activeTabId === 'string' ? workspace.activeTabId : null
-      const hasPreferredTab =
-        preferredActiveTabId &&
-        restoredOpenTabs.some(
-          (tab) => getTabId(tab.connectionId, tab.slaveId, tab.registerGroupId) === preferredActiveTabId
-        )
-      setActiveTabId(
-        hasPreferredTab
-          ? preferredActiveTabId
-          : restoredOpenTabs[0]
-            ? getTabId(
-                restoredOpenTabs[0].connectionId,
-                restoredOpenTabs[0].slaveId,
-                restoredOpenTabs[0].registerGroupId
-              )
-            : null
-      )
-      setExpandedConnections(new Set(restoredOpenTabs.map((tab) => tab.connectionId)))
-      setExpandedSlaves(new Set(restoredOpenTabs.map((tab) => tab.slaveId)))
-      setWorkspaceFileHandle(null)
-      setWorkspaceFilename(options?.fileName || null)
-      setWorkspaceFilePath(options?.filePath || null)
-      return true
-    }
-    showUserError('Invalid workspace file format.')
-    return false
-  }
-
-  const openWorkspaceByPath = async (
-    path: string,
-    options?: { fallbackName?: string; removeOnError?: boolean; setAsLast?: boolean }
-  ): Promise<boolean> => {
-    try {
-      const text = await window.api.readTextFile(path)
-      const workspace = JSON.parse(text) as PersistedWorkspaceSnapshot
-      const fileName = path.split(/[\\/]/).pop() || options?.fallbackName
-      const applied = applyWorkspaceSnapshot(workspace, { fileName, filePath: path })
-      if (!applied) return false
-
-      void window.api.appendSystemLog({
-        level: 'info',
-        source: 'workspace',
-        module: 'server.ui',
-        message: `Workspace loaded: ${fileName}`,
-        details: { path }
+    if (connection.isOpen) {
+      void syncSlaveToBackend(connectionId, copiedSlave).catch((error) => {
+        console.error('Failed to sync copied slave to backend:', error)
+        showUserError('Failed to sync copied slave data to backend.')
       })
+    }
+  }
 
-      upsertRecentWorkspaceByPath(path, fileName || options?.fallbackName || path, {
-        setAsLast: options?.setAsLast
-      })
-      return true
-    } catch (error) {
-      console.warn('Failed to load workspace from path:', path, error)
-      if (options?.removeOnError) {
-        const failedEntry = recentWorkspaces.find((entry) => entry.path === path)
-        if (failedEntry) removeRecentWorkspace(failedEntry.id)
+  const handleExportSlaveById = async (connectionId: string, slaveId: string): Promise<void> => {
+    const slave = getSlaveById(connectionId, slaveId)
+    if (!slave) return
+    const payload = JSON.stringify(slave, null, 2)
+    const blob = new Blob([payload], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `${slave.alias.replace(/\s+/g, '_') || 'slave'}-${slave.slaveId}.json`
+    document.body.appendChild(anchor)
+    anchor.click()
+    document.body.removeChild(anchor)
+    URL.revokeObjectURL(url)
+  }
+
+  const handleImportSlaveById = async (connectionId: string, slaveId: string): Promise<void> => {
+    const connection = getConnectionById(connectionId)
+    const slave = getSlaveById(connectionId, slaveId)
+    if (!connection || !slave) return
+
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.json,application/json'
+    input.onchange = () => {
+      const file = input.files?.[0]
+      if (!file) return
+      const reader = new FileReader()
+      reader.onload = () => {
+        try {
+          const parsed = JSON.parse(String(reader.result)) as Slave
+          if (!Array.isArray(parsed.registerGroups)) {
+            showUserError('Invalid slave data file.')
+            return
+          }
+          const importedSlave: Slave = {
+            ...slave,
+            registerGroups: parsed.registerGroups.map((group) => ({
+              ...group,
+              id: group.id || uuidv4(),
+              registers: Array.isArray(group.registers)
+                ? group.registers.map((reg) => ({ ...reg }))
+                : []
+            }))
+          }
+          setConnections((prev) =>
+            prev.map((item) =>
+              item.id === connectionId
+                ? {
+                    ...item,
+                    slaves: item.slaves.map((entry) =>
+                      entry.id === slaveId ? importedSlave : entry
+                    )
+                  }
+                : item
+            )
+          )
+
+          if (connection.isOpen) {
+            void (async () => {
+              try {
+                await window.api.resetServer(connectionId)
+                await syncConnectionToBackend({
+                  ...connection,
+                  slaves: connection.slaves.map((entry) =>
+                    entry.id === slaveId ? importedSlave : entry
+                  )
+                })
+              } catch (error) {
+                console.error('Failed to sync imported slave data:', error)
+                showUserError('Failed to sync imported slave data to backend.')
+              }
+            })()
+          }
+        } catch (error) {
+          console.error('Failed to import slave data:', error)
+          showUserError('Invalid slave data file.')
+        }
       }
-      return false
+      reader.readAsText(file)
     }
+    input.click()
+  }
+  const requestUnsavedChangesConfirmation = useCallback((): Promise<boolean> => {
+    if (!isWorkspaceDirty) return Promise.resolve(true)
+    if (unsavedConfirmPromiseRef.current) return unsavedConfirmPromiseRef.current
+
+    const promise = new Promise<boolean>((resolve) => {
+      unsavedConfirmResolverRef.current = resolve
+      setUnsavedConfirmOpen(true)
+    })
+    unsavedConfirmPromiseRef.current = promise
+    return promise
+  }, [isWorkspaceDirty])
+
+  const resolveUnsavedChangesConfirmation = (confirmed: boolean): void => {
+    setUnsavedConfirmOpen(false)
+    const resolver = unsavedConfirmResolverRef.current
+    unsavedConfirmResolverRef.current = null
+    unsavedConfirmPromiseRef.current = null
+    resolver?.(confirmed)
+  }
+
+  const requestActionConfirmation = (
+    options: Omit<ActionConfirmDialogState, 'open'>,
+    action: () => Promise<void> | void
+  ): void => {
+    actionConfirmRef.current = action
+    setActionConfirmDialog({ ...options, open: true })
+  }
+
+  const closeActionConfirmation = (): void => {
+    setActionConfirmDialog((prev) => ({ ...prev, open: false }))
+    actionConfirmRef.current = null
+  }
+
+  const confirmAction = async (): Promise<void> => {
+    const action = actionConfirmRef.current
+    closeActionConfirmation()
+    if (!action) return
+    await action()
   }
 
   const downloadWorkspaceSnapshot = (workspace: PersistedWorkspaceSnapshot) => {
+    const defaultWorkspaceFilename = `${DEFAULT_WORKSPACE_FILENAME_PREFIX}_${new Date().toISOString().slice(0, 10)}.json`
     const json = JSON.stringify(workspace, null, 2)
     const blob = new Blob([json], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = workspaceFilename || getDefaultWorkspaceFilename()
+    link.download = workspaceFilename || defaultWorkspaceFilename
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
     URL.revokeObjectURL(url)
   }
 
+  const getErrorDetails = (error: unknown): { message: string; stack?: string } => {
+    if (error instanceof Error) {
+      return { message: error.message, stack: error.stack }
+    }
+    return { message: String(error) }
+  }
+
   const saveWorkspaceWithHandle = async (
     workspace: PersistedWorkspaceSnapshot,
     forceChooseNewFile: boolean
   ): Promise<boolean> => {
-    if (workspaceFilePath && !forceChooseNewFile) {
+    const defaultWorkspaceFilename = `${DEFAULT_WORKSPACE_FILENAME_PREFIX}_${new Date().toISOString().slice(0, 10)}.json`
+    const apiWithOptionalSave = window.api as typeof window.api & {
+      pickWorkspaceSaveFile?: (suggestedName?: string) => Promise<string | null>
+    }
+    let targetPath = workspaceFilePath
+
+    if (forceChooseNewFile || !targetPath) {
+      if (typeof apiWithOptionalSave.pickWorkspaceSaveFile === 'function') {
+        targetPath = await apiWithOptionalSave.pickWorkspaceSaveFile(
+          workspaceFilename || defaultWorkspaceFilename
+        )
+        if (!targetPath) return true
+        setWorkspaceFilePath(targetPath)
+        setWorkspaceFilename(targetPath.split(/[\\/]/).pop() || workspaceFilename)
+      }
+    }
+
+    if (targetPath) {
       try {
-        await window.api.writeTextFile(workspaceFilePath, JSON.stringify(workspace, null, 2))
+        await window.api.writeTextFile(targetPath, JSON.stringify(workspace, null, 2))
         void window.api.appendSystemLog({
           level: 'info',
           source: 'workspace',
           module: 'server.ui',
-          message: `Workspace saved: ${workspaceFilePath}`
+          message: `Workspace saved: ${targetPath}`
         })
         upsertRecentWorkspaceByPath(
-          workspaceFilePath,
-          workspaceFilename || workspaceFilePath.split(/[\\/]/).pop() || 'Workspace',
+          targetPath,
+          targetPath.split(/[\\/]/).pop() || workspaceFilename || 'Workspace',
           { setAsLast: true }
         )
+        setWorkspaceSavedFingerprint(serializeWorkspaceSnapshot(workspace))
         return true
       } catch (error) {
         console.error('Failed to write workspace via path:', error)
+        const details = getErrorDetails(error)
+        void window.api.appendSystemLog({
+          level: 'error',
+          source: 'workspace',
+          module: 'server.ui',
+          message: `Workspace save failed (path): ${details.message}`,
+          details: { targetPath, ...details }
+        })
       }
     }
 
@@ -3170,16 +3268,25 @@ const Server = (): JSX.Element => {
       }) => Promise<WorkspaceFileHandle>
     }
 
-    if (typeof fsWindow.showSaveFilePicker !== 'function') return false
+    if (typeof fsWindow.showSaveFilePicker !== 'function') {
+      showUserError('Save is not available in this environment.')
+      void window.api.appendSystemLog({
+        level: 'warn',
+        source: 'workspace',
+        module: 'server.ui',
+        message: 'Workspace save unavailable: no native save picker support'
+      })
+      return false
+    }
 
     try {
       let handle = workspaceFileHandle
       if (!handle || forceChooseNewFile) {
         handle = await fsWindow.showSaveFilePicker({
-          suggestedName: workspaceFilename || getDefaultWorkspaceFilename(),
+          suggestedName: workspaceFilename || defaultWorkspaceFilename,
           types: [
             {
-              description: 'Modbux Workspace',
+              description: 'Modbus Slave Workspace',
               accept: { 'application/json': ['.json'] }
             }
           ]
@@ -3204,42 +3311,80 @@ const Server = (): JSX.Element => {
           { setAsLast: true }
         )
       }
+      setWorkspaceSavedFingerprint(serializeWorkspaceSnapshot(workspace))
       return true
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') {
         return true
       }
       console.error('Failed to write workspace via file handle:', error)
+      const details = getErrorDetails(error)
+      void window.api.appendSystemLog({
+        level: 'error',
+        source: 'workspace',
+        module: 'server.ui',
+        message: `Workspace save failed (file picker): ${details.message}`,
+        details
+      })
       return false
     }
   }
 
-  const handleSaveWorkspace = async () => {
-    const workspace = getWorkspaceSnapshot()
-    const saved = await saveWorkspaceWithHandle(workspace, false)
-    if (!saved) {
-      downloadWorkspaceSnapshot(workspace)
+  const handleSaveWorkspace = async (): Promise<void> => {
+    try {
+      const workspace = getWorkspaceSnapshot()
+      const saved = await saveWorkspaceWithHandle(workspace, false)
+      if (!saved) {
+        downloadWorkspaceSnapshot(workspace)
+        setWorkspaceSavedFingerprint(serializeWorkspaceSnapshot(workspace))
+      }
+    } catch (error) {
+      console.error('Failed to save workspace:', error)
+      const details = getErrorDetails(error)
+      showUserError(`Failed to save workspace: ${details.message}`)
+      void window.api.appendSystemLog({
+        level: 'error',
+        source: 'workspace',
+        module: 'server.ui',
+        message: `Workspace save failed: ${details.message}`,
+        details
+      })
     }
   }
 
-  const handleSaveWorkspaceAs = async () => {
-    const workspace = getWorkspaceSnapshot()
-    const saved = await saveWorkspaceWithHandle(workspace, true)
-    if (!saved) {
-      downloadWorkspaceSnapshot(workspace)
+  const handleSaveWorkspaceAs = async (): Promise<void> => {
+    try {
+      const workspace = getWorkspaceSnapshot()
+      const saved = await saveWorkspaceWithHandle(workspace, true)
+      if (!saved) {
+        downloadWorkspaceSnapshot(workspace)
+        setWorkspaceSavedFingerprint(serializeWorkspaceSnapshot(workspace))
+      }
+    } catch (error) {
+      console.error('Failed to save workspace as:', error)
+      const details = getErrorDetails(error)
+      showUserError(`Failed to save workspace: ${details.message}`)
+      void window.api.appendSystemLog({
+        level: 'error',
+        source: 'workspace',
+        module: 'server.ui',
+        message: `Workspace save-as failed: ${details.message}`,
+        details
+      })
     }
   }
 
-  const handleOpenWorkspace = async () => {
+  const handleOpenWorkspace = async (): Promise<void> => {
+    const shouldContinue = await requestUnsavedChangesConfirmation()
+    if (!shouldContinue) return
+
     try {
       const filePath = await window.api.pickWorkspaceFile()
       if (!filePath) return
-      const text = await window.api.readTextFile(filePath)
-      const workspace = JSON.parse(text) as PersistedWorkspaceSnapshot
       const fileName = filePath.split(/[\\/]/).pop() || 'Workspace'
-      const applied = applyWorkspaceSnapshot(workspace, { fileName, filePath })
-      if (applied) {
-        upsertRecentWorkspaceByPath(filePath, fileName, { setAsLast: true })
+      const ok = await openWorkspaceByPath(filePath, { fallbackName: fileName, setAsLast: true })
+      if (!ok) {
+        showUserError('Failed to open workspace file.')
       }
     } catch (error) {
       console.error('Failed to open workspace:', error)
@@ -3253,26 +3398,46 @@ const Server = (): JSX.Element => {
     setToolsMenuAnchorEl(null)
   }
 
+  const closeTreeContextMenu = (): void => {
+    setTreeContextMenu(null)
+  }
+
+  const openScriptEditor = (connectionId: string): void => {
+    const targetConn = connections.find((conn) => conn.id === connectionId)
+    sendEvent('open_script_editor_window', {
+      connectionId,
+      connectionAlias: targetConn?.alias || 'Connection',
+      scripts: scriptsByConnection[connectionId] ?? []
+    })
+  }
+
   const handleSelectRecentWorkspace = (entry: RecentWorkspaceEntry): void => {
-    void openWorkspaceByPath(entry.path, {
-      fallbackName: entry.name,
-      removeOnError: true,
-      setAsLast: true
-    }).then((ok) => {
+    void (async () => {
+      const shouldContinue = await requestUnsavedChangesConfirmation()
+      if (!shouldContinue) return
+
+      const ok = await openWorkspaceByPath(entry.path, {
+        fallbackName: entry.name,
+        removeOnError: true,
+        setAsLast: true
+      })
       if (!ok) {
         showUserError('Workspace file is invalid or no longer exists.')
       }
       closeTitleMenus()
-    })
+    })()
   }
 
-  const getSelectedConnection = () => {
+  const getConnectionById = (connectionId: string): Connection | null =>
+    connections.find((c) => c.id === connectionId) || null
+
+  const getSelectedConnection = (): Connection | null => {
     if (!selectedNodeId) return null
     const connectionId = selectedNodeId.split('/')[0]
-    return connections.find((c) => c.id === connectionId) || null
+    return getConnectionById(connectionId)
   }
 
-  const getSelectedSlave = () => {
+  const getSelectedSlave = (): Slave | null => {
     if (!selectedNodeId) return null
     const parts = selectedNodeId.split('/')
     if (parts.length < 2) return null
@@ -3282,11 +3447,27 @@ const Server = (): JSX.Element => {
     return conn?.slaves.find((s) => s.id === slaveId) || null
   }
 
-  const handleOpenConnection = async () => {
-    const conn = getSelectedConnection()
+  const getSlaveById = (connectionId: string, slaveId: string): Slave | null => {
+    const conn = getConnectionById(connectionId)
+    if (!conn) return null
+    return conn.slaves.find((s) => s.id === slaveId) || null
+  }
+
+  const getAddressDisplayModeForSlave = (slave: Slave | null): AddressDisplayMode => {
+    if (!slave) return 'protocol_hex'
+    if (slaveAddressDisplayModes[slave.id]) return slaveAddressDisplayModes[slave.id]
+    return slave.addressType === 'plc' ? 'plc' : 'protocol_hex'
+  }
+
+  const setAddressDisplayModeForSlave = (slaveId: string, mode: AddressDisplayMode): void => {
+    setSlaveAddressDisplayModes((prev) => ({ ...prev, [slaveId]: mode }))
+  }
+
+  const handleOpenConnectionById = async (connectionId: string): Promise<void> => {
+    const conn = getConnectionById(connectionId)
     if (!conn) return
     try {
-      const params: CreateServerParams = {
+      const params = {
         uuid: conn.id,
         config: toServerConfig(conn)
       }
@@ -3304,7 +3485,16 @@ const Server = (): JSX.Element => {
     }
   }
 
+  const handleOpenConnection = async (): Promise<void> => {
+    const conn = getSelectedConnection()
+    if (!conn) return
+    await handleOpenConnectionById(conn.id)
+  }
+
   const handleCloseWorkspace = async (): Promise<void> => {
+    const shouldContinue = await requestUnsavedChangesConfirmation()
+    if (!shouldContinue) return
+
     const activeConnections = connectionsRef.current
     const openConnections = activeConnections.filter((conn) => conn.isOpen)
 
@@ -3336,20 +3526,30 @@ const Server = (): JSX.Element => {
     setWorkspaceFileHandle(null)
     setWorkspaceFilename(null)
     setWorkspaceFilePath(null)
+    setWorkspaceSavedFingerprint(null)
+    workspaceInitialFingerprintRef.current = null
     closeTitleMenus()
     markLastWorkspaceId(null)
   }
 
-  const handleCloseConnection = async () => {
-    const conn = getSelectedConnection()
-    if (!conn) return
+  const handleCloseConnectionById = async (connectionId: string): Promise<boolean> => {
+    const conn = getConnectionById(connectionId)
+    if (!conn) return false
     try {
       await window.api.deleteServer(conn.id)
       setConnections((prev) => prev.map((c) => (c.id === conn.id ? { ...c, isOpen: false } : c)))
+      return true
     } catch (error) {
       console.error('Failed to close connection:', error)
       showUserError('Failed to close connection.')
+      return false
     }
+  }
+
+  const handleCloseConnection = async (): Promise<void> => {
+    const conn = getSelectedConnection()
+    if (!conn) return
+    await handleCloseConnectionById(conn.id)
   }
 
   useEffect(() => {
@@ -3394,7 +3594,9 @@ const Server = (): JSX.Element => {
         case 'l':
           event.preventDefault()
           if (connectionsRef.current.length > 0) {
-            setSelectedConnectionForSlave(selectedNodeId?.split('/')[0] || connectionsRef.current[0]?.id)
+            setSelectedConnectionForSlave(
+              selectedNodeId?.split('/')[0] || connectionsRef.current[0]?.id
+            )
             setNewSlaveOpen(true)
             closeTitleMenus()
           }
@@ -3414,6 +3616,11 @@ const Server = (): JSX.Element => {
           sendEvent('open_comm_log_window')
           closeTitleMenus()
           break
+        case 'g':
+          event.preventDefault()
+          sendEvent('open_system_log_window')
+          closeTitleMenus()
+          break
         default:
           break
       }
@@ -3425,18 +3632,38 @@ const Server = (): JSX.Element => {
     }
   }, [selectedNodeId, connections, handleOpenConnection, handleCloseConnection])
 
+  useEffect(() => {
+    const offCloseRequest = onEvent('request_window_close', (): void => {
+      void (async () => {
+        const shouldClose = await requestUnsavedChangesConfirmation()
+        if (!shouldClose) {
+          await window.api.rejectWindowClose()
+          return
+        }
+        await window.api.confirmWindowClose()
+      })()
+    })
+
+    return () => {
+      offCloseRequest()
+    }
+  }, [isWorkspaceDirty, requestUnsavedChangesConfirmation])
+
   const handleOpenRegisterPlot = (
     tab: OpenTab,
     connection: Connection,
     slave: Slave,
     group: RegisterGroup
   ): void => {
-    const selectedRegisters = group.registers.filter((reg) => tab.selectedAddresses.has(reg.address))
+    const selectedRegisters = group.registers.filter((reg) =>
+      tab.selectedAddresses.has(reg.address)
+    )
     if (selectedRegisters.length === 0) return
 
     const allAddresses = new Set(group.registers.map((reg) => reg.address))
     const typedSpanHints = buildTypedSpanHints(allAddresses, tab.typedInterpretation)
     const defaultInterpretation = getDefaultTypedInterpretation(group.type)
+    const addressDisplayMode = getAddressDisplayModeForSlave(slave)
 
     const seriesByAddress = new Map<number, RegisterPlotWindowInit['series'][number]>()
     selectedRegisters
@@ -3445,8 +3672,12 @@ const Server = (): JSX.Element => {
         const explicitMode = tab.typedInterpretation[reg.address]
         const typedSpanHint = typedSpanHints.get(reg.address)
         const effectiveTypedSpanHint =
-          explicitMode && typedSpanHint && explicitMode !== typedSpanHint.mode ? undefined : typedSpanHint
-        const startAddress = effectiveTypedSpanHint ? effectiveTypedSpanHint.startAddress : reg.address
+          explicitMode && typedSpanHint && explicitMode !== typedSpanHint.mode
+            ? undefined
+            : typedSpanHint
+        const startAddress = effectiveTypedSpanHint
+          ? effectiveTypedSpanHint.startAddress
+          : reg.address
         const interpretation = explicitMode || effectiveTypedSpanHint?.mode || defaultInterpretation
 
         if (seriesByAddress.has(startAddress)) return
@@ -3455,7 +3686,7 @@ const Server = (): JSX.Element => {
         const colorIndex = seriesByAddress.size % PLOT_SERIES_COLORS.length
         seriesByAddress.set(startAddress, {
           address: startAddress,
-          label: sourceRegister.variableName || formatAddress(startAddress),
+          label: sourceRegister.variableName || formatAddress(startAddress, addressDisplayMode),
           color: PLOT_SERIES_COLORS[colorIndex],
           interpretation
         })
@@ -3485,7 +3716,14 @@ const Server = (): JSX.Element => {
   }
 
   return (
-    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+    <Box
+      sx={{
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        pt: WINDOW_TITLEBAR_PADDING_TOP
+      }}
+    >
       {(() => {
         const selectedConn = getSelectedConnection()
         const isConnectionSelected = selectedNodeId && !selectedNodeId.includes('/')
@@ -3497,13 +3735,24 @@ const Server = (): JSX.Element => {
             position="static"
             color="default"
             elevation={0}
-            sx={{ bgcolor: 'background.paper', borderBottom: 1, borderColor: 'divider' }}
+            sx={{
+              bgcolor: (theme) =>
+                theme.palette.mode === 'dark' ? 'rgba(11,18,32,0.82)' : 'rgba(236,243,252,0.98)',
+              borderBottom: 1,
+              borderColor: (theme) => (theme.palette.mode === 'dark' ? 'divider' : '#cbd5e1'),
+              backdropFilter: 'blur(10px)'
+            }}
           >
-            <Toolbar variant="dense" sx={{ gap: 1, minHeight: 42, flexWrap: 'wrap' }}>
+            <Toolbar
+              variant="dense"
+              sx={{ gap: 0.8, minHeight: 44, flexWrap: 'wrap', WebkitAppRegion: 'drag' }}
+            >
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                 <Button
                   size="small"
-                  variant="text"
+                  variant="outlined"
+                  startIcon={<WorkspaceMenuIcon sx={{ fontSize: 16 }} />}
+                  sx={TOP_MENU_BUTTON_SX}
                   onClick={(event) => {
                     setWorkspaceMenuAnchorEl(event.currentTarget)
                     setConnectionMenuAnchorEl(null)
@@ -3514,7 +3763,9 @@ const Server = (): JSX.Element => {
                 </Button>
                 <Button
                   size="small"
-                  variant="text"
+                  variant="outlined"
+                  startIcon={<ConnectionMenuIcon sx={{ fontSize: 16 }} />}
+                  sx={TOP_MENU_BUTTON_SX}
                   onClick={(event) => {
                     setConnectionMenuAnchorEl(event.currentTarget)
                     setWorkspaceMenuAnchorEl(null)
@@ -3525,7 +3776,9 @@ const Server = (): JSX.Element => {
                 </Button>
                 <Button
                   size="small"
-                  variant="text"
+                  variant="outlined"
+                  startIcon={<ToolsMenuIcon sx={{ fontSize: 16 }} />}
+                  sx={TOP_MENU_BUTTON_SX}
                   onClick={(event) => {
                     setToolsMenuAnchorEl(event.currentTarget)
                     setWorkspaceMenuAnchorEl(null)
@@ -3535,12 +3788,37 @@ const Server = (): JSX.Element => {
                   {t('server.toolbar.toolsMenu')}
                 </Button>
               </Box>
-              <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Box
+                sx={{
+                  ml: 'auto',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1,
+                  WebkitAppRegion: 'no-drag'
+                }}
+              >
                 {workspaceFilename ? (
-                  <Typography variant="caption" color="text.secondary" sx={{ maxWidth: 240 }} noWrap>
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ maxWidth: 240 }}
+                    noWrap
+                  >
                     {workspaceFilename}
+                    {isWorkspaceDirty ? '*' : ''}
                   </Typography>
                 ) : null}
+                <FormControlLabel
+                  sx={{ m: 0 }}
+                  control={
+                    <Switch
+                      size="small"
+                      checked={alwaysOnTop}
+                      onChange={(event) => setWindowAlwaysOnTop(event.target.checked)}
+                    />
+                  }
+                  label={t('common.alwaysOnTop')}
+                />
                 <SettingsMenu />
               </Box>
               <Menu
@@ -3581,7 +3859,9 @@ const Server = (): JSX.Element => {
                   }}
                 >
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', minWidth: 250 }}>
-                    <Typography variant="body2">{t('server.toolbar.saveWorkspaceAs')} (A)</Typography>
+                    <Typography variant="body2">
+                      {t('server.toolbar.saveWorkspaceAs')} (A)
+                    </Typography>
                     <Typography variant="caption" color="text.secondary">
                       Alt+A
                     </Typography>
@@ -3595,7 +3875,9 @@ const Server = (): JSX.Element => {
                   disabled={connections.length === 0}
                 >
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', minWidth: 250 }}>
-                    <Typography variant="body2">{t('server.toolbar.closeWorkspace')} (W)</Typography>
+                    <Typography variant="body2">
+                      {t('server.toolbar.closeWorkspace')} (W)
+                    </Typography>
                     <Typography variant="caption" color="text.secondary">
                       Alt+W
                     </Typography>
@@ -3645,7 +3927,9 @@ const Server = (): JSX.Element => {
                 <MenuItem
                   disabled={connections.length === 0}
                   onClick={() => {
-                    setSelectedConnectionForSlave(selectedNodeId?.split('/')[0] || connections[0]?.id)
+                    setSelectedConnectionForSlave(
+                      selectedNodeId?.split('/')[0] || connections[0]?.id
+                    )
                     setNewSlaveOpen(true)
                     closeTitleMenus()
                   }}
@@ -3687,7 +3971,11 @@ const Server = (): JSX.Element => {
                   </Box>
                 </MenuItem>
               </Menu>
-              <Menu anchorEl={toolsMenuAnchorEl} open={Boolean(toolsMenuAnchorEl)} onClose={closeTitleMenus}>
+              <Menu
+                anchorEl={toolsMenuAnchorEl}
+                open={Boolean(toolsMenuAnchorEl)}
+                onClose={closeTitleMenus}
+              >
                 <MenuItem
                   disabled={!isConnectionSelected}
                   onClick={() => {
@@ -3721,20 +4009,244 @@ const Server = (): JSX.Element => {
                   </Box>
                 </MenuItem>
                 <MenuItem
+                  onClick={() => {
+                    sendEvent('open_system_log_window')
+                    closeTitleMenus()
+                  }}
+                >
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', minWidth: 250 }}>
+                    <Typography variant="body2">{t('server.toolbar.systemLogs')} (G)</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Alt+G
+                    </Typography>
+                  </Box>
+                </MenuItem>
+                <MenuItem
                   disabled={!scriptTargetConnectionId}
                   onClick={() => {
                     if (!scriptTargetConnectionId) return
-                    const targetConn = connections.find((conn) => conn.id === scriptTargetConnectionId)
-                    sendEvent('open_script_editor_window', {
-                      connectionId: scriptTargetConnectionId,
-                      connectionAlias: targetConn?.alias || 'Connection',
-                      scripts: scriptsByConnection[scriptTargetConnectionId] ?? []
-                    })
+                    openScriptEditor(scriptTargetConnectionId)
                     closeTitleMenus()
                   }}
                 >
                   <Typography variant="body2">{t('server.toolbar.editScript')}</Typography>
                 </MenuItem>
+              </Menu>
+              <Menu
+                open={Boolean(treeContextMenu)}
+                onClose={closeTreeContextMenu}
+                anchorReference="anchorPosition"
+                anchorPosition={
+                  treeContextMenu
+                    ? { top: treeContextMenu.mouseY, left: treeContextMenu.mouseX }
+                    : undefined
+                }
+              >
+                {treeContextMenu?.target === 'connection'
+                  ? (() => {
+                      const contextConnection = getConnectionById(treeContextMenu.connectionId)
+                      const isContextConnectionOpen = Boolean(contextConnection?.isOpen)
+                      return (
+                        <>
+                          <MenuItem
+                            disabled={!contextConnection || isContextConnectionOpen}
+                            onClick={() => {
+                              if (!contextConnection) return
+                              void handleOpenConnectionById(contextConnection.id)
+                              closeTreeContextMenu()
+                            }}
+                          >
+                            <Typography variant="body2">{t('common.connect')}</Typography>
+                          </MenuItem>
+                          <MenuItem
+                            disabled={!contextConnection || !isContextConnectionOpen}
+                            onClick={() => {
+                              if (!contextConnection) return
+                              void handleCloseConnectionById(contextConnection.id)
+                              closeTreeContextMenu()
+                            }}
+                          >
+                            <Typography variant="body2">{t('common.disconnect')}</Typography>
+                          </MenuItem>
+                          <MenuItem
+                            disabled={!contextConnection}
+                            onClick={() => {
+                              if (!contextConnection) return
+                              handleEditConnectionById(contextConnection.id)
+                              closeTreeContextMenu()
+                            }}
+                          >
+                            <Typography variant="body2">
+                              {t('server.toolbar.editConnection')}
+                            </Typography>
+                          </MenuItem>
+                          <MenuItem
+                            disabled={!contextConnection}
+                            onClick={() => {
+                              if (!contextConnection) return
+                              void handleDeleteConnectionById(contextConnection.id)
+                              closeTreeContextMenu()
+                            }}
+                          >
+                            <Typography variant="body2">
+                              {t('server.toolbar.deleteConnection')}
+                            </Typography>
+                          </MenuItem>
+                          <Divider />
+                          <MenuItem
+                            disabled={!contextConnection}
+                            onClick={() => {
+                              if (!contextConnection) return
+                              setSelectedConnectionForSlave(contextConnection.id)
+                              setNewSlaveOpen(true)
+                              closeTreeContextMenu()
+                            }}
+                          >
+                            <Typography variant="body2">{t('server.toolbar.newSlave')}</Typography>
+                          </MenuItem>
+                          <MenuItem
+                            disabled={!contextConnection}
+                            onClick={() => {
+                              sendEvent('open_comm_log_window')
+                              closeTreeContextMenu()
+                            }}
+                          >
+                            <Typography variant="body2">
+                              {t('server.toolbar.commDetails')}
+                            </Typography>
+                          </MenuItem>
+                        </>
+                      )
+                    })()
+                  : treeContextMenu?.target === 'slave'
+                    ? (() => {
+                        const contextConnection = treeContextMenu
+                          ? getConnectionById(treeContextMenu.connectionId)
+                          : null
+                        const contextSlave =
+                          treeContextMenu && treeContextMenu.slaveId
+                            ? getSlaveById(treeContextMenu.connectionId, treeContextMenu.slaveId)
+                            : null
+                        const addressMode = getAddressDisplayModeForSlave(contextSlave)
+                        return (
+                          <>
+                            <MenuItem
+                              disabled={!contextConnection || !contextSlave}
+                              onClick={() => {
+                                if (!contextConnection || !contextSlave) return
+                                handleEditSlaveById(contextConnection.id, contextSlave.id)
+                                closeTreeContextMenu()
+                              }}
+                            >
+                              <Typography variant="body2">
+                                {t('server.toolbar.editSlave')}
+                              </Typography>
+                            </MenuItem>
+                            <MenuItem
+                              disabled={!contextConnection || !contextSlave}
+                              onClick={() => {
+                                if (!contextConnection || !contextSlave) return
+                                handleCopySlaveById(contextConnection.id, contextSlave.id)
+                                closeTreeContextMenu()
+                              }}
+                            >
+                              <Typography variant="body2">
+                                {t('server.toolbar.copySlave')}
+                              </Typography>
+                            </MenuItem>
+                            <MenuItem
+                              disabled={!contextConnection || !contextSlave}
+                              onClick={() => {
+                                if (!contextConnection || !contextSlave) return
+                                void handleExportSlaveById(contextConnection.id, contextSlave.id)
+                                closeTreeContextMenu()
+                              }}
+                            >
+                              <Typography variant="body2">
+                                {t('server.toolbar.exportSlaveData')}
+                              </Typography>
+                            </MenuItem>
+                            <MenuItem
+                              disabled={!contextConnection || !contextSlave}
+                              onClick={() => {
+                                if (!contextConnection || !contextSlave) return
+                                void handleImportSlaveById(contextConnection.id, contextSlave.id)
+                                closeTreeContextMenu()
+                              }}
+                            >
+                              <Typography variant="body2">
+                                {t('server.toolbar.importSlaveData')}
+                              </Typography>
+                            </MenuItem>
+                            <MenuItem
+                              disabled={!contextConnection || !contextSlave}
+                              onClick={() => {
+                                if (!contextConnection || !contextSlave) return
+                                void handleDeleteSlaveById(contextConnection.id, contextSlave.id)
+                                closeTreeContextMenu()
+                              }}
+                            >
+                              <Typography variant="body2">
+                                {t('server.toolbar.deleteSlave')}
+                              </Typography>
+                            </MenuItem>
+                            <Divider />
+                            <MenuItem
+                              disabled={!contextConnection}
+                              onClick={() => {
+                                if (!contextConnection) return
+                                openScriptEditor(contextConnection.id)
+                                closeTreeContextMenu()
+                              }}
+                            >
+                              <Typography variant="body2">
+                                {t('server.toolbar.editScript')}
+                              </Typography>
+                            </MenuItem>
+                            <Divider />
+                            <MenuItem
+                              disabled={!contextSlave}
+                              selected={addressMode === 'protocol_hex'}
+                              onClick={() => {
+                                if (!contextSlave) return
+                                setAddressDisplayModeForSlave(contextSlave.id, 'protocol_hex')
+                                closeTreeContextMenu()
+                              }}
+                            >
+                              <Typography variant="body2">
+                                {t('server.toolbar.addressModeProtocolHex')}
+                              </Typography>
+                            </MenuItem>
+                            <MenuItem
+                              disabled={!contextSlave}
+                              selected={addressMode === 'protocol_dec'}
+                              onClick={() => {
+                                if (!contextSlave) return
+                                setAddressDisplayModeForSlave(contextSlave.id, 'protocol_dec')
+                                closeTreeContextMenu()
+                              }}
+                            >
+                              <Typography variant="body2">
+                                {t('server.toolbar.addressModeProtocolDec')}
+                              </Typography>
+                            </MenuItem>
+                            <MenuItem
+                              disabled={!contextSlave}
+                              selected={addressMode === 'plc'}
+                              onClick={() => {
+                                if (!contextSlave) return
+                                setAddressDisplayModeForSlave(contextSlave.id, 'plc')
+                                closeTreeContextMenu()
+                              }}
+                            >
+                              <Typography variant="body2">
+                                {t('server.toolbar.addressModePlc')}
+                              </Typography>
+                            </MenuItem>
+                          </>
+                        )
+                      })()
+                    : null}
               </Menu>
             </Toolbar>
           </AppBar>
@@ -3776,6 +4288,16 @@ const Server = (): JSX.Element => {
                   onToggle={() => toggleConnection(conn.id)}
                   onDoubleClick={() => toggleConnection(conn.id)}
                   onSelect={() => setSelectedNodeId(conn.id)}
+                  onContextMenu={(event) => {
+                    event.preventDefault()
+                    setSelectedNodeId(conn.id)
+                    setTreeContextMenu({
+                      mouseX: event.clientX + 2,
+                      mouseY: event.clientY - 6,
+                      target: 'connection',
+                      connectionId: conn.id
+                    })
+                  }}
                   isSelected={selectedNodeId === conn.id}
                   hasChildren={conn.slaves.length > 0}
                 >
@@ -3788,6 +4310,17 @@ const Server = (): JSX.Element => {
                         onToggle={() => toggleSlave(slave.id)}
                         onDoubleClick={() => toggleSlave(slave.id)}
                         onSelect={() => setSelectedNodeId(`${conn.id}/${slave.id}`)}
+                        onContextMenu={(event) => {
+                          event.preventDefault()
+                          setSelectedNodeId(`${conn.id}/${slave.id}`)
+                          setTreeContextMenu({
+                            mouseX: event.clientX + 2,
+                            mouseY: event.clientY - 6,
+                            target: 'slave',
+                            connectionId: conn.id,
+                            slaveId: slave.id
+                          })
+                        }}
                         isSelected={selectedNodeId === `${conn.id}/${slave.id}`}
                         hasChildren={slave.registerGroups.length > 0}
                         level={1}
@@ -3838,7 +4371,13 @@ const Server = (): JSX.Element => {
 
         <Box
           ref={rightPanelRef}
-          sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+          sx={{
+            flex: 1,
+            minWidth: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden'
+          }}
         >
           {(() => {
             const validTabs = openTabs.filter((tab) => {
@@ -3873,6 +4412,7 @@ const Server = (): JSX.Element => {
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                             <Typography variant="caption">{group?.name || 'Unknown'}</Typography>
                             <IconButton
+                              aria-label="Close tab"
                               size="small"
                               onClick={(e) => {
                                 e.stopPropagation()
@@ -3904,6 +4444,9 @@ const Server = (): JSX.Element => {
                 const slave = conn?.slaves.find((s) => s.id === tab.slaveId)
                 const group = slave?.registerGroups.find((g) => g.id === tab.registerGroupId)
                 if (!group) return null
+                const addressDisplayMode = getAddressDisplayModeForSlave(slave || null)
+                const formatAddressForActiveSlave = (address: number): string =>
+                  formatAddress(address, addressDisplayMode)
 
                 const selectedRegisters = group.registers.filter((r) =>
                   tab.selectedAddresses.has(r.address)
@@ -3948,11 +4491,17 @@ const Server = (): JSX.Element => {
                     : []
                 const bottomTotalRows =
                   effectiveInterpretationTab === 'long'
-                    ? (isCoilGroup ? coilLongGroups.length : longGroups.length)
+                    ? isCoilGroup
+                      ? coilLongGroups.length
+                      : longGroups.length
                     : effectiveInterpretationTab === 'float'
-                      ? (isCoilGroup ? coilFloatGroups.length : floatGroups.length)
+                      ? isCoilGroup
+                        ? coilFloatGroups.length
+                        : floatGroups.length
                       : effectiveInterpretationTab === 'double'
-                        ? (isCoilGroup ? coilDoubleGroups.length : doubleGroups.length)
+                        ? isCoilGroup
+                          ? coilDoubleGroups.length
+                          : doubleGroups.length
                         : panelRegisters.length
                 const bottomMaxPage = Math.max(
                   0,
@@ -3967,7 +4516,10 @@ const Server = (): JSX.Element => {
                 const pagedDoubleGroups = doubleGroups.slice(bottomStartIndex, bottomEndIndex)
                 const pagedCoilLongGroups = coilLongGroups.slice(bottomStartIndex, bottomEndIndex)
                 const pagedCoilFloatGroups = coilFloatGroups.slice(bottomStartIndex, bottomEndIndex)
-                const pagedCoilDoubleGroups = coilDoubleGroups.slice(bottomStartIndex, bottomEndIndex)
+                const pagedCoilDoubleGroups = coilDoubleGroups.slice(
+                  bottomStartIndex,
+                  bottomEndIndex
+                )
                 const typedSpanHints = buildTypedSpanHints(
                   new Set(group.registers.map((r) => r.address)),
                   tab.typedInterpretation
@@ -3992,15 +4544,15 @@ const Server = (): JSX.Element => {
                   const values = group.registers.map((register) => {
                     if (column === 'interpretation') {
                       return (
-                        tab.typedInterpretation[register.address] ||
-                        defaultTypedInterpretation
+                        tab.typedInterpretation[register.address] || defaultTypedInterpretation
                       ).toUpperCase()
                     }
                     if (column === 'display') {
                       return (tab.registerDisplayFormat[register.address] || 'dec').toUpperCase()
                     }
-                    if (column === 'address') return formatAddress(register.address)
-                    if (column === 'variable') return register.variableName || 'Double-click to edit'
+                    if (column === 'address') return formatAddressForActiveSlave(register.address)
+                    if (column === 'variable')
+                      return register.variableName || 'Double-click to edit'
                     if (column === 'value') {
                       if (isCoilGroup) return register.value !== 0 ? 'ON' : 'OFF'
                       const mode = tab.registerDisplayFormat[register.address] || 'dec'
@@ -4015,10 +4567,7 @@ const Server = (): JSX.Element => {
                     6
                   )
                   const estimated = Math.round(maxLen * 8.5 + 36)
-                  return Math.max(
-                    MIN_TABLE_COLUMN_WIDTHS[column],
-                    Math.min(estimated, 640)
-                  )
+                  return Math.max(MIN_TABLE_COLUMN_WIDTHS[column], Math.min(estimated, 640))
                 }
                 const tableMinWidth =
                   56 +
@@ -4029,7 +4578,9 @@ const Server = (): JSX.Element => {
                   currentWidths.value +
                   currentWidths.comments
                 return (
-                  <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+                  <Box
+                    sx={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}
+                  >
                     <Box
                       sx={{
                         flex: 1,
@@ -4061,7 +4612,11 @@ const Server = (): JSX.Element => {
                             minHeight: 28
                           }}
                         >
-                          <Typography variant="subtitle1" fontWeight={700} sx={{ lineHeight: 1.25 }}>
+                          <Typography
+                            variant="subtitle1"
+                            fontWeight={700}
+                            sx={{ lineHeight: 1.25 }}
+                          >
                             {group.name}
                           </Typography>
                           <Divider orientation="vertical" flexItem />
@@ -4072,7 +4627,7 @@ const Server = (): JSX.Element => {
                               size="small"
                             />
                             <Chip
-                              label={`Start ${formatAddress(group.startAddress)}`}
+                              label={`Start ${formatAddressForActiveSlave(group.startAddress)}`}
                               variant="outlined"
                               size="small"
                             />
@@ -4107,7 +4662,9 @@ const Server = (): JSX.Element => {
                         const paginatedRegisters = group.registers.slice(startIndex, endIndex)
 
                         return (
-                          <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+                          <Box
+                            sx={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}
+                          >
                             <TableContainer
                               component={Paper}
                               variant="outlined"
@@ -4143,10 +4700,7 @@ const Server = (): JSX.Element => {
                                         }
                                         checked={tab.selectedAddresses.size === group.count}
                                         onChange={() =>
-                                          selectAllAddresses(
-                                            activeTabId,
-                                            allRegisterAddresses
-                                          )
+                                          selectAllAddresses(activeTabId, allRegisterAddresses)
                                         }
                                       />
                                     </TableCell>
@@ -4441,14 +4995,17 @@ const Server = (): JSX.Element => {
                                     const typedSpanHint = typedSpanHints.get(register.address)
                                     const explicitMode = tab.typedInterpretation[register.address]
                                     const effectiveTypedSpanHint =
-                                      explicitMode && typedSpanHint && explicitMode !== typedSpanHint.mode
+                                      explicitMode &&
+                                      typedSpanHint &&
+                                      explicitMode !== typedSpanHint.mode
                                         ? undefined
                                         : typedSpanHint
                                     const currentTypedMode =
                                       explicitMode ||
                                       effectiveTypedSpanHint?.mode ||
                                       defaultTypedInterpretation
-                                    const interpretationColor = INTERPRETATION_COLORS[currentTypedMode]
+                                    const interpretationColor =
+                                      INTERPRETATION_COLORS[currentTypedMode]
                                     const currentDisplayMode =
                                       tab.registerDisplayFormat[register.address] || 'dec'
                                     const displayWordSpan = getDisplayWordSpan(currentDisplayMode)
@@ -4500,7 +5057,7 @@ const Server = (): JSX.Element => {
                                             borderColor: 'divider'
                                           }}
                                         >
-                                          {formatAddress(register.address)}
+                                          {formatAddressForActiveSlave(register.address)}
                                         </TableCell>
                                         <TableCell
                                           sx={{
@@ -4696,7 +5253,13 @@ const Server = (): JSX.Element => {
                                             borderColor: 'divider'
                                           }}
                                         >
-                                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.35 }}>
+                                          <Box
+                                            sx={{
+                                              display: 'flex',
+                                              flexDirection: 'column',
+                                              gap: 0.35
+                                            }}
+                                          >
                                             <Chip
                                               size="small"
                                               variant="filled"
@@ -4749,10 +5312,10 @@ const Server = (): JSX.Element => {
                                                 <LinkIcon sx={{ fontSize: 12 }} />
                                                 <Typography variant="caption">
                                                   {effectiveTypedSpanHint.index === 0
-                                                    ? `${formatAddress(
+                                                    ? `${formatAddressForActiveSlave(
                                                         effectiveTypedSpanHint.startAddress
                                                       )} x${effectiveTypedSpanHint.span}`
-                                                    : `↳ ${formatAddress(
+                                                    : `↳ ${formatAddressForActiveSlave(
                                                         effectiveTypedSpanHint.startAddress
                                                       )}`}
                                                 </Typography>
@@ -4773,7 +5336,11 @@ const Server = (): JSX.Element => {
                                             size="small"
                                             variant="filled"
                                             data-testid={`display-format-${register.address}`}
-                                            label={isCoilGroup ? 'BYTE (8b)' : `${currentDisplayMode.toUpperCase()} (${displayWordSpan}w)`}
+                                            label={
+                                              isCoilGroup
+                                                ? 'BYTE (8b)'
+                                                : `${currentDisplayMode.toUpperCase()} (${displayWordSpan}w)`
+                                            }
                                             sx={{
                                               fontWeight: 700,
                                               height: 20,
@@ -4897,7 +5464,9 @@ const Server = (): JSX.Element => {
                           variant="contained"
                           disabled={batchAssignableStarts.length === 0}
                           data-testid="typed-batch-apply"
-                          onClick={() => void applyTypedInterpretationToSelection(activeTabId, typedBatchMode)}
+                          onClick={() =>
+                            void applyTypedInterpretationToSelection(activeTabId, typedBatchMode)
+                          }
                         >
                           Apply Type To {batchAssignableStarts.length}
                         </Button>
@@ -5008,13 +5577,23 @@ const Server = (): JSX.Element => {
                             </Typography>
                           </Box>
                         ) : (
-                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25, flex: 1, minHeight: 0 }}>
+                          <Box
+                            sx={{
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: 1.25,
+                              flex: 1,
+                              minHeight: 0
+                            }}
+                          >
                             {effectiveInterpretationTab === 'string' ? (
                               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
                                 <Typography variant="subtitle2">Global String Encoding:</Typography>
                                 <Select
                                   value={globalEncoding}
-                                  onChange={(e) => setGlobalStringEncodingPreference(e.target.value as string)}
+                                  onChange={(e) =>
+                                    setGlobalStringEncodingPreference(e.target.value as string)
+                                  }
                                   size="small"
                                   sx={{ minWidth: 150 }}
                                 >
@@ -5098,8 +5677,11 @@ const Server = (): JSX.Element => {
                                 <TableBody>
                                   {effectiveInterpretationTab === 'basic'
                                     ? pagedPanelRegisters.map((reg) => {
-                                        const isCoilGroup = group.type === '01' || group.type === '02'
-                                        const renderBasicCell = (format: BasicValueFormat): JSX.Element => {
+                                        const isCoilGroup =
+                                          group.type === '01' || group.type === '02'
+                                        const renderBasicCell = (
+                                          format: BasicValueFormat
+                                        ): JSX.Element => {
                                           const isEditing =
                                             basicEditCell?.address === reg.address &&
                                             basicEditCell.format === format
@@ -5190,7 +5772,9 @@ const Server = (): JSX.Element => {
                                                           ? { ...prev, hasError: true }
                                                           : prev
                                                       )
-                                                      showUserError('Invalid input or out of range.')
+                                                      showUserError(
+                                                        'Invalid input or out of range.'
+                                                      )
                                                       return
                                                     }
                                                     updateRegister(
@@ -5222,7 +5806,10 @@ const Server = (): JSX.Element => {
                                                 }
                                                 sx={{
                                                   minWidth: 90,
-                                                  '& .MuiInputBase-input': { py: 0.25, fontSize: 12.5 }
+                                                  '& .MuiInputBase-input': {
+                                                    py: 0.25,
+                                                    fontSize: 12.5
+                                                  }
                                                 }}
                                               />
                                             </TableCell>
@@ -5231,8 +5818,10 @@ const Server = (): JSX.Element => {
 
                                         return (
                                           <TableRow key={reg.address}>
-                                            <TableCell sx={{ fontFamily: MONO_FONT_FAMILY, fontWeight: 700 }}>
-                                              {formatAddress(reg.address)}
+                                            <TableCell
+                                              sx={{ fontFamily: MONO_FONT_FAMILY, fontWeight: 700 }}
+                                            >
+                                              {formatAddressForActiveSlave(reg.address)}
                                             </TableCell>
                                             {isCoilGroup ? (
                                               <>
@@ -5254,99 +5843,90 @@ const Server = (): JSX.Element => {
                                                   ) : (
                                                     <Typography
                                                       variant="body2"
-                                                      sx={{ fontFamily: MONO_FONT_FAMILY, fontWeight: 700 }}
+                                                      sx={{
+                                                        fontFamily: MONO_FONT_FAMILY,
+                                                        fontWeight: 700
+                                                      }}
                                                     >
                                                       {reg.value !== 0 ? 'ON' : 'OFF'}
                                                     </Typography>
                                                   )}
                                                 </TableCell>
-                                                {(['unsigned', 'hex', 'bin', 'oct'] as const).map((fmt) => {
-                                                  const isEditing =
-                                                    basicEditCell?.address === reg.address &&
-                                                    basicEditCell.format === fmt
-                                                  if (!isEditing) {
-                                                    const display =
-                                                      fmt === 'unsigned'
-                                                        ? String(reg.value !== 0 ? 1 : 0)
-                                                        : fmt === 'hex'
-                                                          ? `0x${reg.value !== 0 ? '1' : '0'}`
-                                                          : fmt === 'bin'
-                                                            ? `0b${reg.value !== 0 ? '1' : '0'}`
-                                                            : `0o${reg.value !== 0 ? '1' : '0'}`
-                                                    return (
-                                                      <TableCell key={`coil-basic-${fmt}-${reg.address}`}>
-                                                        <Typography
-                                                          variant="body2"
-                                                          sx={{
-                                                            fontFamily: MONO_FONT_FAMILY,
-                                                            fontWeight: 700,
-                                                            cursor: group.type === '01' ? 'text' : 'default'
-                                                          }}
-                                                          onClick={(event) => {
-                                                            if (group.type !== '01') return
-                                                            event.stopPropagation()
-                                                            setBasicEditCell({
-                                                              address: reg.address,
-                                                              format: fmt,
-                                                              draft: fmt === 'unsigned' ? String(reg.value !== 0 ? 1 : 0) : display,
-                                                              hasError: false
-                                                            })
-                                                          }}
+                                                {(['unsigned', 'hex', 'bin', 'oct'] as const).map(
+                                                  (fmt) => {
+                                                    const isEditing =
+                                                      basicEditCell?.address === reg.address &&
+                                                      basicEditCell.format === fmt
+                                                    if (!isEditing) {
+                                                      const display =
+                                                        fmt === 'unsigned'
+                                                          ? String(reg.value !== 0 ? 1 : 0)
+                                                          : fmt === 'hex'
+                                                            ? `0x${reg.value !== 0 ? '1' : '0'}`
+                                                            : fmt === 'bin'
+                                                              ? `0b${reg.value !== 0 ? '1' : '0'}`
+                                                              : `0o${reg.value !== 0 ? '1' : '0'}`
+                                                      return (
+                                                        <TableCell
+                                                          key={`coil-basic-${fmt}-${reg.address}`}
                                                         >
-                                                          {display}
-                                                        </Typography>
-                                                      </TableCell>
-                                                    )
-                                                  }
-                                                  return (
-                                                    <TableCell key={`coil-basic-edit-${fmt}-${reg.address}`}>
-                                                      <TextField
-                                                        autoFocus
-                                                        size="small"
-                                                        value={basicEditCell.draft}
-                                                        error={basicEditCell.hasError}
-                                                        onClick={(event) => event.stopPropagation()}
-                                                        onChange={(event) =>
-                                                          setBasicEditCell((prev) =>
-                                                            prev &&
-                                                            prev.address === reg.address &&
-                                                            prev.format === fmt
-                                                              ? {
-                                                                  ...prev,
-                                                                  draft: event.target.value,
-                                                                  hasError: false
-                                                                }
-                                                              : prev
-                                                          )
-                                                        }
-                                                        onBlur={() => {
-                                                          const parsed = parseCoilBitInput(
-                                                            basicEditCell.draft,
-                                                            fmt
-                                                          )
-                                                          if (parsed === null) {
+                                                          <Typography
+                                                            variant="body2"
+                                                            sx={{
+                                                              fontFamily: MONO_FONT_FAMILY,
+                                                              fontWeight: 700,
+                                                              cursor:
+                                                                group.type === '01'
+                                                                  ? 'text'
+                                                                  : 'default'
+                                                            }}
+                                                            onClick={(event) => {
+                                                              if (group.type !== '01') return
+                                                              event.stopPropagation()
+                                                              setBasicEditCell({
+                                                                address: reg.address,
+                                                                format: fmt,
+                                                                draft:
+                                                                  fmt === 'unsigned'
+                                                                    ? String(
+                                                                        reg.value !== 0 ? 1 : 0
+                                                                      )
+                                                                    : display,
+                                                                hasError: false
+                                                              })
+                                                            }}
+                                                          >
+                                                            {display}
+                                                          </Typography>
+                                                        </TableCell>
+                                                      )
+                                                    }
+                                                    return (
+                                                      <TableCell
+                                                        key={`coil-basic-edit-${fmt}-${reg.address}`}
+                                                      >
+                                                        <TextField
+                                                          autoFocus
+                                                          size="small"
+                                                          value={basicEditCell.draft}
+                                                          error={basicEditCell.hasError}
+                                                          onClick={(event) =>
+                                                            event.stopPropagation()
+                                                          }
+                                                          onChange={(event) =>
                                                             setBasicEditCell((prev) =>
                                                               prev &&
                                                               prev.address === reg.address &&
                                                               prev.format === fmt
-                                                                ? { ...prev, hasError: true }
+                                                                ? {
+                                                                    ...prev,
+                                                                    draft: event.target.value,
+                                                                    hasError: false
+                                                                  }
                                                                 : prev
                                                             )
-                                                            showUserError('Coil value must be 0 or 1.')
-                                                            return
                                                           }
-                                                          updateRegister(
-                                                            tab.connectionId,
-                                                            tab.slaveId,
-                                                            tab.registerGroupId,
-                                                            reg.address,
-                                                            { value: parsed }
-                                                          )
-                                                          setBasicEditCell(null)
-                                                        }}
-                                                        onKeyDown={(event) => {
-                                                          if (event.key === 'Enter') {
-                                                            event.preventDefault()
+                                                          onBlur={() => {
                                                             const parsed = parseCoilBitInput(
                                                               basicEditCell.draft,
                                                               fmt
@@ -5359,7 +5939,9 @@ const Server = (): JSX.Element => {
                                                                   ? { ...prev, hasError: true }
                                                                   : prev
                                                               )
-                                                              showUserError('Coil value must be 0 or 1.')
+                                                              showUserError(
+                                                                'Coil value must be 0 or 1.'
+                                                              )
                                                               return
                                                             }
                                                             updateRegister(
@@ -5370,32 +5952,64 @@ const Server = (): JSX.Element => {
                                                               { value: parsed }
                                                             )
                                                             setBasicEditCell(null)
+                                                          }}
+                                                          onKeyDown={(event) => {
+                                                            if (event.key === 'Enter') {
+                                                              event.preventDefault()
+                                                              const parsed = parseCoilBitInput(
+                                                                basicEditCell.draft,
+                                                                fmt
+                                                              )
+                                                              if (parsed === null) {
+                                                                setBasicEditCell((prev) =>
+                                                                  prev &&
+                                                                  prev.address === reg.address &&
+                                                                  prev.format === fmt
+                                                                    ? { ...prev, hasError: true }
+                                                                    : prev
+                                                                )
+                                                                showUserError(
+                                                                  'Coil value must be 0 or 1.'
+                                                                )
+                                                                return
+                                                              }
+                                                              updateRegister(
+                                                                tab.connectionId,
+                                                                tab.slaveId,
+                                                                tab.registerGroupId,
+                                                                reg.address,
+                                                                { value: parsed }
+                                                              )
+                                                              setBasicEditCell(null)
+                                                            }
+                                                            if (event.key === 'Escape') {
+                                                              event.preventDefault()
+                                                              setBasicEditCell(null)
+                                                            }
+                                                          }}
+                                                          inputProps={{
+                                                            'data-testid': `basic-${fmt}-${reg.address}`,
+                                                            style: {
+                                                              textAlign: 'center',
+                                                              fontFamily: MONO_FONT_FAMILY,
+                                                              fontWeight: 700
+                                                            }
+                                                          }}
+                                                          type={
+                                                            fmt === 'unsigned' ? 'number' : 'text'
                                                           }
-                                                          if (event.key === 'Escape') {
-                                                            event.preventDefault()
-                                                            setBasicEditCell(null)
-                                                          }
-                                                        }}
-                                                        inputProps={{
-                                                          'data-testid': `basic-${fmt}-${reg.address}`,
-                                                          style: {
-                                                            textAlign: 'center',
-                                                            fontFamily: MONO_FONT_FAMILY,
-                                                            fontWeight: 700
-                                                          }
-                                                        }}
-                                                        type={fmt === 'unsigned' ? 'number' : 'text'}
-                                                        sx={{
-                                                          minWidth: 90,
-                                                          '& .MuiInputBase-input': {
-                                                            py: 0.25,
-                                                            fontSize: 12.5
-                                                          }
-                                                        }}
-                                                      />
-                                                    </TableCell>
-                                                  )
-                                                })}
+                                                          sx={{
+                                                            minWidth: 90,
+                                                            '& .MuiInputBase-input': {
+                                                              py: 0.25,
+                                                              fontSize: 12.5
+                                                            }
+                                                          }}
+                                                        />
+                                                      </TableCell>
+                                                    )
+                                                  }
+                                                )}
                                               </>
                                             ) : (
                                               <>
@@ -5413,33 +6027,164 @@ const Server = (): JSX.Element => {
                                       ? isCoilGroup
                                         ? pagedCoilLongGroups.map((groupItem, idx) => {
                                             const pair: Register[] = [
-                                              { address: 0, value: groupItem.words[0], variableName: '', comment: '' },
-                                              { address: 1, value: groupItem.words[1], variableName: '', comment: '' }
+                                              {
+                                                address: 0,
+                                                value: groupItem.words[0],
+                                                variableName: '',
+                                                comment: ''
+                                              },
+                                              {
+                                                address: 1,
+                                                value: groupItem.words[1],
+                                                variableName: '',
+                                                comment: ''
+                                              }
                                             ]
                                             const start = groupItem.startBit
                                             return (
                                               <TableRow key={`coil-long-${idx}`}>
                                                 <TableCell sx={{ fontFamily: MONO_FONT_FAMILY }}>
-                                                  {formatAddress(groupItem.startBit)} - {formatAddress(groupItem.endBit)}
+                                                  {formatAddressForActiveSlave(groupItem.startBit)}{' '}
+                                                  - {formatAddressForActiveSlave(groupItem.endBit)}
                                                 </TableCell>
-                                                {(['ABCD', 'CDAB', 'BADC', 'DCBA'] as const).map((order) => {
+                                                {(['ABCD', 'CDAB', 'BADC', 'DCBA'] as const).map(
+                                                  (order) => {
+                                                    const value = registersToUint32(pair, order)
+                                                    const isEditing =
+                                                      conversionEditCell?.tab === 'long' &&
+                                                      conversionEditCell.start === start &&
+                                                      conversionEditCell.order === order
+                                                    if (!isEditing) {
+                                                      return (
+                                                        <TableCell
+                                                          key={`coil-long-${start}-${order}`}
+                                                        >
+                                                          <Typography
+                                                            variant="body2"
+                                                            sx={{
+                                                              fontFamily: MONO_FONT_FAMILY,
+                                                              fontWeight: 700,
+                                                              cursor:
+                                                                group.type === '01'
+                                                                  ? 'text'
+                                                                  : 'default'
+                                                            }}
+                                                            onClick={() => {
+                                                              if (group.type !== '01') return
+                                                              setConversionEditCell({
+                                                                tab: 'long',
+                                                                start,
+                                                                order,
+                                                                draft: String(value),
+                                                                hasError: false
+                                                              })
+                                                            }}
+                                                          >
+                                                            {value}
+                                                          </Typography>
+                                                        </TableCell>
+                                                      )
+                                                    }
+                                                    return (
+                                                      <TableCell
+                                                        key={`coil-long-edit-${start}-${order}`}
+                                                      >
+                                                        <TextField
+                                                          autoFocus
+                                                          size="small"
+                                                          value={conversionEditCell.draft}
+                                                          error={conversionEditCell.hasError}
+                                                          onChange={(event) =>
+                                                            setConversionEditCell((prev) =>
+                                                              prev &&
+                                                              prev.tab === 'long' &&
+                                                              prev.start === start &&
+                                                              prev.order === order
+                                                                ? {
+                                                                    ...prev,
+                                                                    draft: event.target.value,
+                                                                    hasError: false
+                                                                  }
+                                                                : prev
+                                                            )
+                                                          }
+                                                          onBlur={() => {
+                                                            const n = Number(
+                                                              conversionEditCell.draft
+                                                            )
+                                                            if (
+                                                              !Number.isFinite(n) ||
+                                                              n < 0 ||
+                                                              n > 0xffffffff
+                                                            ) {
+                                                              setConversionEditCell((prev) =>
+                                                                prev &&
+                                                                prev.tab === 'long' &&
+                                                                prev.start === start &&
+                                                                prev.order === order
+                                                                  ? { ...prev, hasError: true }
+                                                                  : prev
+                                                              )
+                                                              return
+                                                            }
+                                                            const words = uint32ToRegisters(
+                                                              Math.round(n),
+                                                              order
+                                                            )
+                                                            updateRegistersBatch(
+                                                              tab.connectionId,
+                                                              tab.slaveId,
+                                                              tab.registerGroupId,
+                                                              wordsToCoilBitMap(start, [...words])
+                                                            )
+                                                            setConversionEditCell(null)
+                                                          }}
+                                                          onKeyDown={(event) => {
+                                                            if (event.key === 'Escape') {
+                                                              setConversionEditCell(null)
+                                                            }
+                                                            if (event.key === 'Enter') {
+                                                              ;(
+                                                                event.target as HTMLInputElement
+                                                              ).blur()
+                                                            }
+                                                          }}
+                                                          inputProps={{
+                                                            style: { fontFamily: MONO_FONT_FAMILY }
+                                                          }}
+                                                        />
+                                                      </TableCell>
+                                                    )
+                                                  }
+                                                )}
+                                              </TableRow>
+                                            )
+                                          })
+                                        : pagedLongGroups.map((pair, idx) => (
+                                            <TableRow key={`long-${idx}`}>
+                                              <TableCell sx={{ fontFamily: MONO_FONT_FAMILY }}>
+                                                {formatAddressForActiveSlave(pair[0].address)} -{' '}
+                                                {formatAddressForActiveSlave(pair[1].address)}
+                                              </TableCell>
+                                              {(['ABCD', 'CDAB', 'BADC', 'DCBA'] as const).map(
+                                                (order) => {
                                                   const value = registersToUint32(pair, order)
+                                                  const start = pair[0].address
                                                   const isEditing =
                                                     conversionEditCell?.tab === 'long' &&
                                                     conversionEditCell.start === start &&
                                                     conversionEditCell.order === order
                                                   if (!isEditing) {
                                                     return (
-                                                      <TableCell key={`coil-long-${start}-${order}`}>
+                                                      <TableCell key={`long-${start}-${order}`}>
                                                         <Typography
                                                           variant="body2"
                                                           sx={{
                                                             fontFamily: MONO_FONT_FAMILY,
                                                             fontWeight: 700,
-                                                            cursor: group.type === '01' ? 'text' : 'default'
+                                                            cursor: 'text'
                                                           }}
-                                                          onClick={() => {
-                                                            if (group.type !== '01') return
+                                                          onClick={() =>
                                                             setConversionEditCell({
                                                               tab: 'long',
                                                               start,
@@ -5447,7 +6192,7 @@ const Server = (): JSX.Element => {
                                                               draft: String(value),
                                                               hasError: false
                                                             })
-                                                          }}
+                                                          }
                                                         >
                                                           {value}
                                                         </Typography>
@@ -5455,7 +6200,7 @@ const Server = (): JSX.Element => {
                                                     )
                                                   }
                                                   return (
-                                                    <TableCell key={`coil-long-edit-${start}-${order}`}>
+                                                    <TableCell key={`long-edit-${start}-${order}`}>
                                                       <TextField
                                                         autoFocus
                                                         size="small"
@@ -5490,157 +6235,210 @@ const Server = (): JSX.Element => {
                                                                 ? { ...prev, hasError: true }
                                                                 : prev
                                                             )
+                                                            showUserError(
+                                                              'Long value must be between 0 and 4294967295.'
+                                                            )
                                                             return
                                                           }
-                                                          const words = uint32ToRegisters(Math.round(n), order)
+                                                          const words = uint32ToRegisters(
+                                                            Math.round(n),
+                                                            order
+                                                          )
                                                           updateRegistersBatch(
                                                             tab.connectionId,
                                                             tab.slaveId,
                                                             tab.registerGroupId,
-                                                            wordsToCoilBitMap(start, [...words])
+                                                            {
+                                                              [start]: words[0],
+                                                              [start + 1]: words[1]
+                                                            }
                                                           )
                                                           setConversionEditCell(null)
                                                         }}
                                                         onKeyDown={(event) => {
-                                                          if (event.key === 'Escape') {
+                                                          if (event.key === 'Escape')
                                                             setConversionEditCell(null)
-                                                          }
                                                           if (event.key === 'Enter') {
-                                                            ;(event.target as HTMLInputElement).blur()
+                                                            ;(
+                                                              event.target as HTMLInputElement
+                                                            ).blur()
                                                           }
                                                         }}
-                                                        inputProps={{ style: { fontFamily: MONO_FONT_FAMILY } }}
+                                                        inputProps={{
+                                                          style: { fontFamily: MONO_FONT_FAMILY }
+                                                        }}
                                                       />
                                                     </TableCell>
                                                   )
-                                                })}
-                                              </TableRow>
-                                            )
-                                          })
-                                        : pagedLongGroups.map((pair, idx) => (
-                                            <TableRow key={`long-${idx}`}>
-                                              <TableCell sx={{ fontFamily: MONO_FONT_FAMILY }}>
-                                                {formatAddress(pair[0].address)} - {formatAddress(pair[1].address)}
-                                              </TableCell>
-                                              {(['ABCD', 'CDAB', 'BADC', 'DCBA'] as const).map((order) => {
-                                                const value = registersToUint32(pair, order)
-                                                const start = pair[0].address
-                                                const isEditing =
-                                                  conversionEditCell?.tab === 'long' &&
-                                                  conversionEditCell.start === start &&
-                                                  conversionEditCell.order === order
-                                                if (!isEditing) {
-                                                  return (
-                                                    <TableCell key={`long-${start}-${order}`}>
-                                                      <Typography
-                                                        variant="body2"
-                                                        sx={{ fontFamily: MONO_FONT_FAMILY, fontWeight: 700, cursor: 'text' }}
-                                                        onClick={() =>
-                                                          setConversionEditCell({
-                                                            tab: 'long',
-                                                            start,
-                                                            order,
-                                                            draft: String(value),
-                                                            hasError: false
-                                                          })
-                                                        }
-                                                      >
-                                                        {value}
-                                                      </Typography>
-                                                    </TableCell>
-                                                  )
                                                 }
-                                                return (
-                                                  <TableCell key={`long-edit-${start}-${order}`}>
-                                                    <TextField
-                                                      autoFocus
-                                                      size="small"
-                                                      value={conversionEditCell.draft}
-                                                      error={conversionEditCell.hasError}
-                                                      onChange={(event) =>
-                                                        setConversionEditCell((prev) =>
-                                                          prev &&
-                                                          prev.tab === 'long' &&
-                                                          prev.start === start &&
-                                                          prev.order === order
-                                                            ? {
-                                                                ...prev,
-                                                                draft: event.target.value,
-                                                                hasError: false
-                                                              }
-                                                            : prev
-                                                        )
-                                                      }
-                                                      onBlur={() => {
-                                                        const n = Number(conversionEditCell.draft)
-                                                        if (!Number.isFinite(n) || n < 0 || n > 0xffffffff) {
-                                                          setConversionEditCell((prev) =>
-                                                            prev &&
-                                                            prev.tab === 'long' &&
-                                                            prev.start === start &&
-                                                            prev.order === order
-                                                              ? { ...prev, hasError: true }
-                                                              : prev
-                                                          )
-                                                          showUserError('Long value must be between 0 and 4294967295.')
-                                                          return
-                                                        }
-                                                        const words = uint32ToRegisters(Math.round(n), order)
-                                                        updateRegistersBatch(
-                                                          tab.connectionId,
-                                                          tab.slaveId,
-                                                          tab.registerGroupId,
-                                                          {
-                                                            [start]: words[0],
-                                                            [start + 1]: words[1]
-                                                          }
-                                                        )
-                                                        setConversionEditCell(null)
-                                                      }}
-                                                      onKeyDown={(event) => {
-                                                        if (event.key === 'Escape') setConversionEditCell(null)
-                                                        if (event.key === 'Enter') {
-                                                          ;(event.target as HTMLInputElement).blur()
-                                                        }
-                                                      }}
-                                                      inputProps={{ style: { fontFamily: MONO_FONT_FAMILY } }}
-                                                    />
-                                                  </TableCell>
-                                                )
-                                              })}
+                                              )}
                                             </TableRow>
                                           ))
                                       : effectiveInterpretationTab === 'float'
                                         ? isCoilGroup
                                           ? pagedCoilFloatGroups.map((groupItem, idx) => {
                                               const pair: Register[] = [
-                                                { address: 0, value: groupItem.words[0], variableName: '', comment: '' },
-                                                { address: 1, value: groupItem.words[1], variableName: '', comment: '' }
+                                                {
+                                                  address: 0,
+                                                  value: groupItem.words[0],
+                                                  variableName: '',
+                                                  comment: ''
+                                                },
+                                                {
+                                                  address: 1,
+                                                  value: groupItem.words[1],
+                                                  variableName: '',
+                                                  comment: ''
+                                                }
                                               ]
                                               const start = groupItem.startBit
                                               return (
                                                 <TableRow key={`coil-float-${idx}`}>
                                                   <TableCell sx={{ fontFamily: MONO_FONT_FAMILY }}>
-                                                    {formatAddress(groupItem.startBit)} - {formatAddress(groupItem.endBit)}
+                                                    {formatAddressForActiveSlave(
+                                                      groupItem.startBit
+                                                    )}{' '}
+                                                    -{' '}
+                                                    {formatAddressForActiveSlave(groupItem.endBit)}
                                                   </TableCell>
-                                                  {(['ABCD', 'CDAB', 'BADC', 'DCBA'] as const).map((order) => {
+                                                  {(['ABCD', 'CDAB', 'BADC', 'DCBA'] as const).map(
+                                                    (order) => {
+                                                      const value = registersToFloat32(pair, order)
+                                                      const isEditing =
+                                                        conversionEditCell?.tab === 'float' &&
+                                                        conversionEditCell.start === start &&
+                                                        conversionEditCell.order === order
+                                                      if (!isEditing) {
+                                                        return (
+                                                          <TableCell
+                                                            key={`coil-float-${start}-${order}`}
+                                                          >
+                                                            <Typography
+                                                              variant="body2"
+                                                              sx={{
+                                                                fontFamily: MONO_FONT_FAMILY,
+                                                                fontWeight: 700,
+                                                                cursor:
+                                                                  group.type === '01'
+                                                                    ? 'text'
+                                                                    : 'default'
+                                                              }}
+                                                              onClick={() => {
+                                                                if (group.type !== '01') return
+                                                                setConversionEditCell({
+                                                                  tab: 'float',
+                                                                  start,
+                                                                  order,
+                                                                  draft: String(value),
+                                                                  hasError: false
+                                                                })
+                                                              }}
+                                                            >
+                                                              {value.toPrecision(7)}
+                                                            </Typography>
+                                                          </TableCell>
+                                                        )
+                                                      }
+                                                      return (
+                                                        <TableCell
+                                                          key={`coil-float-edit-${start}-${order}`}
+                                                        >
+                                                          <TextField
+                                                            autoFocus
+                                                            size="small"
+                                                            value={conversionEditCell.draft}
+                                                            error={conversionEditCell.hasError}
+                                                            onChange={(event) =>
+                                                              setConversionEditCell((prev) =>
+                                                                prev &&
+                                                                prev.tab === 'float' &&
+                                                                prev.start === start &&
+                                                                prev.order === order
+                                                                  ? {
+                                                                      ...prev,
+                                                                      draft: event.target.value,
+                                                                      hasError: false
+                                                                    }
+                                                                  : prev
+                                                              )
+                                                            }
+                                                            onBlur={() => {
+                                                              const n = Number(
+                                                                conversionEditCell.draft
+                                                              )
+                                                              if (!Number.isFinite(n)) {
+                                                                setConversionEditCell((prev) =>
+                                                                  prev &&
+                                                                  prev.tab === 'float' &&
+                                                                  prev.start === start &&
+                                                                  prev.order === order
+                                                                    ? { ...prev, hasError: true }
+                                                                    : prev
+                                                                )
+                                                                showUserError(
+                                                                  'Float value is invalid.'
+                                                                )
+                                                                return
+                                                              }
+                                                              const words = float32ToRegisters(
+                                                                n,
+                                                                order
+                                                              )
+                                                              updateRegistersBatch(
+                                                                tab.connectionId,
+                                                                tab.slaveId,
+                                                                tab.registerGroupId,
+                                                                wordsToCoilBitMap(start, [...words])
+                                                              )
+                                                              setConversionEditCell(null)
+                                                            }}
+                                                            onKeyDown={(event) => {
+                                                              if (event.key === 'Escape')
+                                                                setConversionEditCell(null)
+                                                              if (event.key === 'Enter') {
+                                                                ;(
+                                                                  event.target as HTMLInputElement
+                                                                ).blur()
+                                                              }
+                                                            }}
+                                                            inputProps={{
+                                                              style: {
+                                                                fontFamily: MONO_FONT_FAMILY
+                                                              }
+                                                            }}
+                                                          />
+                                                        </TableCell>
+                                                      )
+                                                    }
+                                                  )}
+                                                </TableRow>
+                                              )
+                                            })
+                                          : pagedFloatGroups.map((pair, idx) => (
+                                              <TableRow key={`float-${idx}`}>
+                                                <TableCell sx={{ fontFamily: MONO_FONT_FAMILY }}>
+                                                  {formatAddressForActiveSlave(pair[0].address)} -{' '}
+                                                  {formatAddressForActiveSlave(pair[1].address)}
+                                                </TableCell>
+                                                {(['ABCD', 'CDAB', 'BADC', 'DCBA'] as const).map(
+                                                  (order) => {
                                                     const value = registersToFloat32(pair, order)
+                                                    const start = pair[0].address
                                                     const isEditing =
                                                       conversionEditCell?.tab === 'float' &&
                                                       conversionEditCell.start === start &&
                                                       conversionEditCell.order === order
                                                     if (!isEditing) {
                                                       return (
-                                                        <TableCell key={`coil-float-${start}-${order}`}>
+                                                        <TableCell key={`float-${start}-${order}`}>
                                                           <Typography
                                                             variant="body2"
                                                             sx={{
                                                               fontFamily: MONO_FONT_FAMILY,
                                                               fontWeight: 700,
-                                                              cursor: group.type === '01' ? 'text' : 'default'
+                                                              cursor: 'text'
                                                             }}
-                                                            onClick={() => {
-                                                              if (group.type !== '01') return
+                                                            onClick={() =>
                                                               setConversionEditCell({
                                                                 tab: 'float',
                                                                 start,
@@ -5648,7 +6446,7 @@ const Server = (): JSX.Element => {
                                                                 draft: String(value),
                                                                 hasError: false
                                                               })
-                                                            }}
+                                                            }
                                                           >
                                                             {value.toPrecision(7)}
                                                           </Typography>
@@ -5656,7 +6454,9 @@ const Server = (): JSX.Element => {
                                                       )
                                                     }
                                                     return (
-                                                      <TableCell key={`coil-float-edit-${start}-${order}`}>
+                                                      <TableCell
+                                                        key={`float-edit-${start}-${order}`}
+                                                      >
                                                         <TextField
                                                           autoFocus
                                                           size="small"
@@ -5677,7 +6477,9 @@ const Server = (): JSX.Element => {
                                                             )
                                                           }
                                                           onBlur={() => {
-                                                            const n = Number(conversionEditCell.draft)
+                                                            const n = Number(
+                                                              conversionEditCell.draft
+                                                            )
                                                             if (!Number.isFinite(n)) {
                                                               setConversionEditCell((prev) =>
                                                                 prev &&
@@ -5687,142 +6489,102 @@ const Server = (): JSX.Element => {
                                                                   ? { ...prev, hasError: true }
                                                                   : prev
                                                               )
-                                                              showUserError('Float value is invalid.')
+                                                              showUserError(
+                                                                'Float value is invalid.'
+                                                              )
                                                               return
                                                             }
-                                                            const words = float32ToRegisters(n, order)
+                                                            const words = float32ToRegisters(
+                                                              n,
+                                                              order
+                                                            )
                                                             updateRegistersBatch(
                                                               tab.connectionId,
                                                               tab.slaveId,
                                                               tab.registerGroupId,
-                                                              wordsToCoilBitMap(start, [...words])
+                                                              {
+                                                                [start]: words[0],
+                                                                [start + 1]: words[1]
+                                                              }
                                                             )
                                                             setConversionEditCell(null)
                                                           }}
                                                           onKeyDown={(event) => {
-                                                            if (event.key === 'Escape') setConversionEditCell(null)
+                                                            if (event.key === 'Escape')
+                                                              setConversionEditCell(null)
                                                             if (event.key === 'Enter') {
-                                                              ;(event.target as HTMLInputElement).blur()
+                                                              ;(
+                                                                event.target as HTMLInputElement
+                                                              ).blur()
                                                             }
                                                           }}
-                                                          inputProps={{ style: { fontFamily: MONO_FONT_FAMILY } }}
+                                                          inputProps={{
+                                                            style: { fontFamily: MONO_FONT_FAMILY }
+                                                          }}
                                                         />
                                                       </TableCell>
                                                     )
-                                                  })}
-                                                </TableRow>
-                                              )
-                                            })
-                                          : pagedFloatGroups.map((pair, idx) => (
-                                              <TableRow key={`float-${idx}`}>
-                                                <TableCell sx={{ fontFamily: MONO_FONT_FAMILY }}>
-                                                  {formatAddress(pair[0].address)} - {formatAddress(pair[1].address)}
-                                                </TableCell>
-                                                {(['ABCD', 'CDAB', 'BADC', 'DCBA'] as const).map((order) => {
-                                                  const value = registersToFloat32(pair, order)
-                                                  const start = pair[0].address
-                                                  const isEditing =
-                                                    conversionEditCell?.tab === 'float' &&
-                                                    conversionEditCell.start === start &&
-                                                    conversionEditCell.order === order
-                                                  if (!isEditing) {
-                                                    return (
-                                                      <TableCell key={`float-${start}-${order}`}>
-                                                        <Typography
-                                                          variant="body2"
-                                                          sx={{ fontFamily: MONO_FONT_FAMILY, fontWeight: 700, cursor: 'text' }}
-                                                          onClick={() =>
-                                                            setConversionEditCell({
-                                                              tab: 'float',
-                                                              start,
-                                                              order,
-                                                              draft: String(value),
-                                                              hasError: false
-                                                            })
-                                                          }
-                                                        >
-                                                          {value.toPrecision(7)}
-                                                        </Typography>
-                                                      </TableCell>
-                                                    )
                                                   }
-                                                  return (
-                                                    <TableCell key={`float-edit-${start}-${order}`}>
-                                                      <TextField
-                                                        autoFocus
-                                                        size="small"
-                                                        value={conversionEditCell.draft}
-                                                        error={conversionEditCell.hasError}
-                                                        onChange={(event) =>
-                                                          setConversionEditCell((prev) =>
-                                                            prev &&
-                                                            prev.tab === 'float' &&
-                                                            prev.start === start &&
-                                                            prev.order === order
-                                                              ? {
-                                                                  ...prev,
-                                                                  draft: event.target.value,
-                                                                  hasError: false
-                                                                }
-                                                              : prev
-                                                          )
-                                                        }
-                                                        onBlur={() => {
-                                                          const n = Number(conversionEditCell.draft)
-                                                          if (!Number.isFinite(n)) {
-                                                            setConversionEditCell((prev) =>
-                                                              prev &&
-                                                              prev.tab === 'float' &&
-                                                              prev.start === start &&
-                                                              prev.order === order
-                                                                ? { ...prev, hasError: true }
-                                                                : prev
-                                                            )
-                                                            showUserError('Float value is invalid.')
-                                                            return
-                                                          }
-                                                          const words = float32ToRegisters(n, order)
-                                                          updateRegistersBatch(
-                                                            tab.connectionId,
-                                                            tab.slaveId,
-                                                            tab.registerGroupId,
-                                                            {
-                                                              [start]: words[0],
-                                                              [start + 1]: words[1]
-                                                            }
-                                                          )
-                                                          setConversionEditCell(null)
-                                                        }}
-                                                        onKeyDown={(event) => {
-                                                          if (event.key === 'Escape') setConversionEditCell(null)
-                                                          if (event.key === 'Enter') {
-                                                            ;(event.target as HTMLInputElement).blur()
-                                                          }
-                                                        }}
-                                                        inputProps={{ style: { fontFamily: MONO_FONT_FAMILY } }}
-                                                      />
-                                                    </TableCell>
-                                                  )
-                                                })}
+                                                )}
                                               </TableRow>
                                             ))
                                         : effectiveInterpretationTab === 'double'
                                           ? isCoilGroup
                                             ? pagedCoilDoubleGroups.map((groupItem, idx) => {
-                                                const words = groupItem.words as [number, number, number, number]
+                                                const words = groupItem.words as [
+                                                  number,
+                                                  number,
+                                                  number,
+                                                  number
+                                                ]
                                                 const quad: Register[] = [
-                                                  { address: 0, value: words[0], variableName: '', comment: '' },
-                                                  { address: 1, value: words[1], variableName: '', comment: '' },
-                                                  { address: 2, value: words[2], variableName: '', comment: '' },
-                                                  { address: 3, value: words[3], variableName: '', comment: '' }
+                                                  {
+                                                    address: 0,
+                                                    value: words[0],
+                                                    variableName: '',
+                                                    comment: ''
+                                                  },
+                                                  {
+                                                    address: 1,
+                                                    value: words[1],
+                                                    variableName: '',
+                                                    comment: ''
+                                                  },
+                                                  {
+                                                    address: 2,
+                                                    value: words[2],
+                                                    variableName: '',
+                                                    comment: ''
+                                                  },
+                                                  {
+                                                    address: 3,
+                                                    value: words[3],
+                                                    variableName: '',
+                                                    comment: ''
+                                                  }
                                                 ]
                                                 const start = groupItem.startBit
                                                 return (
                                                   <TableRow key={`coil-double-${idx}`}>
-                                                    <TableCell sx={{ fontFamily: MONO_FONT_FAMILY }}>
-                                                      {formatAddress(groupItem.startBit)} - {formatAddress(groupItem.endBit)}
+                                                    <TableCell
+                                                      sx={{ fontFamily: MONO_FONT_FAMILY }}
+                                                    >
+                                                      {formatAddressForActiveSlave(
+                                                        groupItem.startBit
+                                                      )}{' '}
+                                                      -{' '}
+                                                      {formatAddressForActiveSlave(
+                                                        groupItem.endBit
+                                                      )}
                                                     </TableCell>
-                                                    {(['ABCDEFGH', 'GHEFCDAB', 'BADCFEHG', 'HGFEDCBA'] as const).map((order) => {
+                                                    {(
+                                                      [
+                                                        'ABCDEFGH',
+                                                        'GHEFCDAB',
+                                                        'BADCFEHG',
+                                                        'HGFEDCBA'
+                                                      ] as const
+                                                    ).map((order) => {
                                                       const value = registersToFloat64(quad, order)
                                                       const isEditing =
                                                         conversionEditCell?.tab === 'double' &&
@@ -5830,13 +6592,18 @@ const Server = (): JSX.Element => {
                                                         conversionEditCell.order === order
                                                       if (!isEditing) {
                                                         return (
-                                                          <TableCell key={`coil-double-${start}-${order}`}>
+                                                          <TableCell
+                                                            key={`coil-double-${start}-${order}`}
+                                                          >
                                                             <Typography
                                                               variant="body2"
                                                               sx={{
                                                                 fontFamily: MONO_FONT_FAMILY,
                                                                 fontWeight: 700,
-                                                                cursor: group.type === '01' ? 'text' : 'default'
+                                                                cursor:
+                                                                  group.type === '01'
+                                                                    ? 'text'
+                                                                    : 'default'
                                                               }}
                                                               onClick={() => {
                                                                 if (group.type !== '01') return
@@ -5855,7 +6622,9 @@ const Server = (): JSX.Element => {
                                                         )
                                                       }
                                                       return (
-                                                        <TableCell key={`coil-double-edit-${start}-${order}`}>
+                                                        <TableCell
+                                                          key={`coil-double-edit-${start}-${order}`}
+                                                        >
                                                           <TextField
                                                             autoFocus
                                                             size="small"
@@ -5876,7 +6645,9 @@ const Server = (): JSX.Element => {
                                                               )
                                                             }
                                                             onBlur={() => {
-                                                              const n = Number(conversionEditCell.draft)
+                                                              const n = Number(
+                                                                conversionEditCell.draft
+                                                              )
                                                               if (!Number.isFinite(n)) {
                                                                 setConversionEditCell((prev) =>
                                                                   prev &&
@@ -5886,25 +6657,39 @@ const Server = (): JSX.Element => {
                                                                     ? { ...prev, hasError: true }
                                                                     : prev
                                                                 )
-                                                                showUserError('Double value is invalid.')
+                                                                showUserError(
+                                                                  'Double value is invalid.'
+                                                                )
                                                                 return
                                                               }
-                                                              const words64 = float64ToRegisters(n, order)
+                                                              const words64 = float64ToRegisters(
+                                                                n,
+                                                                order
+                                                              )
                                                               updateRegistersBatch(
                                                                 tab.connectionId,
                                                                 tab.slaveId,
                                                                 tab.registerGroupId,
-                                                                wordsToCoilBitMap(start, [...words64])
+                                                                wordsToCoilBitMap(start, [
+                                                                  ...words64
+                                                                ])
                                                               )
                                                               setConversionEditCell(null)
                                                             }}
                                                             onKeyDown={(event) => {
-                                                              if (event.key === 'Escape') setConversionEditCell(null)
+                                                              if (event.key === 'Escape')
+                                                                setConversionEditCell(null)
                                                               if (event.key === 'Enter') {
-                                                                ;(event.target as HTMLInputElement).blur()
+                                                                ;(
+                                                                  event.target as HTMLInputElement
+                                                                ).blur()
                                                               }
                                                             }}
-                                                            inputProps={{ style: { fontFamily: MONO_FONT_FAMILY } }}
+                                                            inputProps={{
+                                                              style: {
+                                                                fontFamily: MONO_FONT_FAMILY
+                                                              }
+                                                            }}
                                                           />
                                                         </TableCell>
                                                       )
@@ -5915,9 +6700,17 @@ const Server = (): JSX.Element => {
                                             : pagedDoubleGroups.map((quad, idx) => (
                                                 <TableRow key={`double-${idx}`}>
                                                   <TableCell sx={{ fontFamily: MONO_FONT_FAMILY }}>
-                                                    {formatAddress(quad[0].address)} - {formatAddress(quad[3].address)}
+                                                    {formatAddressForActiveSlave(quad[0].address)} -{' '}
+                                                    {formatAddressForActiveSlave(quad[3].address)}
                                                   </TableCell>
-                                                  {(['ABCDEFGH', 'GHEFCDAB', 'BADCFEHG', 'HGFEDCBA'] as const).map((order) => {
+                                                  {(
+                                                    [
+                                                      'ABCDEFGH',
+                                                      'GHEFCDAB',
+                                                      'BADCFEHG',
+                                                      'HGFEDCBA'
+                                                    ] as const
+                                                  ).map((order) => {
                                                     const value = registersToFloat64(quad, order)
                                                     const start = quad[0].address
                                                     const isEditing =
@@ -5929,7 +6722,11 @@ const Server = (): JSX.Element => {
                                                         <TableCell key={`double-${start}-${order}`}>
                                                           <Typography
                                                             variant="body2"
-                                                            sx={{ fontFamily: MONO_FONT_FAMILY, fontWeight: 700, cursor: 'text' }}
+                                                            sx={{
+                                                              fontFamily: MONO_FONT_FAMILY,
+                                                              fontWeight: 700,
+                                                              cursor: 'text'
+                                                            }}
                                                             onClick={() =>
                                                               setConversionEditCell({
                                                                 tab: 'double',
@@ -5946,7 +6743,9 @@ const Server = (): JSX.Element => {
                                                       )
                                                     }
                                                     return (
-                                                      <TableCell key={`double-edit-${start}-${order}`}>
+                                                      <TableCell
+                                                        key={`double-edit-${start}-${order}`}
+                                                      >
                                                         <TextField
                                                           autoFocus
                                                           size="small"
@@ -5967,7 +6766,9 @@ const Server = (): JSX.Element => {
                                                             )
                                                           }
                                                           onBlur={() => {
-                                                            const n = Number(conversionEditCell.draft)
+                                                            const n = Number(
+                                                              conversionEditCell.draft
+                                                            )
                                                             if (!Number.isFinite(n)) {
                                                               setConversionEditCell((prev) =>
                                                                 prev &&
@@ -5977,10 +6778,15 @@ const Server = (): JSX.Element => {
                                                                   ? { ...prev, hasError: true }
                                                                   : prev
                                                               )
-                                                              showUserError('Double value is invalid.')
+                                                              showUserError(
+                                                                'Double value is invalid.'
+                                                              )
                                                               return
                                                             }
-                                                            const words64 = float64ToRegisters(n, order)
+                                                            const words64 = float64ToRegisters(
+                                                              n,
+                                                              order
+                                                            )
                                                             updateRegistersBatch(
                                                               tab.connectionId,
                                                               tab.slaveId,
@@ -5995,12 +6801,17 @@ const Server = (): JSX.Element => {
                                                             setConversionEditCell(null)
                                                           }}
                                                           onKeyDown={(event) => {
-                                                            if (event.key === 'Escape') setConversionEditCell(null)
+                                                            if (event.key === 'Escape')
+                                                              setConversionEditCell(null)
                                                             if (event.key === 'Enter') {
-                                                              ;(event.target as HTMLInputElement).blur()
+                                                              ;(
+                                                                event.target as HTMLInputElement
+                                                              ).blur()
                                                             }
                                                           }}
-                                                          inputProps={{ style: { fontFamily: MONO_FONT_FAMILY } }}
+                                                          inputProps={{
+                                                            style: { fontFamily: MONO_FONT_FAMILY }
+                                                          }}
                                                         />
                                                       </TableCell>
                                                     )
@@ -6008,18 +6819,23 @@ const Server = (): JSX.Element => {
                                                 </TableRow>
                                               ))
                                           : pagedPanelRegisters.map((reg) => (
-                                                <TableRow key={reg.address}>
-                                                  <TableCell sx={{ fontFamily: MONO_FONT_FAMILY, fontWeight: 700 }}>
-                                                    {formatAddress(reg.address)}
-                                                  </TableCell>
-                                                  <TableCell sx={{ fontFamily: MONO_FONT_FAMILY }}>
-                                                    {String.fromCharCode(
-                                                      reg.value & 0xff,
-                                                      (reg.value >> 8) & 0xff
-                                                    )}
-                                                  </TableCell>
-                                                </TableRow>
-                                              ))}
+                                              <TableRow key={reg.address}>
+                                                <TableCell
+                                                  sx={{
+                                                    fontFamily: MONO_FONT_FAMILY,
+                                                    fontWeight: 700
+                                                  }}
+                                                >
+                                                  {formatAddressForActiveSlave(reg.address)}
+                                                </TableCell>
+                                                <TableCell sx={{ fontFamily: MONO_FONT_FAMILY }}>
+                                                  {String.fromCharCode(
+                                                    reg.value & 0xff,
+                                                    (reg.value >> 8) & 0xff
+                                                  )}
+                                                </TableCell>
+                                              </TableRow>
+                                            ))}
                                 </TableBody>
                               </Table>
                             </TableContainer>
@@ -6052,7 +6868,9 @@ const Server = (): JSX.Element => {
                             />
 
                             {effectiveInterpretationTab === 'long' &&
-                            (isCoilGroup ? coilLongGroups.length === 0 : longGroups.length === 0) ? (
+                            (isCoilGroup
+                              ? coilLongGroups.length === 0
+                              : longGroups.length === 0) ? (
                               <Typography color="text.secondary">
                                 {isCoilGroup
                                   ? 'Select at least 32 consecutive bits (4 bytes) to decode Long'
@@ -6060,7 +6878,9 @@ const Server = (): JSX.Element => {
                               </Typography>
                             ) : null}
                             {effectiveInterpretationTab === 'float' &&
-                            (isCoilGroup ? coilFloatGroups.length === 0 : floatGroups.length === 0) ? (
+                            (isCoilGroup
+                              ? coilFloatGroups.length === 0
+                              : floatGroups.length === 0) ? (
                               <Typography color="text.secondary">
                                 {isCoilGroup
                                   ? 'Select at least 32 consecutive bits (4 bytes) to decode Float'
@@ -6068,7 +6888,9 @@ const Server = (): JSX.Element => {
                               </Typography>
                             ) : null}
                             {effectiveInterpretationTab === 'double' &&
-                            (isCoilGroup ? coilDoubleGroups.length === 0 : doubleGroups.length === 0) ? (
+                            (isCoilGroup
+                              ? coilDoubleGroups.length === 0
+                              : doubleGroups.length === 0) ? (
                               <Typography color="text.secondary">
                                 {isCoilGroup
                                   ? 'Select at least 64 consecutive bits (8 bytes) to decode Double'
@@ -6090,7 +6912,10 @@ const Server = (): JSX.Element => {
                       }
                     >
                       {TYPED_INTERPRETATION_OPTIONS.map((mode) => {
-                        const startAddresses = getBatchAssignableAddresses(tab.selectedAddresses, mode)
+                        const startAddresses = getBatchAssignableAddresses(
+                          tab.selectedAddresses,
+                          mode
+                        )
                         return (
                           <MenuItem
                             key={`ctx-batch-${mode}`}
@@ -6210,7 +7035,10 @@ const Server = (): JSX.Element => {
                       anchorReference="anchorPosition"
                       anchorPosition={
                         displayFormatEditMenu
-                          ? { top: displayFormatEditMenu.mouseY, left: displayFormatEditMenu.mouseX }
+                          ? {
+                              top: displayFormatEditMenu.mouseY,
+                              left: displayFormatEditMenu.mouseX
+                            }
                           : undefined
                       }
                     >
@@ -6287,6 +7115,46 @@ const Server = (): JSX.Element => {
         onConfirm={handleSaveEditedSlave}
         initialSlave={editingSlave}
       />
+      <Dialog
+        open={unsavedConfirmOpen}
+        onClose={() => resolveUnsavedChangesConfirmation(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>{t('server.dialog.unsavedChangesTitle')}</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">{t('server.dialog.unsavedChangesOnClose')}</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => resolveUnsavedChangesConfirmation(false)}>
+            {t('common.cancel')}
+          </Button>
+          <Button
+            onClick={() => resolveUnsavedChangesConfirmation(true)}
+            color="error"
+            variant="contained"
+          >
+            {t('common.close')}
+          </Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog
+        open={actionConfirmDialog.open}
+        onClose={closeActionConfirmation}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>{actionConfirmDialog.title}</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">{actionConfirmDialog.message}</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeActionConfirmation}>{t('common.cancel')}</Button>
+          <Button onClick={() => void confirmAction()} color="error" variant="contained">
+            {actionConfirmDialog.confirmLabel}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   )
 }

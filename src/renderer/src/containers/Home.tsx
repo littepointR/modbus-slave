@@ -5,7 +5,7 @@ import LanguageSwitcher from '@renderer/components/shared/LanguageSwitcher'
 import { useLayoutZustand } from '@renderer/context/layout.zustand'
 import { useCallback, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import modbuxImage from '../../../../resources/icon.png'
+import modbusSlaveImage from '../../../../resources/icon.png'
 import ServerIcon from '@renderer/svg/Server'
 import { sendEvent } from '@renderer/events'
 import Ploxc from '@renderer/svg/Ploxc'
@@ -104,9 +104,9 @@ const Version = (): JSX.Element => {
   return (
     <Box
       data-testid="home-version-link"
-      aria-label="Modbux GitHub"
+      aria-label="Modbus Slave GitHub"
       component={'a'}
-      href="https://github.com/ploxc/modbux"
+      href="https://github.com/ploxc/modbus-slave"
       target="_blank"
       sx={{ right: 16, ...bottomElementsCommonSx }}
     >
@@ -145,7 +145,7 @@ const Home = meme(() => {
             bottom: 0,
             right: 0,
             left: 0,
-            backgroundImage: `url(${modbuxImage})`,
+            backgroundImage: `url(${modbusSlaveImage})`,
             backgroundRepeat: 'no-repeat',
             backgroundPosition: 'center',
             opacity: 0.1

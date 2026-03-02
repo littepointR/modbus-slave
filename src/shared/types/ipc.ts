@@ -78,20 +78,28 @@ export const IPC_CHANNELS = [
   'stop_comm_monitor',
   'clear_comm_monitor',
   'export_comm_log',
+  'get_comm_packets',
   'get_comm_stats',
   'read_text_file',
   'write_text_file',
   'pick_workspace_file',
+  'pick_workspace_save_file',
   'append_system_log',
   'get_system_logs',
   'get_system_log_stats',
   'clear_system_logs',
   'export_system_logs',
-  'set_log_buffer_limit_mb',
-  'get_log_buffer_limit_mb',
+  'set_comm_buffer_limit_mb',
+  'get_comm_buffer_limit_mb',
+  'set_system_log_buffer_limit_mb',
+  'get_system_log_buffer_limit_mb',
   'export_server_data',
   'import_server_data',
-  'create_excel_template'
+  'create_excel_template',
+  'confirm_window_close',
+  'reject_window_close',
+  'set_window_always_on_top',
+  'get_window_always_on_top'
 ] as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[number]
@@ -304,6 +312,12 @@ export interface IpcHandlerSpec {
     return: void
   }
 
+  /** Get latest communication monitor packets */
+  ['get_comm_packets']: {
+    args: [number?]
+    return: ServerCommPacket[]
+  }
+
   /** Get communication statistics */
   ['get_comm_stats']: {
     args: []
@@ -325,6 +339,12 @@ export interface IpcHandlerSpec {
   /** Pick a workspace file path from native open dialog */
   ['pick_workspace_file']: {
     args: []
+    return: string | null
+  }
+
+  /** Pick a workspace file path from native save dialog */
+  ['pick_workspace_save_file']: {
+    args: [string?]
     return: string | null
   }
 
@@ -358,14 +378,26 @@ export interface IpcHandlerSpec {
     return: void
   }
 
-  /** Set communication/system log ring-buffer limit (MB) */
-  ['set_log_buffer_limit_mb']: {
+  /** Set communication ring-buffer limit (MB) */
+  ['set_comm_buffer_limit_mb']: {
     args: [number]
     return: number
   }
 
-  /** Get communication/system log ring-buffer limit (MB) */
-  ['get_log_buffer_limit_mb']: {
+  /** Get communication ring-buffer limit (MB) */
+  ['get_comm_buffer_limit_mb']: {
+    args: []
+    return: number
+  }
+
+  /** Set system log ring-buffer limit (MB) */
+  ['set_system_log_buffer_limit_mb']: {
+    args: [number]
+    return: number
+  }
+
+  /** Get system log ring-buffer limit (MB) */
+  ['get_system_log_buffer_limit_mb']: {
     args: []
     return: number
   }
@@ -386,6 +418,30 @@ export interface IpcHandlerSpec {
   ['create_excel_template']: {
     args: [CreateExcelTemplateParams]
     return: CreateExcelTemplateResult
+  }
+
+  /** Confirm and proceed window close from renderer */
+  ['confirm_window_close']: {
+    args: []
+    return: void
+  }
+
+  /** Reject and cancel pending window close from renderer */
+  ['reject_window_close']: {
+    args: []
+    return: void
+  }
+
+  /** Set current window always-on-top state */
+  ['set_window_always_on_top']: {
+    args: [boolean]
+    return: boolean
+  }
+
+  /** Get current window always-on-top state */
+  ['get_window_always_on_top']: {
+    args: []
+    return: boolean
   }
 }
 
@@ -415,6 +471,7 @@ export interface ImportServerDataResult {
   importedCount: number
   errors: Array<{ row: number; message: string }>
   warnings: string[]
+  data?: unknown
 }
 
 export interface CreateExcelTemplateParams {
@@ -509,6 +566,7 @@ export const IPC_EVENTS = [
   'window_update',
   'open_server_window',
   'open_comm_log_window',
+  'open_system_log_window',
   'open_register_plot_window',
   'address_groups',
   'comm_packet',
@@ -523,7 +581,8 @@ export const IPC_EVENTS = [
   'script_editor_run_once',
   'script_editor_window_closed',
   'system_log_entry',
-  'system_log_clear'
+  'system_log_clear',
+  'request_window_close'
 ] as const
 
 export type IpcEvent = (typeof IPC_EVENTS)[number]
@@ -540,6 +599,7 @@ export interface IpcEventPayloadMap {
   ['window_update']: [WindowsOpen]
   ['open_server_window']: []
   ['open_comm_log_window']: []
+  ['open_system_log_window']: []
   ['open_register_plot_window']: [RegisterPlotWindowInit]
   ['address_groups']: [AddressGroup[]]
   ['comm_packet']: [ServerCommPacket]
@@ -555,6 +615,7 @@ export interface IpcEventPayloadMap {
   ['script_editor_window_closed']: [string]
   ['system_log_entry']: [SystemLogEntry]
   ['system_log_clear']: [void]
+  ['request_window_close']: []
 }
 
 export interface BackendMessage {

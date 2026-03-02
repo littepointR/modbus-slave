@@ -29,7 +29,7 @@ test.afterAll(async () => {
 
 test.describe.serial('Server Smoke And Comm E2E', () => {
   test('app launches and shows server toolbar', async () => {
-    expect(await page.title()).toBe('Modbux')
+    expect(await page.title()).toBe('Modbus Slave Emulator')
     await expect(page.getByRole('button', { name: /连接|Connection/ })).toBeVisible()
     await expect(page.getByRole('button', { name: /工作空间|Workspace/ })).toBeVisible()
     await expect(page.getByText('Connections', { exact: true })).toBeVisible()
@@ -43,7 +43,7 @@ test.describe.serial('Server Smoke And Comm E2E', () => {
     await themeModeCombobox.click()
     await page.getByRole('option', { name: /Light|亮色/ }).click()
     await expect(
-      page.evaluate(() => localStorage.getItem('modbux.theme.mode'))
+      page.evaluate(() => localStorage.getItem('modbus-slave.theme.mode'))
     ).resolves.toBe('light')
 
     const colorPickerToggle = page.getByLabel('toggle-theme-color-picker')
@@ -52,13 +52,13 @@ test.describe.serial('Server Smoke And Comm E2E', () => {
     }
     await page.getByLabel(/Blue|蓝色/).click()
     await expect(
-      page.evaluate(() => localStorage.getItem('modbux.theme.color'))
+      page.evaluate(() => localStorage.getItem('modbus-slave.theme.color'))
     ).resolves.toBe('blue')
 
     await themeModeCombobox.click()
     await page.getByRole('option', { name: /Auto|自动/ }).click()
     await expect(
-      page.evaluate(() => localStorage.getItem('modbux.theme.mode'))
+      page.evaluate(() => localStorage.getItem('modbus-slave.theme.mode'))
     ).resolves.toBe('system')
 
     await page.keyboard.press('Escape')
@@ -107,7 +107,9 @@ test.describe.serial('Server Smoke And Comm E2E', () => {
 
     await expect(page.getByRole('tab', { name: /Default Group/ })).toBeVisible()
     await expect(page.getByText(/Type:?\s*Holding Register \(4x\)/)).toBeVisible()
-    await expect(page.getByText(new RegExp(`Conn(?:ection)?:?\\s*${CONN_ALIAS_EDITED}`))).toBeVisible()
+    await expect(
+      page.getByText(new RegExp(`Conn(?:ection)?:?\\s*${CONN_ALIAS_EDITED}`))
+    ).toBeVisible()
     await expect(page.getByText(new RegExp(`Slave:?\\s*${SLAVE_ALIAS}`))).toBeVisible()
   })
 
@@ -144,7 +146,11 @@ test.describe.serial('Server Smoke And Comm E2E', () => {
 
   test('type interpretation supports constrained options and batch apply', async () => {
     const ensureChecked = async (rowIndex: number) => {
-      const checkbox = page.locator('tbody tr').nth(rowIndex).locator('td input[type="checkbox"]').first()
+      const checkbox = page
+        .locator('tbody tr')
+        .nth(rowIndex)
+        .locator('td input[type="checkbox"]')
+        .first()
       if (!(await checkbox.isChecked())) {
         await checkbox.click()
       }
@@ -155,7 +161,9 @@ test.describe.serial('Server Smoke And Comm E2E', () => {
     await ensureChecked(2)
     await ensureChecked(3)
 
-    const selectionPanel = page.getByRole('heading', { name: 'Set Display For Selection' }).locator('..')
+    const selectionPanel = page
+      .getByRole('heading', { name: 'Set Display For Selection' })
+      .locator('..')
     const batchMode = selectionPanel.locator('[role="combobox"]').first()
     await batchMode.click()
     await page.getByRole('option', { name: /^INT \(2w\)$/ }).click()
@@ -203,7 +211,9 @@ test.describe.serial('Server Smoke And Comm E2E', () => {
 
     const getValueCellBackground = async (row: Locator, address: number): Promise<string | null> =>
       await row.evaluate((el, targetAddress) => {
-        const cell = el.querySelector(`[data-testid="value-cell-${targetAddress}"]`) as HTMLElement | null
+        const cell = el.querySelector(
+          `[data-testid="value-cell-${targetAddress}"]`
+        ) as HTMLElement | null
         if (!cell) return null
         return getComputedStyle(cell).backgroundColor
       }, address)
@@ -264,7 +274,8 @@ test.describe.serial('Server Smoke And Comm E2E', () => {
 
   test('can open communication log window', async () => {
     const newConnectionBtn = page.getByRole('button', { name: /连接|Connection/ })
-    const hasToolbar = (await newConnectionBtn.count()) > 0 && (await newConnectionBtn.first().isVisible())
+    const hasToolbar =
+      (await newConnectionBtn.count()) > 0 && (await newConnectionBtn.first().isVisible())
     if (!hasToolbar) {
       await closeApp(app)
       const relaunched = await launchMainWindow()

@@ -20,9 +20,10 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useThemeSettings } from '@renderer/theme/theme-settings'
 import type { ThemeModePreference, ThemePrimaryPreset } from '@renderer/theme'
+import { useRootZustand } from '@renderer/context/root.zustand'
 import LanguageSwitcher from '../LanguageSwitcher'
 import {
-  GLOBAL_LOG_BUFFER_MB_KEY,
+  GLOBAL_COMM_BUFFER_MB_KEY,
   GLOBAL_MAX_LOG_BUFFER_MB,
   GLOBAL_MIN_LOG_BUFFER_MB,
   GLOBAL_MONO_FONT_CANDIDATES,
@@ -31,13 +32,16 @@ import {
   GLOBAL_STRING_ENCODING_OPTIONS,
   type GlobalPreferenceChangeDetail,
   GLOBAL_MONO_FONT_FALLBACK,
-  getGlobalLogBufferSizePreference,
+  GLOBAL_SYSTEM_LOG_BUFFER_MB_KEY,
+  getGlobalCommBufferSizePreference,
   getGlobalMonoFontPreference,
   getGlobalMonoFontSizePreference,
+  getGlobalSystemLogBufferSizePreference,
   getGlobalStringEncodingPreference,
-  setGlobalLogBufferSizePreference,
+  setGlobalCommBufferSizePreference,
   setGlobalMonoFontPreference,
   setGlobalMonoFontSizePreference,
+  setGlobalSystemLogBufferSizePreference,
   setGlobalStringEncodingPreference
 } from '@renderer/settings/global-preferences'
 
@@ -47,10 +51,14 @@ interface LocalFontFace {
 
 const SettingsMenu = () => {
   const { t } = useTranslation()
+  const appVersion = useRootZustand((z) => z.version)
   const { themeMode, themeColor, setThemeMode, setThemeColor } = useThemeSettings()
   const [monoFont, setMonoFont] = useState<string>(getGlobalMonoFontPreference)
   const [monoFontSize, setMonoFontSize] = useState<number>(getGlobalMonoFontSizePreference)
-  const [logBufferMb, setLogBufferMb] = useState<number>(getGlobalLogBufferSizePreference)
+  const [commBufferMb, setCommBufferMb] = useState<number>(getGlobalCommBufferSizePreference)
+  const [systemLogBufferMb, setSystemLogBufferMb] = useState<number>(
+    getGlobalSystemLogBufferSizePreference
+  )
   const [globalEncoding, setGlobalEncoding] = useState<string>(getGlobalStringEncodingPreference)
   const [localFontFamilies, setLocalFontFamilies] = useState<string[]>([])
   const buttonRef = useRef<HTMLButtonElement | null>(null)
@@ -67,8 +75,8 @@ const SettingsMenu = () => {
         }
         if (typeof win.queryLocalFonts !== 'function') return
         const fonts = await win.queryLocalFonts()
-        const families = [...new Set(fonts.map((font) => font.family).filter(Boolean))].sort((a, b) =>
-          a.localeCompare(b)
+        const families = [...new Set(fonts.map((font) => font.family).filter(Boolean))].sort(
+          (a, b) => a.localeCompare(b)
         )
         setLocalFontFamilies(families)
       } catch {
@@ -85,13 +93,19 @@ const SettingsMenu = () => {
       if (customEvent.detail?.key === GLOBAL_MONO_FONT_SIZE_KEY) {
         setMonoFontSize(getGlobalMonoFontSizePreference())
       }
-      if (customEvent.detail?.key === GLOBAL_LOG_BUFFER_MB_KEY) {
-        setLogBufferMb(getGlobalLogBufferSizePreference())
+      if (customEvent.detail?.key === GLOBAL_COMM_BUFFER_MB_KEY) {
+        setCommBufferMb(getGlobalCommBufferSizePreference())
+      }
+      if (customEvent.detail?.key === GLOBAL_SYSTEM_LOG_BUFFER_MB_KEY) {
+        setSystemLogBufferMb(getGlobalSystemLogBufferSizePreference())
       }
     }
     window.addEventListener(GLOBAL_PREFERENCE_CHANGE_EVENT, onPreferenceChange as EventListener)
     return () => {
-      window.removeEventListener(GLOBAL_PREFERENCE_CHANGE_EVENT, onPreferenceChange as EventListener)
+      window.removeEventListener(
+        GLOBAL_PREFERENCE_CHANGE_EVENT,
+        onPreferenceChange as EventListener
+      )
     }
   }, [])
 
@@ -130,19 +144,34 @@ const SettingsMenu = () => {
     setGlobalStringEncodingPreference(value)
   }
 
-  const handleLogBufferSliderChange = (_: Event, value: number | number[]): void => {
+  const handleCommBufferSliderChange = (_: Event, value: number | number[]): void => {
     const next = Array.isArray(value) ? value[0] : value
-    const normalized = setGlobalLogBufferSizePreference(next)
-    setLogBufferMb(normalized)
-    void window.api.setLogBufferLimitMb(normalized)
+    const normalized = setGlobalCommBufferSizePreference(next)
+    setCommBufferMb(normalized)
+    void window.api.setCommBufferLimitMb(normalized)
   }
 
-  const handleLogBufferInputChange = (event: ChangeEvent<HTMLInputElement>): void => {
+  const handleCommBufferInputChange = (event: ChangeEvent<HTMLInputElement>): void => {
     const next = Number.parseInt(event.target.value, 10)
     if (!Number.isFinite(next)) return
-    const normalized = setGlobalLogBufferSizePreference(next)
-    setLogBufferMb(normalized)
-    void window.api.setLogBufferLimitMb(normalized)
+    const normalized = setGlobalCommBufferSizePreference(next)
+    setCommBufferMb(normalized)
+    void window.api.setCommBufferLimitMb(normalized)
+  }
+
+  const handleSystemLogBufferSliderChange = (_: Event, value: number | number[]): void => {
+    const next = Array.isArray(value) ? value[0] : value
+    const normalized = setGlobalSystemLogBufferSizePreference(next)
+    setSystemLogBufferMb(normalized)
+    void window.api.setSystemLogBufferLimitMb(normalized)
+  }
+
+  const handleSystemLogBufferInputChange = (event: ChangeEvent<HTMLInputElement>): void => {
+    const next = Number.parseInt(event.target.value, 10)
+    if (!Number.isFinite(next)) return
+    const normalized = setGlobalSystemLogBufferSizePreference(next)
+    setSystemLogBufferMb(normalized)
+    void window.api.setSystemLogBufferLimitMb(normalized)
   }
 
   const themeColorPresets: Array<{ value: ThemePrimaryPreset; label: string; color: string }> = [
@@ -189,12 +218,19 @@ const SettingsMenu = () => {
       >
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
           <LanguageSwitcher />
+          <Typography data-testid="settings-version" variant="caption" color="text.secondary">
+            {t('common.version')} {appVersion}
+          </Typography>
           <Typography variant="caption" color="text.secondary">
             {t('common.theme')}
           </Typography>
           <FormControl size="small" fullWidth>
             <InputLabel>{t('common.themeMode')}</InputLabel>
-            <Select label={t('common.themeMode')} value={themeMode} onChange={handleThemeModeChange}>
+            <Select
+              label={t('common.themeMode')}
+              value={themeMode}
+              onChange={handleThemeModeChange}
+            >
               <MenuItem value="light">{t('common.themeModeLight')}</MenuItem>
               <MenuItem value="dark">{t('common.themeModeDark')}</MenuItem>
               <MenuItem value="system">{t('common.themeModeSystem')}</MenuItem>
@@ -244,7 +280,13 @@ const SettingsMenu = () => {
               </IconButton>
             </Box>
             <Collapse in={colorPickerExpanded} timeout={120}>
-              <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 0.75 }}>
+              <Box
+                sx={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+                  gap: 0.75
+                }}
+              >
                 {themeColorPresets.map((preset) => {
                   const isActive = themeColor === preset.value
                   return (
@@ -277,7 +319,11 @@ const SettingsMenu = () => {
             onInputChange={handleFontInputChange}
             renderInput={(params) => <TextField {...params} label={t('common.globalFont')} />}
             renderOption={(props, option) => (
-              <Box component="li" {...props} sx={{ fontFamily: `"${option}", ${GLOBAL_MONO_FONT_FALLBACK}` }}>
+              <Box
+                component="li"
+                {...props}
+                sx={{ fontFamily: `"${option}", ${GLOBAL_MONO_FONT_FALLBACK}` }}
+              >
                 {option}
               </Box>
             )}
@@ -308,7 +354,11 @@ const SettingsMenu = () => {
           </Box>
           <FormControl size="small" fullWidth>
             <InputLabel>{t('common.globalEncoding')}</InputLabel>
-            <Select label={t('common.globalEncoding')} value={globalEncoding} onChange={handleEncodingChange}>
+            <Select
+              label={t('common.globalEncoding')}
+              value={globalEncoding}
+              onChange={handleEncodingChange}
+            >
               {GLOBAL_STRING_ENCODING_OPTIONS.map((encoding) => (
                 <MenuItem key={encoding} value={encoding}>
                   {encoding}
@@ -318,23 +368,51 @@ const SettingsMenu = () => {
           </FormControl>
           <Box sx={{ px: 0.25 }}>
             <Typography variant="caption" color="text.secondary">
-              {t('common.logBufferSize')}
+              {t('common.commBufferSize')}
             </Typography>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
               <Slider
-                value={logBufferMb}
+                value={commBufferMb}
                 min={GLOBAL_MIN_LOG_BUFFER_MB}
                 max={GLOBAL_MAX_LOG_BUFFER_MB}
                 step={1}
-                onChange={handleLogBufferSliderChange}
+                onChange={handleCommBufferSliderChange}
                 valueLabelDisplay="auto"
                 sx={{ flex: 1 }}
               />
               <TextField
                 size="small"
                 type="number"
-                value={logBufferMb}
-                onChange={handleLogBufferInputChange}
+                value={commBufferMb}
+                onChange={handleCommBufferInputChange}
+                inputProps={{
+                  min: GLOBAL_MIN_LOG_BUFFER_MB,
+                  max: GLOBAL_MAX_LOG_BUFFER_MB,
+                  step: 1
+                }}
+                sx={{ width: 90 }}
+              />
+            </Box>
+          </Box>
+          <Box sx={{ px: 0.25 }}>
+            <Typography variant="caption" color="text.secondary">
+              {t('common.systemLogBufferSize')}
+            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+              <Slider
+                value={systemLogBufferMb}
+                min={GLOBAL_MIN_LOG_BUFFER_MB}
+                max={GLOBAL_MAX_LOG_BUFFER_MB}
+                step={1}
+                onChange={handleSystemLogBufferSliderChange}
+                valueLabelDisplay="auto"
+                sx={{ flex: 1 }}
+              />
+              <TextField
+                size="small"
+                type="number"
+                value={systemLogBufferMb}
+                onChange={handleSystemLogBufferInputChange}
                 inputProps={{
                   min: GLOBAL_MIN_LOG_BUFFER_MB,
                   max: GLOBAL_MAX_LOG_BUFFER_MB,

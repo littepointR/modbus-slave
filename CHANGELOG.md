@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to Modbux will be documented in this file.
+All notable changes to Modbus Slave will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
@@ -26,14 +26,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Endian toggle moved from "Add Register" modal to server toolbar
 
 - **Config files now include version metadata** for better backward compatibility
-  - Server configs now include `version`, `modbuxVersion`, and `littleEndian` fields
-  - Client configs now include `version` and `modbuxVersion` fields
+  - Server configs now include `version`, `modbusSlaveVersion`, and `littleEndian` fields
+  - Client configs now include `version` and `modbusSlaveVersion` fields
   - Old configurations are **automatically migrated** when loaded (no user action required)
 
 - **Improved backward compatibility handling**
   - Automatic migration of v1 configs to v2 format
   - Detection and handling of mixed endianness scenarios (shows warning)
-  - Forward compatibility: configs from newer Modbux versions show warning but attempt to load
+  - Forward compatibility: configs from newer Modbus Slave versions show warning but attempt to load
   - localStorage state is automatically migrated on app startup
 
 ### Fixed
@@ -45,7 +45,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Automatic migration:** Old configs (pre-v1.5.0) are auto-migrated when loaded
 - **Mixed endianness warning:** If a v1 config had registers with different byte orders, the most common setting is used globally with a warning notification
-- **Backward incompatibility:** Configs saved in v1.5.0+ cannot be opened in older Modbux versions
+- **Backward incompatibility:** Configs saved in v1.5.0+ cannot be opened in older Modbus Slave versions
   - This is intentional to enable the improved architecture
   - Keep backups of configs if you need to downgrade
 

@@ -18,7 +18,7 @@ const SERVER_CONFIG_MIGRATIONS: Record<number, Migration<ServerConfig>> = {
 
 /**
  * Migrate server config from v1 to v2.
- * - Adds version and modbuxVersion fields
+ * - Adds version and modbusSlaveVersion fields
  * - Extracts global littleEndian from per-register settings
  * - Removes littleEndian from individual register params
  */
@@ -65,7 +65,7 @@ function migrateServerV1toV2(v1Config: unknown): ServerConfig & { wasMixedEndian
 
   const v2Config: ServerConfig & { wasMixedEndianness?: boolean } = {
     version: 2,
-    modbuxVersion: '1.5.0',
+    modbusSlaveVersion: '1.5.0',
     name: config.name ?? '',
     littleEndian: endianness,
     serverRegistersPerUnit: migratedRegisters

@@ -13,7 +13,7 @@ describe('SystemLogger', () => {
   })
 
   it('records entries and computes stats', () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'modbux-logger-'))
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'modbus-slave-logger-'))
     tempDirs.push(dir)
     const windows = { send: vi.fn() } as any
     const logger = new SystemLogger(windows, dir)
@@ -40,7 +40,7 @@ describe('SystemLogger', () => {
   })
 
   it('exports and clears entries', () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'modbux-logger-'))
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'modbus-slave-logger-'))
     tempDirs.push(dir)
     const windows = { send: vi.fn() } as any
     const logger = new SystemLogger(windows, dir)

@@ -1,18 +1,18 @@
-# Modbux CLI 使用说明
+# Modbus Slave CLI 使用说明
 
-`modbux` 在主进程启动后会暴露本地 CLI API。你可以通过 `yarn cli` 直接完成与 UI 等价的大部分操作。
+`modbus-slave` 在主进程启动后会暴露本地 CLI API。你可以通过 `yarn cli` 直接完成与 UI 等价的大部分操作。
 
 ## 1. 前提条件
 
-1. 先启动 Modbux 程序。
+1. 先启动 Modbus Slave 程序。
 2. 程序启动后会写入连接信息文件 `cli-api.json`。
 3. CLI 默认从该文件读取 `host/port/token`。
 
 默认路径：
 
-- Windows: `%APPDATA%\\modbux\\cli-api.json`
-- macOS: `~/Library/Application Support/modbux/cli-api.json`
-- Linux: `${XDG_CONFIG_HOME:-~/.config}/modbux/cli-api.json`
+- Windows: `%APPDATA%\\modbus-slave\\cli-api.json`
+- macOS: `~/Library/Application Support/modbus-slave/cli-api.json`
+- Linux: `${XDG_CONFIG_HOME:-~/.config}/modbus-slave/cli-api.json`
 
 ## 2. 命令总览
 
@@ -85,7 +85,7 @@ yarn cli action register.batch_set --payload '{"connectionId":"conn-1","slaveId"
 
 ## 6. 错误排查
 
-1. `ENOENT cli-api.json`：先确认 Modbux 已启动并完成初始化。
+1. `ENOENT cli-api.json`：先确认 Modbus Slave 已启动并完成初始化。
 2. `401 Unauthorized`：`token` 不正确，检查 `cli-api.json` 或命令行参数。
 3. `IPC handler not registered`：channel 名错误，先执行 `yarn cli channels`。
 4. `action failed`：payload 字段缺失或 id 不存在，先用 `workspace.get` 查看当前状态。

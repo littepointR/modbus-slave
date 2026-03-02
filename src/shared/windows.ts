@@ -5,12 +5,14 @@ interface WindowsObject {
   main: BrowserWindow | null
   server: BrowserWindow | null
   commLog: BrowserWindow | null
+  systemLog: BrowserWindow | null
 }
 
 export interface WindowsOpen {
   main: boolean
   server: boolean
   commLog: boolean
+  systemLog: boolean
 }
 
 export class Windows {
@@ -20,7 +22,8 @@ export class Windows {
     this._windows = {
       main: null,
       server: null,
-      commLog: null
+      commLog: null,
+      systemLog: null
     }
   }
 
@@ -67,12 +70,21 @@ export class Windows {
     this._sendUpdate()
   }
 
+  get systemLog(): BrowserWindow | null {
+    return this._windows.systemLog
+  }
+  set systemLog(systemLog) {
+    this._windows.systemLog = systemLog
+    this._sendUpdate()
+  }
+
   // Send update when windows change
   private _sendUpdate(): void {
     const windowsOpen = {
       main: !!this._windows.main,
       server: !!this._windows.server,
-      commLog: !!this._windows.commLog
+      commLog: !!this._windows.commLog,
+      systemLog: !!this._windows.systemLog
     }
     try {
       Object.values(this._windows).forEach((w) => w?.webContents.send('window_update', windowsOpen))

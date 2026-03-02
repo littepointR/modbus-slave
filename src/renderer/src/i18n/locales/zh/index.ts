@@ -20,6 +20,7 @@ export default {
     showLog: '显示日志',
     hideLog: '隐藏日志',
     settings: '设置',
+    version: '版本',
     language: '语言',
     theme: '主题',
     themeMode: '外观模式',
@@ -34,12 +35,14 @@ export default {
     globalFont: '全局字体',
     globalFontSize: '全局字号',
     globalEncoding: '全局编码',
-    logBufferSize: '日志缓冲区大小 (MB)',
+    commBufferSize: '通讯缓冲区大小 (MB)',
+    systemLogBufferSize: '系统日志缓冲区大小 (MB)',
     returnToHome: '返回主页',
     view: '查看',
     refresh: '刷新',
     validate: '验证',
     continue: '继续',
+    alwaysOnTop: '窗口置顶',
     autoScroll: '自动滚动',
     moreOptions: '更多选项',
     timeSettings: '时间设置',
@@ -127,7 +130,7 @@ export default {
       save: '保存配置',
       saveTooltip: '将数据类型、缩放因子和注释配置保存到 JSON 文件',
       load: '加载配置',
-      loadTooltip: '加载 modbux 客户端配置文件',
+      loadTooltip: '加载 modbus-slave 客户端配置文件',
       clear: '清除配置',
       clearTooltip: '清除数据类型、缩放因子和注释配置'
     },
@@ -180,8 +183,17 @@ export default {
       openConnection: '打开连接',
       closeConnection: '关闭连接',
       editConnection: '编辑连接',
+      deleteConnection: '删除连接',
       editSlave: '编辑从站',
+      deleteSlave: '删除从站',
+      copySlave: '复制从站',
+      exportSlaveData: '导出从站数据',
+      importSlaveData: '导入从站数据',
+      addressModeProtocolHex: '协议地址（基址 0，十六进制）',
+      addressModeProtocolDec: '协议地址（基址 0，十进制）',
+      addressModePlc: 'PLC 地址（基址 1）',
       commDetails: '通讯详情',
+      systemLogs: '系统日志',
       editScript: '编辑脚本'
     },
     dialog: {
@@ -214,7 +226,9 @@ export default {
       registerType: '寄存器类型',
       startAddress: '起始地址',
       count: '数量',
-      addGroup: '添加寄存器组'
+      addGroup: '添加寄存器组',
+      unsavedChangesTitle: '未保存修改',
+      unsavedChangesOnClose: '当前工作空间有未保存修改，继续将丢失这些修改，是否继续？'
     },
     connection: {
       protocol: '协议',
@@ -357,7 +371,7 @@ export default {
     configMigrated: '配置已从旧格式更新',
     invalidConfig: '无效配置',
     invalidJson: '无效的 JSON: {{message}}',
-    futureVersion: '此配置是使用较新版本的 Modbux 创建的。某些功能可能无法正常工作。',
+    futureVersion: '此配置是使用较新版本的 Modbus Slave 创建的。某些功能可能无法正常工作。',
     mixedEndianness: '警告：配置具有混合的字节序设置。现已全局使用 {{endian}}。请验证。'
   },
 

@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid'
-import { ModbusServer } from './mobusServer'
+import { ModbusServer } from './modbusServer'
 import { CreateServerParams, RegisterParams, ServerConnectionConfig, UnitIdString } from '@shared'
 import type { SystemLogger } from './systemLogger'
 
@@ -246,7 +246,10 @@ export class CliWorkspaceRuntime {
     this.state = {
       version: typeof workspace.version === 'number' ? workspace.version : 3,
       connections: workspace.connections as ConnectionEntry[],
-      scriptsByConnection: (workspace.scriptsByConnection || {}) as Record<string, ScriptDefinition[]>
+      scriptsByConnection: (workspace.scriptsByConnection || {}) as Record<
+        string,
+        ScriptDefinition[]
+      >
     }
 
     for (const conn of this.state.connections) {
@@ -271,7 +274,8 @@ export class CliWorkspaceRuntime {
   private updateConnection(payload: UiActionPayload): { connectionId: string } {
     const connectionId = payload.connectionId as string | undefined
     const patch = payload.patch as Partial<ConnectionEntry> | undefined
-    if (!connectionId || !patch) throw new Error('connection.update requires connectionId and patch')
+    if (!connectionId || !patch)
+      throw new Error('connection.update requires connectionId and patch')
     const connection = this.findConnection(connectionId)
     Object.assign(connection, patch)
     return { connectionId }
@@ -399,7 +403,8 @@ export class CliWorkspaceRuntime {
   private deleteScript(payload: UiActionPayload): void {
     const connectionId = payload.connectionId as string | undefined
     const scriptId = payload.scriptId as string | undefined
-    if (!connectionId || !scriptId) throw new Error('script.delete requires connectionId and scriptId')
+    if (!connectionId || !scriptId)
+      throw new Error('script.delete requires connectionId and scriptId')
     const scripts = this.state.scriptsByConnection[connectionId] || []
     this.state.scriptsByConnection[connectionId] = scripts.filter((item) => item.id !== scriptId)
   }
@@ -418,7 +423,11 @@ export class CliWorkspaceRuntime {
     this.scriptScopeMap.set(scopeKey, state)
 
     const api: CliScriptApi = {
-      getValue: (unitId: number, registerType: RegisterTypeCode, address: number): number | undefined => {
+      getValue: (
+        unitId: number,
+        registerType: RegisterTypeCode,
+        address: number
+      ): number | undefined => {
         const targets = this.findTargets(connectionId, unitId, registerType)
         for (const target of targets) {
           const found = target.group.registers.find((reg) => reg.address === address)

@@ -1,8 +1,10 @@
-export const GLOBAL_MONO_FONT_KEY = 'modbux.global.monoFont'
-export const GLOBAL_MONO_FONT_SIZE_KEY = 'modbux.global.monoFontSize'
-export const GLOBAL_STRING_ENCODING_KEY = 'modbux.global.stringEncoding'
-export const GLOBAL_LOG_BUFFER_MB_KEY = 'modbux.global.logBufferMb'
-export const GLOBAL_PREFERENCE_CHANGE_EVENT = 'modbux-global-preference-change'
+export const GLOBAL_MONO_FONT_KEY = 'modbus-slave.global.monoFont'
+export const GLOBAL_MONO_FONT_SIZE_KEY = 'modbus-slave.global.monoFontSize'
+export const GLOBAL_STRING_ENCODING_KEY = 'modbus-slave.global.stringEncoding'
+export const GLOBAL_COMM_BUFFER_MB_KEY = 'modbus-slave.global.commBufferMb'
+export const GLOBAL_SYSTEM_LOG_BUFFER_MB_KEY = 'modbus-slave.global.systemLogBufferMb'
+export const GLOBAL_LEGACY_LOG_BUFFER_MB_KEY = 'modbus-slave.global.logBufferMb'
+export const GLOBAL_PREFERENCE_CHANGE_EVENT = 'modbus-slave-global-preference-change'
 
 export interface GlobalPreferenceChangeDetail {
   key: string
@@ -53,7 +55,10 @@ const dispatchPreferenceChange = (key: string, value: string): void => {
 const quoteFontName = (value: string): string => {
   const trimmed = value.trim()
   if (!trimmed) return GLOBAL_DEFAULT_MONO_FONT
-  if ((trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
     return trimmed
   }
   return `"${trimmed.replace(/"/g, '\\"')}"`
@@ -68,7 +73,10 @@ export const getGlobalMonoFontFamily = (fontName: string): string => {
 }
 
 export const applyGlobalMonoFontPreference = (fontName: string): void => {
-  document.documentElement.style.setProperty('--modbux-mono-font', getGlobalMonoFontFamily(fontName))
+  document.documentElement.style.setProperty(
+    '--modbus-slave-mono-font',
+    getGlobalMonoFontFamily(fontName)
+  )
 }
 
 export const setGlobalMonoFontPreference = (fontName: string): void => {
@@ -91,7 +99,10 @@ export const getGlobalMonoFontSizePreference = (): number => {
 }
 
 export const applyGlobalMonoFontSizePreference = (fontSize: number): void => {
-  document.documentElement.style.setProperty('--modbux-mono-font-size', `${clampMonoFontSize(fontSize)}px`)
+  document.documentElement.style.setProperty(
+    '--modbus-slave-mono-font-size',
+    `${clampMonoFontSize(fontSize)}px`
+  )
 }
 
 export const setGlobalMonoFontSizePreference = (fontSize: number): void => {
@@ -101,8 +112,15 @@ export const setGlobalMonoFontSizePreference = (fontSize: number): void => {
   dispatchPreferenceChange(GLOBAL_MONO_FONT_SIZE_KEY, String(value))
 }
 
-const isGlobalEncoding = (value: string | null): value is (typeof GLOBAL_STRING_ENCODING_OPTIONS)[number] => {
-  return typeof value === 'string' && GLOBAL_STRING_ENCODING_OPTIONS.includes(value as (typeof GLOBAL_STRING_ENCODING_OPTIONS)[number])
+const isGlobalEncoding = (
+  value: string | null
+): value is (typeof GLOBAL_STRING_ENCODING_OPTIONS)[number] => {
+  return (
+    typeof value === 'string' &&
+    GLOBAL_STRING_ENCODING_OPTIONS.includes(
+      value as (typeof GLOBAL_STRING_ENCODING_OPTIONS)[number]
+    )
+  )
 }
 
 export const getGlobalStringEncodingPreference = (): string => {
@@ -121,16 +139,31 @@ const clampLogBufferMb = (value: number): number => {
   return Math.max(GLOBAL_MIN_LOG_BUFFER_MB, Math.min(GLOBAL_MAX_LOG_BUFFER_MB, Math.round(value)))
 }
 
-export const getGlobalLogBufferSizePreference = (): number => {
-  const raw = localStorage.getItem(GLOBAL_LOG_BUFFER_MB_KEY)
+const parseWithLegacyFallback = (key: string): number => {
+  const raw = localStorage.getItem(key) ?? localStorage.getItem(GLOBAL_LEGACY_LOG_BUFFER_MB_KEY)
   if (!raw) return GLOBAL_DEFAULT_LOG_BUFFER_MB
   const parsed = Number.parseInt(raw, 10)
   return clampLogBufferMb(parsed)
 }
 
-export const setGlobalLogBufferSizePreference = (bufferMb: number): number => {
+export const getGlobalCommBufferSizePreference = (): number => {
+  return parseWithLegacyFallback(GLOBAL_COMM_BUFFER_MB_KEY)
+}
+
+export const setGlobalCommBufferSizePreference = (bufferMb: number): number => {
   const value = clampLogBufferMb(bufferMb)
-  localStorage.setItem(GLOBAL_LOG_BUFFER_MB_KEY, String(value))
-  dispatchPreferenceChange(GLOBAL_LOG_BUFFER_MB_KEY, String(value))
+  localStorage.setItem(GLOBAL_COMM_BUFFER_MB_KEY, String(value))
+  dispatchPreferenceChange(GLOBAL_COMM_BUFFER_MB_KEY, String(value))
+  return value
+}
+
+export const getGlobalSystemLogBufferSizePreference = (): number => {
+  return parseWithLegacyFallback(GLOBAL_SYSTEM_LOG_BUFFER_MB_KEY)
+}
+
+export const setGlobalSystemLogBufferSizePreference = (bufferMb: number): number => {
+  const value = clampLogBufferMb(bufferMb)
+  localStorage.setItem(GLOBAL_SYSTEM_LOG_BUFFER_MB_KEY, String(value))
+  dispatchPreferenceChange(GLOBAL_SYSTEM_LOG_BUFFER_MB_KEY, String(value))
   return value
 }

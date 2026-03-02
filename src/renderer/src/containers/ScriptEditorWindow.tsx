@@ -11,13 +11,18 @@ import {
   Typography
 } from '@mui/material'
 import { useTheme } from '@mui/material/styles'
-import { Add as AddIcon, Delete as DeleteIcon, PlayArrow as PlayArrowIcon } from '@mui/icons-material'
+import {
+  Add as AddIcon,
+  Delete as DeleteIcon,
+  PlayArrow as PlayArrowIcon
+} from '@mui/icons-material'
 import Editor from '@monaco-editor/react'
 import loader from '@monaco-editor/loader'
 import * as monaco from 'monaco-editor'
 import { v4 as uuidv4 } from 'uuid'
 import { onEvent, sendEvent } from '@renderer/events'
 import type { ScriptDefinitionPayload, ScriptEditorWindowInit } from '@shared'
+import { useTranslation } from 'react-i18next'
 import {
   GLOBAL_MONO_FONT_KEY,
   GLOBAL_MONO_FONT_SIZE_KEY,
@@ -27,8 +32,10 @@ import {
   getGlobalMonoFontPreference,
   getGlobalMonoFontSizePreference
 } from '@renderer/settings/global-preferences'
+import { useWindowAlwaysOnTop } from '@renderer/hooks/useWindowAlwaysOnTop'
 
 loader.config({ monaco })
+const WINDOW_TITLEBAR_PADDING_TOP = 'calc(env(titlebar-area-height, 0px) + 10px)'
 
 const DEFAULT_SCRIPT_TEMPLATE = `// event.type: 'interval' | 'manual'
 // api.getValue(unitId, registerType, address)
@@ -50,7 +57,9 @@ const createDefaultScript = (index: number): ScriptDefinitionPayload => ({
 })
 
 const ScriptEditorWindow = (): JSX.Element => {
+  const { t } = useTranslation()
   const theme = useTheme()
+  const { alwaysOnTop, setWindowAlwaysOnTop } = useWindowAlwaysOnTop()
   const [monoFontFamily, setMonoFontFamily] = useState<string>(() =>
     getGlobalMonoFontFamily(getGlobalMonoFontPreference())
   )
@@ -120,7 +129,10 @@ const ScriptEditorWindow = (): JSX.Element => {
 
     const onPreferenceChange = (event: Event): void => {
       const customEvent = event as CustomEvent<GlobalPreferenceChangeDetail>
-      if (customEvent.detail?.key === GLOBAL_MONO_FONT_KEY || customEvent.detail?.key === GLOBAL_MONO_FONT_SIZE_KEY) {
+      if (
+        customEvent.detail?.key === GLOBAL_MONO_FONT_KEY ||
+        customEvent.detail?.key === GLOBAL_MONO_FONT_SIZE_KEY
+      ) {
         syncMonoStyle()
       }
     }
@@ -129,138 +141,204 @@ const ScriptEditorWindow = (): JSX.Element => {
     window.addEventListener(GLOBAL_PREFERENCE_CHANGE_EVENT, onPreferenceChange as EventListener)
     return () => {
       window.removeEventListener('storage', onStorage)
-      window.removeEventListener(GLOBAL_PREFERENCE_CHANGE_EVENT, onPreferenceChange as EventListener)
+      window.removeEventListener(
+        GLOBAL_PREFERENCE_CHANGE_EVENT,
+        onPreferenceChange as EventListener
+      )
     }
   }, [])
 
   return (
-    <Box sx={{ height: '100dvh', display: 'grid', gridTemplateColumns: '340px 1fr', gap: 1.5, p: 1.5 }}>
-      <Paper variant="outlined" sx={{ p: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-        <Typography variant="subtitle2" sx={{ mb: 1 }}>
-          {`Scripts - ${connectionAlias}`}
-        </Typography>
-        <Button onClick={addScript} startIcon={<AddIcon />} size="small" variant="outlined">
-          Add Script
-        </Button>
-        <Divider sx={{ my: 1 }} />
-        <Box sx={{ overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 1, pr: 0.5 }}>
-          {scripts.map((script) => (
-            <Paper
-              key={script.id}
-              variant={selectedScriptId === script.id ? 'elevation' : 'outlined'}
-              elevation={selectedScriptId === script.id ? 2 : 0}
-              sx={{ p: 1, cursor: 'pointer' }}
-              onClick={() => setSelectedScriptId(script.id)}
-            >
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <TextField
-                  size="small"
-                  label="Name"
-                  value={script.name}
-                  onClick={(event) => event.stopPropagation()}
-                  onChange={(event) => updateScript(script.id, { name: event.target.value })}
-                  sx={{ flex: 1 }}
-                />
-                <IconButton
-                  size="small"
-                  color="error"
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    removeScript(script.id)
-                  }}
-                >
-                  <DeleteIcon fontSize="small" />
-                </IconButton>
-              </Box>
-              <Box sx={{ mt: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <FormControlLabel
-                  sx={{ m: 0, pl: 0.5 }}
-                  control={
-                    <Switch
-                      size="small"
-                      checked={script.enabled}
-                      onClick={(event) => event.stopPropagation()}
-                      onChange={(event) =>
-                        updateScript(script.id, {
-                          enabled: event.target.checked,
-                          lastError: event.target.checked ? undefined : script.lastError
-                        })
-                      }
-                    />
-                  }
-                  label={script.enabled ? 'Enabled' : 'Disabled'}
-                />
-                <TextField
-                  size="small"
-                  type="number"
-                  label="Interval ms"
-                  value={script.intervalMs}
-                  onClick={(event) => event.stopPropagation()}
-                  onChange={(event) =>
-                    updateScript(script.id, { intervalMs: Math.max(100, Number(event.target.value) || 1000) })
-                  }
-                  sx={{ width: 120 }}
-                  inputProps={{ min: 100, step: 100 }}
-                />
-              </Box>
-              {script.lastError ? (
-                <Typography variant="caption" color="error.main">
-                  {script.lastError}
-                </Typography>
-              ) : null}
-            </Paper>
-          ))}
+    <Box
+      sx={{
+        height: '100dvh',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 1,
+        p: 1.5,
+        pt: WINDOW_TITLEBAR_PADDING_TOP
+      }}
+    >
+      <Paper variant="outlined" sx={{ px: 1.25, py: 0.75 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+            {`Script Editor - ${connectionAlias}`}
+          </Typography>
+          <Box sx={{ flex: 1 }} />
+          <FormControlLabel
+            sx={{ m: 0, '& .MuiFormControlLabel-label': { fontSize: 12.5 } }}
+            control={
+              <Switch
+                size="small"
+                checked={alwaysOnTop}
+                onChange={(event) => setWindowAlwaysOnTop(event.target.checked)}
+              />
+            }
+            label={t('common.alwaysOnTop')}
+          />
+        </Box>
+        <Box sx={{ mt: 0.5, display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+          <Typography variant="caption" color="text.secondary">
+            {`Scripts: ${scripts.length}`}
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            {selectedScript ? `Current: ${selectedScript.name}` : 'Current: None'}
+          </Typography>
+          <Box sx={{ flex: 1 }} />
+          <Button onClick={addScript} startIcon={<AddIcon />} size="small" variant="outlined">
+            Add Script
+          </Button>
         </Box>
       </Paper>
-
-      <Paper variant="outlined" sx={{ p: 1.5, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-        {selectedScript ? (
-          <>
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-              <Typography variant="subtitle2">{selectedScript.name}</Typography>
-              <Button
-                variant="outlined"
-                size="small"
-                startIcon={<PlayArrowIcon />}
-                onClick={() =>
-                  sendEvent('script_editor_run_once', {
-                    connectionId,
-                    scriptId: selectedScript.id
-                  })
-                }
+      <Box
+        sx={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: '340px 1fr', gap: 1.5 }}
+      >
+        <Paper
+          variant="outlined"
+          sx={{ p: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}
+        >
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>
+            {`Scripts - ${connectionAlias}`}
+          </Typography>
+          <Divider sx={{ my: 1 }} />
+          <Box sx={{ overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 1, pr: 0.5 }}>
+            {scripts.map((script) => (
+              <Paper
+                key={script.id}
+                variant={selectedScriptId === script.id ? 'elevation' : 'outlined'}
+                elevation={selectedScriptId === script.id ? 2 : 0}
+                sx={{ p: 1, cursor: 'pointer' }}
+                onClick={() => setSelectedScriptId(script.id)}
               >
-                Run Once
-              </Button>
-            </Box>
-            <Box sx={{ flex: 1, minHeight: 0, border: '1px solid', borderColor: 'divider' }}>
-              <Editor
-                height="100%"
-                defaultLanguage="javascript"
-                language="javascript"
-                theme={theme.palette.mode === 'dark' ? 'vs-dark' : 'vs'}
-                value={selectedScript.code}
-                onChange={(value) => updateScript(selectedScript.id, { code: value || '' })}
-                options={{
-                  minimap: { enabled: true },
-                  fontFamily: monoFontFamily,
-                  fontSize: monoFontSize,
-                  automaticLayout: true,
-                  tabSize: 2,
-                  wordWrap: 'on',
-                  scrollBeyondLastLine: false
-                }}
-              />
-            </Box>
-            <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
-              API: `getValue`, `setValue`, `setValues`, `log`. Register types: `01/02/03/04`.
-            </Typography>
-          </>
-        ) : (
-          <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Typography color="text.secondary">Select a script from the left list.</Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <TextField
+                    size="small"
+                    label="Name"
+                    value={script.name}
+                    onClick={(event) => event.stopPropagation()}
+                    onChange={(event) => updateScript(script.id, { name: event.target.value })}
+                    sx={{ flex: 1 }}
+                  />
+                  <IconButton
+                    size="small"
+                    color="error"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      removeScript(script.id)
+                    }}
+                  >
+                    <DeleteIcon fontSize="small" />
+                  </IconButton>
+                </Box>
+                <Box
+                  sx={{
+                    mt: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between'
+                  }}
+                >
+                  <FormControlLabel
+                    sx={{ m: 0, pl: 0.5 }}
+                    control={
+                      <Switch
+                        size="small"
+                        checked={script.enabled}
+                        onClick={(event) => event.stopPropagation()}
+                        onChange={(event) =>
+                          updateScript(script.id, {
+                            enabled: event.target.checked,
+                            lastError: event.target.checked ? undefined : script.lastError
+                          })
+                        }
+                      />
+                    }
+                    label={script.enabled ? 'Enabled' : 'Disabled'}
+                  />
+                  <TextField
+                    size="small"
+                    type="number"
+                    label="Interval ms"
+                    value={script.intervalMs}
+                    onClick={(event) => event.stopPropagation()}
+                    onChange={(event) =>
+                      updateScript(script.id, {
+                        intervalMs: Math.max(100, Number(event.target.value) || 1000)
+                      })
+                    }
+                    sx={{ width: 120 }}
+                    inputProps={{ min: 100, step: 100 }}
+                  />
+                </Box>
+                {script.lastError ? (
+                  <Typography variant="caption" color="error.main">
+                    {script.lastError}
+                  </Typography>
+                ) : null}
+              </Paper>
+            ))}
           </Box>
-        )}
-      </Paper>
+        </Paper>
+
+        <Paper
+          variant="outlined"
+          sx={{ p: 1.5, display: 'flex', flexDirection: 'column', minHeight: 0 }}
+        >
+          {selectedScript ? (
+            <>
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  mb: 1
+                }}
+              >
+                <Typography variant="subtitle2">{selectedScript.name}</Typography>
+                <Button
+                  variant="outlined"
+                  size="small"
+                  startIcon={<PlayArrowIcon />}
+                  onClick={() =>
+                    sendEvent('script_editor_run_once', {
+                      connectionId,
+                      scriptId: selectedScript.id
+                    })
+                  }
+                >
+                  Run Once
+                </Button>
+              </Box>
+              <Box sx={{ flex: 1, minHeight: 0, border: '1px solid', borderColor: 'divider' }}>
+                <Editor
+                  height="100%"
+                  defaultLanguage="javascript"
+                  language="javascript"
+                  theme={theme.palette.mode === 'dark' ? 'vs-dark' : 'vs'}
+                  value={selectedScript.code}
+                  onChange={(value) => updateScript(selectedScript.id, { code: value || '' })}
+                  options={{
+                    minimap: { enabled: true },
+                    fontFamily: monoFontFamily,
+                    fontSize: monoFontSize,
+                    automaticLayout: true,
+                    tabSize: 2,
+                    wordWrap: 'on',
+                    scrollBeyondLastLine: false
+                  }}
+                />
+              </Box>
+              <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
+                API: `getValue`, `setValue`, `setValues`, `log`. Register types: `01/02/03/04`.
+              </Typography>
+            </>
+          ) : (
+            <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Typography color="text.secondary">Select a script from the left list.</Typography>
+            </Box>
+          )}
+        </Paper>
+      </Box>
     </Box>
   )
 }
