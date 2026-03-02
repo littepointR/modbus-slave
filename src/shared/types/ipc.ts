@@ -83,6 +83,7 @@ export const IPC_CHANNELS = [
   'read_text_file',
   'write_text_file',
   'pick_workspace_file',
+  'pick_workspace_save_file',
   'append_system_log',
   'get_system_logs',
   'get_system_log_stats',
@@ -338,6 +339,12 @@ export interface IpcHandlerSpec {
   /** Pick a workspace file path from native open dialog */
   ['pick_workspace_file']: {
     args: []
+    return: string | null
+  }
+
+  /** Pick a workspace file path from native save dialog */
+  ['pick_workspace_save_file']: {
+    args: [string?]
     return: string | null
   }
 

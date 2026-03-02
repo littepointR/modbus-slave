@@ -40,6 +40,9 @@ interface LogRow {
   sizeBytes: number
 }
 
+const sanitizeSingleLine = (value: string): string =>
+  value.replace(/\r?\n/g, ' ↩ ').replace(/\t/g, '  ')
+
 const buildFilteredIndices = (rows: LogRow[], query: string): number[] => {
   const normalized = query.trim().toLowerCase()
   const next: number[] = []
@@ -69,16 +72,17 @@ const toRow = (entry: SystemLogEntry): LogRow => {
     entry.details === undefined
       ? ''
       : typeof entry.details === 'string'
-        ? entry.details
+        ? sanitizeSingleLine(entry.details)
         : JSON.stringify(entry.details)
-  const line = `[${timestamp}] [${entry.level.toUpperCase()}] ${entry.source}/${entry.module} | ${entry.message}${details ? ` | ${details}` : ''}`
+  const message = sanitizeSingleLine(entry.message)
+  const line = `[${timestamp}] [${entry.level.toUpperCase()}] ${entry.source}/${entry.module} | ${message}${details ? ` | ${details}` : ''}`
   return {
     id: entry.id,
     timestamp: entry.timestamp,
     level: entry.level,
     source: entry.source,
     module: entry.module,
-    message: entry.message,
+    message,
     line,
     sizeBytes: 96 + line.length * 2
   }

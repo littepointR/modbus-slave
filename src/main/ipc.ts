@@ -144,6 +144,15 @@ export const initIpc: InitIpcFn = (app, _state, server, logger) => {
     if (result.canceled || result.filePaths.length === 0) return null
     return result.filePaths[0]
   })
+  ipcHandle('pick_workspace_save_file', async (_, suggestedName?: string) => {
+    const result = await dialog.showSaveDialog({
+      title: 'Save Workspace',
+      defaultPath: suggestedName || 'modbus-slave_workspace.json',
+      filters: [{ name: 'Modbus Slave Workspace', extensions: ['json'] }]
+    })
+    if (result.canceled || !result.filePath) return null
+    return result.filePath
+  })
   ipcHandle('append_system_log', (_, params) => {
     logger?.log(params)
   })

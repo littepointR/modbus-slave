@@ -61,6 +61,7 @@ interface UseWorkspaceManagementReturn {
     options?: { setAsLast?: boolean }
   ) => void
   removeRecentWorkspace: (entryId: string) => void
+  removeRecentWorkspaceByPath: (path: string) => void
   loadRecentWorkspacesFromStorage: () => RecentWorkspaceEntry[]
   markLastWorkspaceId: (id: string | null) => void
   DEFAULT_WORKSPACE_FILENAME_PREFIX: string
@@ -197,6 +198,23 @@ export const useWorkspaceManagement = ({
     [markLastWorkspaceId]
   )
 
+  const removeRecentWorkspaceByPath = useCallback(
+    (path: string): void => {
+      setRecentWorkspaces((prev) => {
+        const target = prev.find((entry) => entry.path === path)
+        if (!target) return prev
+        const next = prev.filter((entry) => entry.path !== path)
+        localStorage.setItem(RECENT_WORKSPACES_STORAGE_KEY, JSON.stringify(next))
+        const lastId = localStorage.getItem(LAST_WORKSPACE_ID_STORAGE_KEY)
+        if (lastId === target.id) {
+          markLastWorkspaceId(null)
+        }
+        return next
+      })
+    },
+    [markLastWorkspaceId]
+  )
+
   const applyWorkspaceSnapshot = useCallback(
     (
       workspace: PersistedWorkspaceSnapshot,
@@ -272,10 +290,25 @@ export const useWorkspaceManagement = ({
               ? workspace.scriptsByConnection
               : {}
 
-          const nextActiveTabId =
+          const preferredActiveTabId =
             workspaceVersion === 4 && typeof workspace.activeTabId === 'string'
               ? workspace.activeTabId
               : null
+          const hasPreferredTab =
+            preferredActiveTabId &&
+            restoredOpenTabs.some(
+              (tab) => getTabId(tab.connectionId, tab.slaveId, tab.registerGroupId) === preferredActiveTabId
+            )
+          const nextActiveTabId =
+            hasPreferredTab
+              ? preferredActiveTabId
+              : restoredOpenTabs[0]
+                ? getTabId(
+                    restoredOpenTabs[0].connectionId,
+                    restoredOpenTabs[0].slaveId,
+                    restoredOpenTabs[0].registerGroupId
+                  )
+                : null
 
           setConnections(normalizedConnections)
           setScriptsByConnection(restoredScripts)
@@ -288,8 +321,16 @@ export const useWorkspaceManagement = ({
           setWorkspaceFilePath(options?.filePath || null)
 
           const fingerprint = serializeWorkspaceSnapshot({
-            ...workspace,
-            connections: normalizedConnections
+            version: 4,
+            connections: normalizedConnections,
+            tabSettings: normalizedTabSettings,
+            scriptsByConnection: restoredScripts,
+            openTabs: restoredOpenTabs.map((tab) => ({
+              connectionId: tab.connectionId,
+              slaveId: tab.slaveId,
+              registerGroupId: tab.registerGroupId
+            })),
+            activeTabId: nextActiveTabId
           })
           workspaceInitialFingerprintRef.current = fingerprint
           return fingerprint
@@ -349,12 +390,12 @@ export const useWorkspaceManagement = ({
       } catch (error) {
         console.warn('Failed to load workspace from path:', path, error)
         if (options?.removeOnError) {
-          removeRecentWorkspace(path) // Path used as identifier here for removal if failed to load
+          removeRecentWorkspaceByPath(path)
         }
         return false
       }
     },
-    [applyWorkspaceSnapshot, upsertRecentWorkspaceByPath, removeRecentWorkspace, showUserError]
+    [applyWorkspaceSnapshot, upsertRecentWorkspaceByPath, removeRecentWorkspaceByPath, showUserError]
   )
 
   useEffect(() => {
@@ -385,6 +426,7 @@ export const useWorkspaceManagement = ({
     openWorkspaceByPath,
     upsertRecentWorkspaceByPath,
     removeRecentWorkspace,
+    removeRecentWorkspaceByPath,
     loadRecentWorkspacesFromStorage,
     markLastWorkspaceId,
     DEFAULT_WORKSPACE_FILENAME_PREFIX,

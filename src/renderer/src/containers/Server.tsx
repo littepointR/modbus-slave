@@ -1785,6 +1785,8 @@ const Server = (): JSX.Element => {
     setWorkspaceFileHandle,
     workspaceFilename,
     workspaceFilePath,
+    setWorkspaceFilename,
+    setWorkspaceFilePath,
     setWorkspaceSavedFingerprint,
     recentWorkspaces,
     setRecentWorkspaces,
@@ -1795,6 +1797,7 @@ const Server = (): JSX.Element => {
     upsertRecentWorkspaceByPath,
     loadRecentWorkspacesFromStorage,
     markLastWorkspaceId,
+    DEFAULT_WORKSPACE_FILENAME_PREFIX,
     LAST_WORKSPACE_ID_STORAGE_KEY
   } = useWorkspaceManagement({
     connections,
@@ -3188,40 +3191,73 @@ const Server = (): JSX.Element => {
   }
 
   const downloadWorkspaceSnapshot = (workspace: PersistedWorkspaceSnapshot) => {
+    const defaultWorkspaceFilename = `${DEFAULT_WORKSPACE_FILENAME_PREFIX}_${new Date().toISOString().slice(0, 10)}.json`
     const json = JSON.stringify(workspace, null, 2)
     const blob = new Blob([json], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = workspaceFilename || getDefaultWorkspaceFilename()
+    link.download = workspaceFilename || defaultWorkspaceFilename
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
     URL.revokeObjectURL(url)
   }
 
+  const getErrorDetails = (error: unknown): { message: string; stack?: string } => {
+    if (error instanceof Error) {
+      return { message: error.message, stack: error.stack }
+    }
+    return { message: String(error) }
+  }
+
   const saveWorkspaceWithHandle = async (
     workspace: PersistedWorkspaceSnapshot,
     forceChooseNewFile: boolean
   ): Promise<boolean> => {
-    if (workspaceFilePath && !forceChooseNewFile) {
+    const defaultWorkspaceFilename = `${DEFAULT_WORKSPACE_FILENAME_PREFIX}_${new Date().toISOString().slice(0, 10)}.json`
+    const apiWithOptionalSave = window.api as typeof window.api & {
+      pickWorkspaceSaveFile?: (suggestedName?: string) => Promise<string | null>
+    }
+    let targetPath = workspaceFilePath
+
+    if (forceChooseNewFile || !targetPath) {
+      if (typeof apiWithOptionalSave.pickWorkspaceSaveFile === 'function') {
+        targetPath = await apiWithOptionalSave.pickWorkspaceSaveFile(
+          workspaceFilename || defaultWorkspaceFilename
+        )
+        if (!targetPath) return true
+        setWorkspaceFilePath(targetPath)
+        setWorkspaceFilename(targetPath.split(/[\\/]/).pop() || workspaceFilename)
+      }
+    }
+
+    if (targetPath) {
       try {
-        await window.api.writeTextFile(workspaceFilePath, JSON.stringify(workspace, null, 2))
+        await window.api.writeTextFile(targetPath, JSON.stringify(workspace, null, 2))
         void window.api.appendSystemLog({
           level: 'info',
           source: 'workspace',
           module: 'server.ui',
-          message: `Workspace saved: ${workspaceFilePath}`
+          message: `Workspace saved: ${targetPath}`
         })
         upsertRecentWorkspaceByPath(
-          workspaceFilePath,
-          workspaceFilename || workspaceFilePath.split(/[\\/]/).pop() || 'Workspace',
+          targetPath,
+          targetPath.split(/[\\/]/).pop() || workspaceFilename || 'Workspace',
           { setAsLast: true }
         )
         setWorkspaceSavedFingerprint(serializeWorkspaceSnapshot(workspace))
         return true
       } catch (error) {
         console.error('Failed to write workspace via path:', error)
+        const details = getErrorDetails(error)
+        void window.api.appendSystemLog({
+          level: 'error',
+          source: 'workspace',
+          module: 'server.ui',
+          message: `Workspace save failed (path): ${details.message}`,
+          details: { targetPath, ...details }
+        })
       }
     }
 
@@ -3232,13 +3268,22 @@ const Server = (): JSX.Element => {
       }) => Promise<WorkspaceFileHandle>
     }
 
-    if (typeof fsWindow.showSaveFilePicker !== 'function') return false
+    if (typeof fsWindow.showSaveFilePicker !== 'function') {
+      showUserError('Save is not available in this environment.')
+      void window.api.appendSystemLog({
+        level: 'warn',
+        source: 'workspace',
+        module: 'server.ui',
+        message: 'Workspace save unavailable: no native save picker support'
+      })
+      return false
+    }
 
     try {
       let handle = workspaceFileHandle
       if (!handle || forceChooseNewFile) {
         handle = await fsWindow.showSaveFilePicker({
-          suggestedName: workspaceFilename || getDefaultWorkspaceFilename(),
+          suggestedName: workspaceFilename || defaultWorkspaceFilename,
           types: [
             {
               description: 'Modbus Slave Workspace',
@@ -3273,25 +3318,59 @@ const Server = (): JSX.Element => {
         return true
       }
       console.error('Failed to write workspace via file handle:', error)
+      const details = getErrorDetails(error)
+      void window.api.appendSystemLog({
+        level: 'error',
+        source: 'workspace',
+        module: 'server.ui',
+        message: `Workspace save failed (file picker): ${details.message}`,
+        details
+      })
       return false
     }
   }
 
   const handleSaveWorkspace = async (): Promise<void> => {
-    const workspace = getWorkspaceSnapshot()
-    const saved = await saveWorkspaceWithHandle(workspace, false)
-    if (!saved) {
-      downloadWorkspaceSnapshot(workspace)
-      setWorkspaceSavedFingerprint(serializeWorkspaceSnapshot(workspace))
+    try {
+      const workspace = getWorkspaceSnapshot()
+      const saved = await saveWorkspaceWithHandle(workspace, false)
+      if (!saved) {
+        downloadWorkspaceSnapshot(workspace)
+        setWorkspaceSavedFingerprint(serializeWorkspaceSnapshot(workspace))
+      }
+    } catch (error) {
+      console.error('Failed to save workspace:', error)
+      const details = getErrorDetails(error)
+      showUserError(`Failed to save workspace: ${details.message}`)
+      void window.api.appendSystemLog({
+        level: 'error',
+        source: 'workspace',
+        module: 'server.ui',
+        message: `Workspace save failed: ${details.message}`,
+        details
+      })
     }
   }
 
   const handleSaveWorkspaceAs = async (): Promise<void> => {
-    const workspace = getWorkspaceSnapshot()
-    const saved = await saveWorkspaceWithHandle(workspace, true)
-    if (!saved) {
-      downloadWorkspaceSnapshot(workspace)
-      setWorkspaceSavedFingerprint(serializeWorkspaceSnapshot(workspace))
+    try {
+      const workspace = getWorkspaceSnapshot()
+      const saved = await saveWorkspaceWithHandle(workspace, true)
+      if (!saved) {
+        downloadWorkspaceSnapshot(workspace)
+        setWorkspaceSavedFingerprint(serializeWorkspaceSnapshot(workspace))
+      }
+    } catch (error) {
+      console.error('Failed to save workspace as:', error)
+      const details = getErrorDetails(error)
+      showUserError(`Failed to save workspace: ${details.message}`)
+      void window.api.appendSystemLog({
+        level: 'error',
+        source: 'workspace',
+        module: 'server.ui',
+        message: `Workspace save-as failed: ${details.message}`,
+        details
+      })
     }
   }
 
